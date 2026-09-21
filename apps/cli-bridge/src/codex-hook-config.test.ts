@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   CODEX_COMPLEX_PROMPT_HOOK_MARKER,
+  defaultCodexHome,
+  defaultHooksPath,
   installCodexStopHook,
   removeCodexStopHook,
 } from './codex-hook-config.js';
@@ -67,6 +69,23 @@ describe('Codex 훅 설정', () => {
     expect(JSON.parse(await readFile(configPath, 'utf8'))).toHaveProperty('hooks.Stop');
   });
 
+  it('CODEX_HOME이 지정되면 기본 훅 경로를 그 아래로 계산한다', async () => {
+    const codexHome = await createDirectory();
+    const previousCodexHome = process.env['CODEX_HOME'];
+    process.env['CODEX_HOME'] = codexHome;
+
+    try {
+      const result = await installCodexStopHook();
+
+      expect(defaultCodexHome()).toBe(codexHome);
+      expect(defaultHooksPath()).toBe(join(codexHome, 'hooks.json'));
+      expect(result.configPath).toBe(join(codexHome, 'hooks.json'));
+      expect(result.command).toBe('complex-prompt hook stop');
+    } finally {
+      restoreCodexHome(previousCodexHome);
+    }
+  });
+
   it('이미 설치된 패키지 소유 훅을 변경하지 않는다', async () => {
     const configPath = await createConfig({
       hooks: {
@@ -96,6 +115,22 @@ describe('Codex 훅 설정', () => {
     await writeFile(configPath, '{not-json', 'utf8');
 
     await expect(installCodexStopHook({ configPath })).rejects.toThrow('not valid JSON');
+  });
+
+  it('JSON 배열로 저장된 훅 설정을 거부한다', async () => {
+    const directory = await createDirectory();
+    const configPath = join(directory, 'hooks.json');
+    await writeFile(configPath, '[]', 'utf8');
+
+    await expect(installCodexStopHook({ configPath })).rejects.toThrow(
+      'must contain a JSON object',
+    );
+  });
+
+  it('훅 설정을 읽는 중 발생한 파일 오류를 전달한다', async () => {
+    const configPath = await createDirectory();
+
+    await expect(installCodexStopHook({ configPath })).rejects.toThrow();
   });
 
   it('객체가 아닌 훅 필드를 거부한다', async () => {
@@ -144,4 +179,9 @@ async function createDirectory(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'codex-hooks-test-'));
   temporaryDirectories.push(directory);
   return directory;
+}
+
+function restoreCodexHome(value: string | undefined): void {
+  if (value === undefined) delete process.env['CODEX_HOME'];
+  else process.env['CODEX_HOME'] = value;
 }
