@@ -110,14 +110,18 @@ function validateWebUrl(webUrl: string): string {
 /* c8 ignore next */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args[0] === 'hook' && args[1] === 'prompt') {
+  if (args[0] === 'hook' && args[1] === 'prompt' && args.length === 2) {
     const input = await readStdin();
     const result = await runCodexUserPromptHook(input);
     process.stdout.write(`${JSON.stringify(result)}\n`);
     return;
   }
-  if (args[0] === 'hook' && (args[1] === 'install' || args[1] === 'setup')) {
-    const dryRun = args.includes('--dry-run');
+  if (
+    args[0] === 'hook' &&
+    (args[1] === 'install' || args[1] === 'setup') &&
+    (args.length === 2 || (args.length === 3 && args[2] === '--dry-run'))
+  ) {
+    const dryRun = args[2] === '--dry-run';
     const skillResult = await installCodexSkill({ dryRun });
     const promptResult = await installCodexPrompt({ dryRun });
     const result = await installCodexUserPromptHook({
@@ -139,8 +143,12 @@ async function main(): Promise<void> {
       );
     return;
   }
-  if (args[0] === 'hook' && (args[1] === 'remove' || args[1] === 'uninstall')) {
-    const dryRun = args.includes('--dry-run');
+  if (
+    args[0] === 'hook' &&
+    (args[1] === 'remove' || args[1] === 'uninstall') &&
+    (args.length === 2 || (args.length === 3 && args[2] === '--dry-run'))
+  ) {
+    const dryRun = args[2] === '--dry-run';
     const result = await removeCodexUserPromptHook({
       dryRun,
       command: hookPromptCommand(),
@@ -167,6 +175,11 @@ async function main(): Promise<void> {
       'Usage: complex-prompt [hook prompt|hook install|hook remove]\n\n' +
         'Open a browser command editor for $complex-prompt and manage its Codex hook and skill.\n',
     );
+    return;
+  }
+  if (args.length > 0) {
+    process.stderr.write(`Unknown command: ${args.join(' ')}\n`);
+    process.exitCode = 1;
     return;
   }
   if (args.length === 0) {

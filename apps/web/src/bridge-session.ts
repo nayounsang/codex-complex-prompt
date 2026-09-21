@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ServerMessageSchema } from '@codex-complex-prompt/protocol';
 
@@ -10,13 +10,28 @@ export type ConnectionState =
 interface BridgeSession {
   readonly state: ConnectionState;
   readonly error: string | null;
+  readonly closeInSeconds: number | null;
   readonly submit: (prompt: string) => void;
 }
 
 export function useBridgeSession(): BridgeSession {
   const [state, setState] = useState<ConnectionState>('connecting');
   const [error, setError] = useState<string | null>(null);
+  const [closeInSeconds, setCloseInSeconds] = useState<number | null>(null);
   const [socket, setSocket] = useState<WebSocket | null>(null);
+  const closeTimer = useRef<number | undefined>(undefined);
+  const countdownTimer = useRef<number | undefined>(undefined);
+
+  function clearCloseTimers(): void {
+    if (closeTimer.current !== undefined) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = undefined;
+    }
+    if (countdownTimer.current !== undefined) {
+      window.clearInterval(countdownTimer.current);
+      countdownTimer.current = undefined;
+    }
+  }
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -57,9 +72,26 @@ export function useBridgeSession(): BridgeSession {
         if (message.data.status === 'accepted') {
           setState('success');
           setError(null);
+          clearCloseTimers();
+          setCloseInSeconds(COMMAND_WINDOW_CLOSE_DELAY_MS / 1_000);
+          closeTimer.current = window.setTimeout(() => {
+            closeTimer.current = undefined;
+            window.close();
+          }, COMMAND_WINDOW_CLOSE_DELAY_MS);
+          countdownTimer.current = window.setInterval(() => {
+            setCloseInSeconds((current) => {
+              if (current === null || current <= 1) {
+                clearCloseTimers();
+                return 0;
+              }
+              return current - 1;
+            });
+          }, 1_000);
         } else {
           setState('error');
           setError(message.data.error ?? 'The command could not be sent.');
+          clearCloseTimers();
+          setCloseInSeconds(null);
         }
       } else if (message.data.type === 'session.error') {
         setState('error');
@@ -74,8 +106,13 @@ export function useBridgeSession(): BridgeSession {
       setState('error');
       setError('Could not connect to the local bridge.');
     });
-    return () => connection.close();
+    return () => {
+      clearCloseTimers();
+      connection.close();
+    };
   }, []);
+
+  useEffect(() => clearCloseTimers, []);
 
   const submit = useCallback(
     (prompt: string): void => {
@@ -90,10 +127,9 @@ export function useBridgeSession(): BridgeSession {
           prompt: prompt.trim(),
         }),
       );
-      window.setTimeout(() => window.close(), COMMAND_WINDOW_CLOSE_DELAY_MS);
     },
     [socket],
   );
 
-  return { state, error, submit };
+  return { state, error, closeInSeconds, submit };
 }

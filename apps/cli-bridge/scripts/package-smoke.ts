@@ -74,7 +74,22 @@ try {
       resolve(childOutput);
     });
   });
-  const completedOutput = await output;
+  let timeout: NodeJS.Timeout | undefined;
+  let completedOutput: string;
+  try {
+    completedOutput = await Promise.race([
+      output,
+      new Promise<string>((_, reject) => {
+        timeout = setTimeout(() => {
+          child.kill('SIGTERM');
+          reject(new Error('Installed hook command did not exit within 10 seconds.'));
+        }, 10_000);
+        timeout.unref();
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
   if (!completedOutput.includes('"continue":true')) {
     throw new Error(`Installed hook command returned an unexpected result.\n${completedOutput}`);
   }

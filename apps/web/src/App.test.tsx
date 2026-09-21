@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App.js';
@@ -102,18 +102,36 @@ describe('명령 편집기', () => {
     expect(closeSpy).not.toHaveBeenCalled();
   });
 
-  it('명령을 전송하면 3초 뒤 브라우저 창을 닫는다', () => {
+  it('명령 접수 후 3초 카운트다운 모달을 표시하고 창을 닫는다', async () => {
     vi.useFakeTimers();
-    renderWithSession();
+    const socket = renderWithSession();
     const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Run the tests' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send command' }));
 
     expect(closeSpy).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(2_999);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await act(async () => {
+      socket.emit(
+        'message',
+        JSON.stringify({
+          type: 'prompt.result',
+          submissionId: '00000000-0000-4000-8000-000000000004',
+          status: 'accepted',
+        }),
+      );
+    });
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('3초 후 이 창이 닫힙니다.');
+    await act(async () => vi.advanceTimersByTime(999));
     expect(closeSpy).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(1);
+    expect(screen.getByRole('dialog')).toHaveTextContent('3초 후 이 창이 닫힙니다.');
+    await act(async () => vi.advanceTimersByTime(1_000));
+    expect(screen.getByRole('dialog')).toHaveTextContent('2초 후 이 창이 닫힙니다.');
+    await act(async () => vi.advanceTimersByTime(1_000));
+    expect(screen.getByRole('dialog')).toHaveTextContent('1초 후 이 창이 닫힙니다.');
+    await act(async () => vi.advanceTimersByTime(1_000));
     expect(closeSpy).toHaveBeenCalledOnce();
   });
 
@@ -144,6 +162,7 @@ describe('명령 편집기', () => {
     );
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Command rejected'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('잘못된 JSON 메시지를 받으면 프로토콜 오류를 표시한다', async () => {

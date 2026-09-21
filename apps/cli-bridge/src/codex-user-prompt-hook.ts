@@ -51,15 +51,19 @@ export async function runCodexUserPromptHook(
   if (!COMPLEX_PROMPT_INVOCATION.test(input.prompt)) return { continue: true };
 
   let resolveCommand: ((command: string) => void) | undefined;
+  let resolveSubmission: (() => void) | undefined;
   const commandResult = new Promise<string>((resolve) => {
     resolveCommand = resolve;
+  });
+  const submissionResult = new Promise<void>((resolve) => {
+    resolveSubmission = resolve;
   });
   const bridge = await startCliBridge({
     ...options.bridgeOptions,
     inputAdapter: {
       submit: (command: string) => {
         resolveCommand?.(command);
-        return Promise.resolve();
+        return submissionResult;
       },
     },
   });
@@ -76,7 +80,7 @@ export async function runCodexUserPromptHook(
     if (command === '') {
       return continueWithMessage('The browser command editor returned an empty command.');
     }
-    return {
+    const result: CodexUserPromptHookOutput = {
       continue: true,
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
@@ -85,6 +89,9 @@ export async function runCodexUserPromptHook(
           command,
       },
     };
+    resolveSubmission?.();
+    await flushBridgeSubmission();
+    return result;
   } catch (error) {
     return continueWithMessage(
       error instanceof Error ? error.message : 'The browser command editor ended.',
@@ -92,6 +99,10 @@ export async function runCodexUserPromptHook(
   } finally {
     await bridge.stop();
   }
+}
+
+function flushBridgeSubmission(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 function continueWithMessage(systemMessage: string): CodexUserPromptHookOutput {

@@ -5,7 +5,7 @@ import './styles.css';
 
 export function App(): React.JSX.Element {
   const [command, setCommand] = useState('');
-  const { state, error, submit } = useBridgeSession();
+  const { state, error, closeInSeconds, submit } = useBridgeSession();
   const isSubmitting = state === 'submitting';
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
@@ -47,6 +47,20 @@ export function App(): React.JSX.Element {
           </button>
         </form>
       </section>
+      {closeInSeconds !== null && (
+        <div className="countdown-backdrop">
+          <section
+            className="countdown-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="countdown-title"
+          >
+            <p className="eyebrow">COMMAND SENT</p>
+            <h2 id="countdown-title">명령이 전송되었습니다</h2>
+            <p>{closeInSeconds}초 후 이 창이 닫힙니다.</p>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

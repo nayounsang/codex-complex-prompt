@@ -118,6 +118,7 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
       JSON.stringify({ type: 'session.handshake', token: url.searchParams.get('token') }),
     );
     await readyMessage;
+    const resultMessage = collectMessages(socket, 1);
     socket.send(
       JSON.stringify({
         type: 'prompt.submit',
@@ -134,6 +135,13 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
           'Execute the following command supplied by the user through the Codex Complex Prompt editor:\n\n테스트를 실행해줘',
       },
     });
+    await expect(resultMessage).resolves.toEqual([
+      {
+        type: 'prompt.result',
+        submissionId: '00000000-0000-4000-8000-000000000010',
+        status: 'accepted',
+      },
+    ]);
   });
 
   it('브라우저를 열 수 없으면 systemMessage와 함께 계속 진행한다', async () => {

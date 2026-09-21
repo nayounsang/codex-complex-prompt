@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   CODEX_COMPLEX_PROMPT_HOOK_MARKER,
+  CODEX_COMPLEX_PROMPT_LEGACY_STOP_HOOK_MARKER,
   defaultCodexHome,
   defaultHooksPath,
   installCodexUserPromptHook,
@@ -26,7 +27,20 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
   it('기존 설정을 보존하면서 명령 편집기 훅을 설치한다', async () => {
     const configPath = await createConfig({
       description: 'Existing hooks',
-      hooks: { Stop: [{ hooks: [{ type: 'command', command: 'existing-stop' }] }] },
+      hooks: {
+        Stop: [
+          { hooks: [{ type: 'command', command: 'existing-stop' }] },
+          {
+            hooks: [
+              {
+                type: 'command',
+                command: 'complex-prompt hook stop',
+                statusMessage: CODEX_COMPLEX_PROMPT_LEGACY_STOP_HOOK_MARKER,
+              },
+            ],
+          },
+        ],
+      },
     });
 
     const result = await installCodexUserPromptHook({
@@ -40,7 +54,9 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
 
     expect(result.changed).toBe(true);
     expect(written.description).toBe('Existing hooks');
-    expect(written.hooks['Stop']).toHaveLength(1);
+    expect(written.hooks['Stop']).toEqual([
+      { hooks: [{ type: 'command', command: 'existing-stop' }] },
+    ]);
     expect(written.hooks['UserPromptSubmit']).toEqual([
       {
         hooks: [
@@ -107,6 +123,7 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
   it('패키지 소유 훅만 제거하고 다른 훅은 보존한다', async () => {
     const configPath = await createConfig({
       hooks: {
+        Stop: [{ hooks: [{ type: 'command', command: 'other-stop' }] }],
         UserPromptSubmit: [
           { hooks: [{ type: 'command', command: 'other-hook' }] },
           {
@@ -124,9 +141,10 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
 
     await removeCodexUserPromptHook({ configPath, command: 'complex-prompt hook prompt' });
     const written = JSON.parse(await readFile(configPath, 'utf8')) as {
-      hooks: { UserPromptSubmit: unknown[] };
+      hooks: { Stop: unknown[]; UserPromptSubmit: unknown[] };
     };
 
+    expect(written.hooks.Stop).toEqual([{ hooks: [{ type: 'command', command: 'other-stop' }] }]);
     expect(written.hooks.UserPromptSubmit).toEqual([
       { hooks: [{ type: 'command', command: 'other-hook' }] },
     ]);
