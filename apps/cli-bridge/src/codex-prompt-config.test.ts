@@ -7,8 +7,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   CODEX_COMPLEX_PROMPT_CONTENT,
   CODEX_COMPLEX_PROMPT_FILE_MARKER,
+  CODEX_COMPLEX_SKILL_CONTENT,
+  CODEX_COMPLEX_SKILL_FILE_MARKER,
   defaultCodexPromptPath,
+  defaultCodexSkillPath,
+  installCodexSkill,
   installCodexPrompt,
+  removeCodexSkill,
   removeCodexPrompt,
 } from './codex-prompt-config.js';
 
@@ -22,8 +27,14 @@ afterEach(async () => {
   );
 });
 
-describe('Codex 슬래시 prompt 설정', () => {
-  it('없는 prompt 파일에 package 소유 슬래시 prompt를 생성한다', async () => {
+describe('Codex 호환 prompt 설정', () => {
+  it('호환 prompt가 분석 대신 hook이 반환한 명령만 실행하도록 안내한다', () => {
+    expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('Do not analyze or answer');
+    expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('do not invoke the CLI or');
+    expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('additionalContext');
+  });
+
+  it('없는 prompt 파일에 package 소유 호환 prompt를 생성한다', async () => {
     const promptPath = join(await createDirectory(), 'prompts', 'complex-prompt.md');
 
     const result = await installCodexPrompt({ promptPath });
@@ -33,7 +44,7 @@ describe('Codex 슬래시 prompt 설정', () => {
     expect(result.content).toContain(CODEX_COMPLEX_PROMPT_FILE_MARKER);
   });
 
-  it('CODEX_HOME이 지정되면 기본 슬래시 prompt 경로를 그 아래로 계산한다', async () => {
+  it('CODEX_HOME이 지정되면 기본 호환 prompt 경로를 그 아래로 계산한다', async () => {
     const codexHome = await createDirectory();
     const previousCodexHome = process.env['CODEX_HOME'];
     process.env['CODEX_HOME'] = codexHome;
@@ -48,7 +59,7 @@ describe('Codex 슬래시 prompt 설정', () => {
     }
   });
 
-  it('드라이런에서는 슬래시 prompt 파일을 쓰지 않는다', async () => {
+  it('드라이런에서는 호환 prompt 파일을 쓰지 않는다', async () => {
     const promptPath = join(await createDirectory(), 'prompts', 'complex-prompt.md');
 
     const result = await installCodexPrompt({ promptPath, dryRun: true });
@@ -84,10 +95,86 @@ describe('Codex 슬래시 prompt 설정', () => {
     await expect(readFile(promptPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('없는 prompt 파일을 제거할 때 변경하지 않는다', async () => {
+    const promptPath = join(await createDirectory(), 'complex-prompt.md');
+
+    const result = await removeCodexPrompt({ promptPath });
+
+    expect(result.changed).toBe(false);
+  });
+
   it('읽는 중 오류가 발생한 prompt 경로를 거부한다', async () => {
     const promptPath = await createDirectory();
 
     await expect(installCodexPrompt({ promptPath })).rejects.toThrow();
+  });
+});
+
+describe('Codex skill 설정', () => {
+  it('skill이 중복 bridge를 열지 않고 hook의 명령만 실행하도록 안내한다', () => {
+    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('Do not analyze or answer');
+    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('do not invoke the CLI or');
+    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('additionalContext');
+  });
+
+  it('없는 skill 파일에 package 소유 skill을 생성한다', async () => {
+    const skillPath = join(await createDirectory(), 'skills', 'complex-prompt', 'SKILL.md');
+
+    const result = await installCodexSkill({ skillPath });
+
+    expect(result.changed).toBe(true);
+    expect(await readFile(skillPath, 'utf8')).toBe(CODEX_COMPLEX_SKILL_CONTENT);
+    expect(result.content).toContain(CODEX_COMPLEX_SKILL_FILE_MARKER);
+  });
+
+  it('CODEX_HOME이 지정되면 기본 skill 경로를 그 아래로 계산한다', async () => {
+    const codexHome = await createDirectory();
+    const previousCodexHome = process.env['CODEX_HOME'];
+    process.env['CODEX_HOME'] = codexHome;
+
+    try {
+      const result = await installCodexSkill();
+
+      expect(defaultCodexSkillPath()).toBe(join(codexHome, 'skills', 'complex-prompt', 'SKILL.md'));
+      expect(result.skillPath).toBe(defaultCodexSkillPath());
+    } finally {
+      restoreCodexHome(previousCodexHome);
+    }
+  });
+
+  it('드라이런에서는 skill 파일을 쓰지 않는다', async () => {
+    const skillPath = join(await createDirectory(), 'skills', 'complex-prompt', 'SKILL.md');
+
+    const result = await installCodexSkill({ skillPath, dryRun: true });
+
+    expect(result.changed).toBe(true);
+    await expect(readFile(skillPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('사용자 소유 skill 파일을 덮어쓰지 않는다', async () => {
+    const skillPath = join(await createDirectory(), 'SKILL.md');
+    await writeFile(skillPath, 'user skill', 'utf8');
+
+    await expect(installCodexSkill({ skillPath })).rejects.toThrow('not package-owned');
+    expect(await readFile(skillPath, 'utf8')).toBe('user skill');
+  });
+
+  it('package 소유 skill 파일만 제거한다', async () => {
+    const skillPath = join(await createDirectory(), 'SKILL.md');
+    await writeFile(skillPath, CODEX_COMPLEX_SKILL_CONTENT, 'utf8');
+
+    const result = await removeCodexSkill({ skillPath });
+
+    expect(result.changed).toBe(true);
+    await expect(readFile(skillPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('없는 skill 파일을 제거할 때 변경하지 않는다', async () => {
+    const skillPath = join(await createDirectory(), 'SKILL.md');
+
+    const result = await removeCodexSkill({ skillPath });
+
+    expect(result.changed).toBe(false);
   });
 });
 

@@ -4,100 +4,63 @@ import { useBridgeSession } from './bridge-session.js';
 import './styles.css';
 
 export function App(): React.JSX.Element {
-  const [prompt, setPrompt] = useState('');
-  const [feedback, setFeedback] = useState('');
-  const { state, error, submit, review, submitReview } = useBridgeSession();
+  const [command, setCommand] = useState('');
+  const { state, error, closeInSeconds, submit } = useBridgeSession();
   const isSubmitting = state === 'submitting';
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
-    submit(prompt);
-  }
-
-  if (review !== null) {
-    return (
-      <main className="shell">
-        <section className="card" aria-labelledby="review-title">
-          <p className="eyebrow">CODEX REVIEW</p>
-          <h1 id="review-title">{review.title}</h1>
-          <p className="intro">Review the response before Codex continues.</p>
-          {/* c8 ignore start -- transient status branches are rendered during browser lifecycle transitions. */}
-          <p className={`status status-${state}`} role="status">
-            {state === 'connecting' && 'Connecting to the local bridge…'}
-            {state === 'connected' && 'Review ready'}
-            {state === 'submitting' && 'Sending review…'}
-            {state === 'success' && 'Review submitted successfully'}
-            {state === 'error' && (error ?? 'Something went wrong')}
-            {state === 'disconnected' && 'Bridge connection closed'}
-          </p>
-          {/* c8 ignore stop */}
-          <pre className="review-content">{review.content}</pre>
-          <label htmlFor="feedback">Feedback (optional)</label>
-          <textarea
-            id="feedback"
-            value={feedback}
-            onChange={(event) => setFeedback(event.target.value)}
-            placeholder="Tell Codex what should change…"
-            rows={5}
-            disabled={isSubmitting}
-          />
-          <div className="review-actions">
-            <button
-              type="button"
-              disabled={isSubmitting || state !== 'connected'}
-              onClick={() => submitReview('approved')}
-            >
-              Approve
-            </button>
-            <button
-              type="button"
-              disabled={isSubmitting || state !== 'connected'}
-              onClick={() =>
-                submitReview(feedback.trim() === '' ? 'rejected' : 'feedback', feedback)
-              }
-            >
-              {feedback.trim() === '' ? 'Reject' : 'Send feedback'}
-            </button>
-          </div>
-        </section>
-      </main>
-    );
+    submit(command);
   }
 
   return (
     <main className="shell">
       <section className="card" aria-labelledby="title">
-        <p className="eyebrow">CODEX BRIDGE</p>
-        <h1 id="title">Shape your prompt</h1>
+        <p className="eyebrow">CODEX COMMAND EDITOR</p>
+        <h1 id="title">Send a command to Codex</h1>
         <p className="intro">
-          Draft a request in the browser and send it back to the waiting Codex session.
+          Write the command here. AI responses stay in Codex; this window only sends your command.
         </p>
         <p className={`status status-${state}`} role="status">
           {state === 'connecting' && 'Connecting to the local bridge…'}
-          {state === 'connected' && 'Connected'}
-          {state === 'submitting' && 'Sending prompt…'}
-          {state === 'success' && 'Prompt sent successfully'}
+          {state === 'connected' && 'Command editor ready'}
+          {state === 'submitting' && 'Sending command…'}
+          {state === 'success' && 'Command sent. This window can be closed.'}
           {state === 'error' && (error ?? 'Something went wrong')}
           {state === 'disconnected' && 'Bridge connection closed'}
         </p>
         <form onSubmit={handleSubmit}>
-          <label htmlFor="prompt">Prompt draft</label>
+          <label htmlFor="command">Command</label>
           <textarea
-            id="prompt"
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder="What would you like Codex to help improve?"
+            id="command"
+            value={command}
+            onChange={(event) => setCommand(event.target.value)}
+            placeholder="예: 테스트를 보강하고 실패 원인을 수정해줘…"
             rows={9}
             disabled={isSubmitting}
           />
           <button
             type="submit"
-            disabled={isSubmitting || state !== 'connected' || prompt.trim() === ''}
+            disabled={isSubmitting || state !== 'connected' || command.trim() === ''}
           >
-            {isSubmitting ? 'Submitting…' : 'Submit to Codex'}
+            {isSubmitting ? 'Sending…' : 'Send command'}
           </button>
         </form>
       </section>
+      {closeInSeconds !== null && (
+        <div className="countdown-backdrop">
+          <section
+            className="countdown-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="countdown-title"
+          >
+            <p className="eyebrow">COMMAND SENT</p>
+            <h2 id="countdown-title">명령이 전송되었습니다</h2>
+            <p>{closeInSeconds}초 후 이 창이 닫힙니다.</p>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

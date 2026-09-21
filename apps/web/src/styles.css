@@ -78,23 +78,6 @@ textarea:focus {
   outline: 2px solid #9aa5ff;
   outline-offset: 2px;
 }
-.review-content {
-  max-height: 48vh;
-  overflow: auto;
-  padding: 16px;
-  border: 1px solid #3c4250;
-  border-radius: 12px;
-  color: #e8e9ed;
-  background: #101218;
-  font: inherit;
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-.review-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
 button {
   width: 100%;
   margin-top: 16px;
@@ -107,11 +90,37 @@ button {
   font-weight: 800;
   cursor: pointer;
 }
-.review-actions button:last-child {
-  color: #e8e9ed;
-  background: #454b5e;
-}
 button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.countdown-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #0008;
+}
+
+.countdown-modal {
+  width: min(100%, 440px);
+  padding: 32px;
+  border: 1px solid #515875;
+  border-radius: 20px;
+  background: #202532;
+  box-shadow: 0 24px 80px #0008;
+  text-align: center;
+}
+
+.countdown-modal h2 {
+  margin: 0;
+  font-size: clamp(24px, 5vw, 36px);
+  letter-spacing: -0.04em;
+}
+
+.countdown-modal p:last-child {
+  margin: 16px 0 0;
+  color: #bfc6ff;
 }

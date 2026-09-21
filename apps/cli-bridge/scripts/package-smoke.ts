@@ -38,25 +38,28 @@ try {
       cwd: temporaryDir,
     },
   );
-  const packageJson = JSON.parse(
-    await readFile(
-      join(temporaryDir, 'node_modules/@codex-complex-prompt/cli-bridge/package.json'),
-      'utf8',
-    ),
-  ) as { bin?: Record<string, string> };
+  const packageRoot = join(temporaryDir, 'node_modules/@codex-complex-prompt/cli-bridge');
+  const packageJson = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8')) as {
+    bin?: Record<string, string>;
+    files?: string[];
+  };
   if (packageJson.bin?.['complex-prompt'] !== 'dist/index.js') {
     throw new Error('Installed tarball did not expose the complex-prompt executable.');
   }
+  const webIndex = await readFile(join(packageRoot, 'web/dist/index.html'), 'utf8');
+  if (!webIndex.includes('Codex')) {
+    throw new Error('Installed tarball did not include the packaged web UI.');
+  }
   const executable = join(temporaryDir, 'node_modules/.bin/complex-prompt');
-  const child = spawn(executable, [], {
+  const child = spawn(executable, ['hook', 'prompt'], {
     cwd: temporaryDir,
     env: {
       ...process.env,
       PATH: `${dirname(process.execPath)}:${process.env['PATH'] ?? ''}`,
-      COMPLEX_PROMPT_NO_BROWSER: '1',
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
+  child.stdin.end(JSON.stringify({ prompt: '일반 명령' }));
   let childOutput = '';
   const output = new Promise<string>((resolve) => {
     child.stdout.on('data', (chunk: Buffer) => {
@@ -71,32 +74,25 @@ try {
       resolve(childOutput);
     });
   });
-  await new Promise<void>((resolve, reject) => {
-    const deadline = setTimeout(() => reject(new Error('Installed CLI did not start.')), 5_000);
-    const request = async (): Promise<void> => {
-      try {
-        const match = /http:\/\/127\.0\.0\.1:\d+/.exec(childOutput);
-        if (match !== null) {
-          const response = await fetch(`${match[0]}/`);
-          if (response.status === 200) {
-            clearTimeout(deadline);
-            resolve();
-            return;
-          }
-        }
-      } catch {
-        // The child may still be binding its ephemeral port.
-      }
-      setTimeout(() => void request(), 50);
-    };
-    void request();
-  }).catch(async (error: unknown) => {
-    child.kill('SIGTERM');
-    const failedOutput = await output;
-    throw new Error(`${String(error)}\n${failedOutput}`);
-  });
-  child.kill('SIGTERM');
-  await output;
+  let timeout: NodeJS.Timeout | undefined;
+  let completedOutput: string;
+  try {
+    completedOutput = await Promise.race([
+      output,
+      new Promise<string>((_, reject) => {
+        timeout = setTimeout(() => {
+          child.kill('SIGTERM');
+          reject(new Error('Installed hook command did not exit within 10 seconds.'));
+        }, 10_000);
+        timeout.unref();
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+  if (!completedOutput.includes('"continue":true')) {
+    throw new Error(`Installed hook command returned an unexpected result.\n${completedOutput}`);
+  }
   process.stdout.write('CLI package smoke test passed.\n');
 } finally {
   await rm(temporaryDir, { recursive: true, force: true });

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App.js';
@@ -33,6 +33,8 @@ class MockWebSocket {
 afterEach(() => {
   cleanup();
   MockWebSocket.instance = undefined;
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.history.replaceState({}, '', '/');
 });
@@ -56,72 +58,85 @@ function renderWithSession(bridge = 'http://127.0.0.1:4321'): MockWebSocket {
   return socket;
 }
 
-describe('프롬프트 편집기', () => {
-  it('세션 토큰이 없으면 오류를 표시하고 제출을 막는다', () => {
+describe('명령 편집기', () => {
+  it('세션 토큰이 없으면 오류를 표시하고 전송을 막는다', () => {
     render(<App />);
 
     expect(screen.getByRole('status')).toHaveTextContent('needs a bridge session token');
     expect(screen.getByRole('button')).toBeDisabled();
   });
 
-  it('브리지 쿼리 매개변수의 오리진으로 WebSocket을 연결한다', () => {
-    const socket = renderWithSession('http://127.0.0.1:4321');
-
-    expect(socket.url).toBe('ws://127.0.0.1:4321/ws');
-  });
-
-  it('HTTPS 브리지 오리진에는 보안 WebSocket을 연결한다', () => {
+  it('브리지 오리진에 맞는 WebSocket을 연결한다', () => {
     const socket = renderWithSession('https://127.0.0.1:4321');
 
     expect(socket.url).toBe('wss://127.0.0.1:4321/ws');
   });
 
-  it('핸드셰이크가 성공하면 프롬프트 제출 버튼을 활성화한다', async () => {
+  it('연결되면 명령 입력창 하나와 전송 버튼만 표시한다', async () => {
     renderWithSession();
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Draft prompt' } });
 
     await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent('Connected');
-      expect(screen.getByRole('button')).toBeEnabled();
+      expect(screen.getByRole('status')).toHaveTextContent('Command editor ready');
+      expect(screen.getAllByRole('textbox')).toHaveLength(1);
+      expect(screen.getByRole('button', { name: 'Send command' })).toBeDisabled();
     });
+    expect(screen.queryByRole('heading', { name: /response/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
   });
 
-  it('사용자가 입력한 프롬프트의 앞뒤 공백을 제거한 뒤 전송한다', async () => {
+  it('입력한 명령의 앞뒤 공백을 제거해 전송한다', async () => {
     const socket = renderWithSession();
-    const textarea = screen.getByRole('textbox');
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '  Fix the tests  ' } });
 
-    fireEvent.change(textarea, { target: { value: '  Improve this  ' } });
-    await waitFor(() => expect(screen.getByRole('button')).toBeEnabled());
-    fireEvent.click(screen.getByRole('button'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send command' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Send command' }));
 
     expect(socket.send).toHaveBeenLastCalledWith(
       JSON.stringify({
         type: 'prompt.submit',
         submissionId: '00000000-0000-4000-8000-000000000004',
-        prompt: 'Improve this',
+        prompt: 'Fix the tests',
       }),
     );
+    expect(closeSpy).not.toHaveBeenCalled();
   });
 
-  it('서버가 실패 결과를 보내면 오류 메시지를 표시한다', async () => {
+  it('명령 접수 후 3초 카운트다운 모달을 표시하고 창을 닫는다', async () => {
+    vi.useFakeTimers();
     const socket = renderWithSession();
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
 
-    socket.emit(
-      'message',
-      JSON.stringify({
-        type: 'prompt.result',
-        submissionId: '00000000-0000-4000-8000-000000000004',
-        status: 'failed',
-        error: 'Prompt rejected',
-      }),
-    );
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Run the tests' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send command' }));
 
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Prompt rejected'));
+    expect(closeSpy).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await act(async () => {
+      socket.emit(
+        'message',
+        JSON.stringify({
+          type: 'prompt.result',
+          submissionId: '00000000-0000-4000-8000-000000000004',
+          status: 'accepted',
+        }),
+      );
+    });
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('3초 후 이 창이 닫힙니다.');
+    await act(async () => vi.advanceTimersByTime(999));
+    expect(closeSpy).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toHaveTextContent('3초 후 이 창이 닫힙니다.');
+    await act(async () => vi.advanceTimersByTime(1_000));
+    expect(screen.getByRole('dialog')).toHaveTextContent('2초 후 이 창이 닫힙니다.');
+    await act(async () => vi.advanceTimersByTime(1_000));
+    expect(screen.getByRole('dialog')).toHaveTextContent('1초 후 이 창이 닫힙니다.');
+    await act(async () => vi.advanceTimersByTime(1_000));
+    expect(closeSpy).toHaveBeenCalledOnce();
   });
 
-  it('서버가 성공 결과를 보내면 성공 상태를 표시한다', async () => {
+  it('명령 접수 결과가 성공이면 성공 상태를 표시한다', async () => {
     const socket = renderWithSession();
-
     socket.emit(
       'message',
       JSON.stringify({
@@ -131,54 +146,27 @@ describe('프롬프트 편집기', () => {
       }),
     );
 
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('sent successfully'));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Command sent'));
   });
 
-  it('서버가 오류 메시지를 보내면 해당 메시지를 표시한다', async () => {
+  it('서버가 명령을 거부하면 오류를 표시한다', async () => {
     const socket = renderWithSession();
-
-    socket.emit(
-      'message',
-      JSON.stringify({
-        type: 'session.error',
-        code: 'invalid_message',
-        message: 'Message rejected',
-      }),
-    );
-
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Message rejected'));
-  });
-
-  it('실패 결과에 오류 메시지가 없으면 기본 오류를 표시한다', async () => {
-    const socket = renderWithSession();
-
     socket.emit(
       'message',
       JSON.stringify({
         type: 'prompt.result',
         submissionId: '00000000-0000-4000-8000-000000000004',
         status: 'failed',
+        error: 'Command rejected',
       }),
     );
 
-    await waitFor(() =>
-      expect(screen.getByRole('status')).toHaveTextContent('could not be submitted'),
-    );
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Command rejected'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('서버가 잘못된 메시지를 보내면 프로토콜 오류를 표시한다', async () => {
+  it('잘못된 JSON 메시지를 받으면 프로토콜 오류를 표시한다', async () => {
     const socket = renderWithSession();
-
-    socket.emit('message', JSON.stringify({ type: 'unknown' }));
-
-    await waitFor(() =>
-      expect(screen.getByRole('status')).toHaveTextContent('returned an invalid message'),
-    );
-  });
-
-  it('WebSocket 메시지가 JSON이 아니면 프로토콜 오류를 표시한다', async () => {
-    const socket = renderWithSession();
-
     socket.emit('message', '{not-json');
 
     await waitFor(() =>
@@ -186,183 +174,14 @@ describe('프롬프트 편집기', () => {
     );
   });
 
-  it('WebSocket 오류가 발생하면 연결 오류를 표시한다', async () => {
+  it('WebSocket 오류와 종료를 각각 표시한다', async () => {
     const socket = renderWithSession();
-
     socket.emit('error', undefined);
-
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not connect'));
-  });
-
-  it('WebSocket이 종료되면 연결 종료 상태를 표시한다', async () => {
-    const socket = renderWithSession();
 
     socket.emit('close', undefined);
-
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent('Bridge connection closed'),
     );
-  });
-
-  it('성공 상태에서 WebSocket이 종료되어도 성공 상태를 유지한다', async () => {
-    const socket = renderWithSession();
-    socket.emit(
-      'message',
-      JSON.stringify({
-        type: 'prompt.result',
-        submissionId: '00000000-0000-4000-8000-000000000004',
-        status: 'accepted',
-      }),
-    );
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('sent successfully'));
-
-    socket.emit('close', undefined);
-
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('sent successfully'));
-  });
-
-  it('리뷰 준비 메시지를 받으면 응답을 승인할 수 있다', async () => {
-    const socket = renderWithSession();
-    socket.emit(
-      'message',
-      JSON.stringify({
-        type: 'review.ready',
-        reviewId: '00000000-0000-4000-8000-000000000010',
-        title: 'Review response',
-        content: 'Response body',
-      }),
-    );
-
-    await waitFor(() => expect(screen.getByRole('heading')).toHaveTextContent('Review response'));
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-
-    expect(socket.send).toHaveBeenLastCalledWith(
-      JSON.stringify({
-        type: 'review.submit',
-        reviewId: '00000000-0000-4000-8000-000000000010',
-        decision: 'approved',
-      }),
-    );
-  });
-
-  it('리뷰 피드백을 작성하면 피드백 결정을 전송한다', async () => {
-    const socket = renderWithSession();
-    socket.emit(
-      'message',
-      JSON.stringify({
-        type: 'review.ready',
-        reviewId: '00000000-0000-4000-8000-000000000010',
-        title: 'Review response',
-        content: 'Response body',
-      }),
-    );
-
-    await waitFor(() => expect(screen.getByRole('heading')).toHaveTextContent('Review response'));
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: '  Revise this  ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send feedback' }));
-
-    expect(socket.send).toHaveBeenLastCalledWith(
-      JSON.stringify({
-        type: 'review.submit',
-        reviewId: '00000000-0000-4000-8000-000000000010',
-        decision: 'feedback',
-        feedback: 'Revise this',
-      }),
-    );
-  });
-
-  it('승인된 리뷰 결과를 받으면 성공 상태를 표시한다', async () => {
-    const socket = renderWithSession();
-    socket.emit(
-      'message',
-      JSON.stringify({
-        type: 'review.ready',
-        reviewId: '00000000-0000-4000-8000-000000000010',
-        title: 'Review response',
-        content: 'Response body',
-      }),
-    );
-    await waitFor(() => expect(screen.getByRole('heading')).toHaveTextContent('Review response'));
-
-    socket.emit(
-      'message',
-      JSON.stringify({
-        type: 'review.result',
-        reviewId: '00000000-0000-4000-8000-000000000010',
-        decision: 'approved',
-      }),
-    );
-
-    await waitFor(() =>
-      expect(screen.getByRole('status')).toHaveTextContent('submitted successfully'),
-    );
-  });
-
-  it('거부된 리뷰 결과를 받으면 피드백 오류를 표시한다', async () => {
-    const socket = renderWithSession();
-    socket.emit(
-      'message',
-      JSON.stringify({
-        type: 'review.ready',
-        reviewId: '00000000-0000-4000-8000-000000000010',
-        title: 'Review response',
-        content: 'Response body',
-      }),
-    );
-    await waitFor(() => expect(screen.getByRole('heading')).toHaveTextContent('Review response'));
-
-    socket.emit(
-      'message',
-      JSON.stringify({
-        type: 'review.result',
-        reviewId: '00000000-0000-4000-8000-000000000010',
-        decision: 'rejected',
-        feedback: 'Needs changes',
-      }),
-    );
-
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Needs changes'));
-  });
-
-  it('피드백 없는 거부된 리뷰 결과는 기본 오류를 표시한다', async () => {
-    const socket = renderWithSession();
-    socket.emit(
-      'message',
-      JSON.stringify({
-        type: 'review.ready',
-        reviewId: '00000000-0000-4000-8000-000000000010',
-        title: 'Review response',
-        content: 'Response body',
-      }),
-    );
-    await waitFor(() => expect(screen.getByRole('heading')).toHaveTextContent('Review response'));
-    socket.emit(
-      'message',
-      JSON.stringify({
-        type: 'review.result',
-        reviewId: '00000000-0000-4000-8000-000000000010',
-        decision: 'rejected',
-      }),
-    );
-
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('rejected'));
-  });
-
-  it('리뷰 연결 오류를 표시한다', async () => {
-    const socket = renderWithSession();
-    socket.emit(
-      'message',
-      JSON.stringify({
-        type: 'review.ready',
-        reviewId: '00000000-0000-4000-8000-000000000010',
-        title: 'Review response',
-        content: 'Response body',
-      }),
-    );
-    await waitFor(() => expect(screen.getByRole('heading')).toHaveTextContent('Review response'));
-
-    socket.emit('error', undefined);
-
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not connect'));
   });
 });

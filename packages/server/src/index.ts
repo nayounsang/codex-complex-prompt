@@ -12,17 +12,14 @@ import {
   ClientMessageSchema,
   encodeServerMessage,
   type PromptSubmit,
-  type ReviewSubmit,
-  type ReviewResult,
   type ServerMessage,
 } from '@codex-complex-prompt/protocol';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 
 import { SessionStore, type SessionStoreOptions } from './session-store.js';
-import type { ReviewSessionData } from './session-store.js';
 
 export { SessionStore } from './session-store.js';
-export type { ReviewSessionData, SessionRecord, SessionStoreOptions } from './session-store.js';
+export type { SessionRecord, SessionStoreOptions } from './session-store.js';
 
 export interface PromptContext {
   readonly sessionId: string;
@@ -37,20 +34,13 @@ export interface LocalBridgeServerOptions extends SessionStoreOptions {
   readonly maxConnections?: number;
   readonly handshakeTimeoutMs?: number;
   readonly onPrompt: (prompt: string, context: PromptContext) => Promise<void>;
-  readonly onReview?: (result: ReviewSubmit, context: PromptContext) => Promise<void>;
-}
-
-export type ReviewSession = ReviewSessionData;
-
-export interface CreateSessionOptions {
-  readonly review?: ReviewSession;
 }
 
 export interface RunningLocalBridgeServer {
   readonly host: string;
   readonly port: number;
   readonly url: string;
-  readonly createSession: (options?: CreateSessionOptions) => {
+  readonly createSession: () => {
     id: string;
     token: string;
     expiresAt: Date;
@@ -109,14 +99,7 @@ export async function startLocalBridgeServer(
     };
     webSocket.once('close', releaseConnection);
     webSocket.once('error', releaseConnection);
-    attachConnection(
-      webSocket,
-      store,
-      options.onPrompt,
-      options.onReview ?? (() => Promise.resolve()),
-      promptTimeoutMs,
-      handshakeTimeoutMs,
-    );
+    attachConnection(webSocket, store, options.onPrompt, promptTimeoutMs, handshakeTimeoutMs);
   });
 
   await listen(httpServer, host, port);
@@ -130,8 +113,8 @@ export async function startLocalBridgeServer(
     host,
     port: address.port,
     url: `http://${host}:${address.port}`,
-    createSession: (createOptions = {}) => {
-      const session = store.create(createOptions);
+    createSession: () => {
+      const session = store.create();
       return { id: session.id, token: session.token, expiresAt: session.expiresAt };
     },
     close: async () => {
@@ -154,7 +137,6 @@ function attachConnection(
   webSocket: WebSocket,
   store: SessionStore,
   onPrompt: LocalBridgeServerOptions['onPrompt'],
-  onReview: NonNullable<LocalBridgeServerOptions['onReview']>,
   promptTimeoutMs: number,
   handshakeTimeoutMs: number,
 ): void {
@@ -227,24 +209,12 @@ function attachConnection(
         sessionId: session.id,
         expiresAt: session.expiresAt.toISOString(),
       });
-      if (session.review !== undefined) {
-        send(webSocket, {
-          type: 'review.ready',
-          reviewId: session.review.reviewId,
-          title: session.review.title,
-          content: session.review.content,
-        });
-      }
       return;
     }
 
     /* c8 ignore next 4 -- sessionId is assigned by the successful handshake above. */
     if (sessionId === undefined) {
       sendError(webSocket, 'invalid_message', 'The bridge session is not ready.');
-      return;
-    }
-    if (parsed.data.type === 'review.submit') {
-      await handleReviewSubmission(parsed.data);
       return;
     }
     if (parsed.data.type !== 'prompt.submit') {
@@ -259,32 +229,6 @@ function attachConnection(
     const queuedSubmission = submissionQueue.then(() => handleSubmission(promptSubmission));
     submissionQueue = queuedSubmission.catch(() => undefined);
     await queuedSubmission;
-  }
-
-  async function handleReviewSubmission(submission: ReviewSubmit): Promise<void> {
-    const session = store.get(sessionId as string);
-    if (session?.review === undefined || session.review.reviewId !== submission.reviewId) {
-      sendError(webSocket, 'invalid_message', 'This session does not have that review.');
-      return;
-    }
-    try {
-      await withTimeout(
-        onReview(submission, {
-          sessionId: sessionId as string,
-          submissionId: submission.reviewId,
-        }),
-        promptTimeoutMs,
-      );
-      const result: ReviewResult = {
-        type: 'review.result',
-        reviewId: submission.reviewId,
-        decision: submission.decision,
-        ...(submission.feedback === undefined ? {} : { feedback: submission.feedback }),
-      };
-      send(webSocket, result);
-    } catch {
-      sendError(webSocket, 'adapter_error', 'The review could not be delivered.');
-    }
   }
 
   async function handleSubmission(submission: PromptSubmit): Promise<void> {

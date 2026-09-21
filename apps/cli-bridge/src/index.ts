@@ -7,22 +7,22 @@ import open from 'open';
 
 import {
   startLocalBridgeServer,
-  type ReviewSession,
   type RunningLocalBridgeServer,
 } from '@codex-complex-prompt/server';
-import type { ReviewSubmit } from '@codex-complex-prompt/protocol';
 
 import {
   CodexSessionInputAdapter,
   type CodexSessionInput,
 } from './adapters/codex-session-input.js';
-import { installCodexStopHook, removeCodexStopHook } from './codex-hook-config.js';
+import { installCodexUserPromptHook, removeCodexUserPromptHook } from './codex-hook-config.js';
 import {
   CODEX_COMPLEX_PROMPT_NAME,
+  installCodexSkill,
   installCodexPrompt,
+  removeCodexSkill,
   removeCodexPrompt,
 } from './codex-prompt-config.js';
-import { runCodexStopHook } from './codex-stop-hook.js';
+import { runCodexUserPromptHook } from './codex-user-prompt-hook.js';
 
 export interface CliBridgeOptions {
   readonly inputAdapter?: CodexSessionInput;
@@ -31,8 +31,6 @@ export interface CliBridgeOptions {
   readonly port?: number;
   readonly sessionTtlMs?: number;
   readonly promptTimeoutMs?: number;
-  readonly review?: ReviewSession;
-  readonly onReview?: (result: ReviewSubmit) => Promise<void>;
   readonly staticDir?: string;
 }
 
@@ -47,19 +45,15 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
   const webUrl = options.webUrl === undefined ? undefined : validateWebUrl(options.webUrl);
   const inputAdapter = options.inputAdapter ?? new CodexSessionInputAdapter();
   const staticDir = options.staticDir ?? resolveStaticDir();
-  const onReview = options.onReview;
   const serverOptions = {
     onPrompt: (prompt: string) => inputAdapter.submit(prompt),
     ...(staticDir === undefined ? {} : { staticDir }),
     ...(options.port === undefined ? {} : { port: options.port }),
     ...(options.sessionTtlMs === undefined ? {} : { ttlMs: options.sessionTtlMs }),
     ...(options.promptTimeoutMs === undefined ? {} : { promptTimeoutMs: options.promptTimeoutMs }),
-    ...(onReview === undefined ? {} : { onReview: (result: ReviewSubmit) => onReview(result) }),
   };
   const server = await startLocalBridgeServer(serverOptions);
-  const session = server.createSession(
-    options.review === undefined ? {} : { review: options.review },
-  );
+  const session = server.createSession();
   const browserUrl = addToken(webUrl ?? server.url, session.token, server.url);
   const openBrowser =
     options.openBrowser ??
@@ -116,55 +110,84 @@ function validateWebUrl(webUrl: string): string {
 /* c8 ignore next */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args[0] === 'hook' && args[1] === 'stop') {
+  if (args[0] === 'hook' && args[1] === 'prompt' && args.length === 2) {
     const input = await readStdin();
-    const result = await runCodexStopHook(input);
+    const result = await runCodexUserPromptHook(input);
     process.stdout.write(`${JSON.stringify(result)}\n`);
     return;
   }
-  if (args[0] === 'hook' && (args[1] === 'install' || args[1] === 'setup')) {
-    const dryRun = args.includes('--dry-run');
+  if (
+    args[0] === 'hook' &&
+    (args[1] === 'install' || args[1] === 'setup') &&
+    (args.length === 2 || (args.length === 3 && args[2] === '--dry-run'))
+  ) {
+    const dryRun = args[2] === '--dry-run';
+    const skillResult = await installCodexSkill({ dryRun });
     const promptResult = await installCodexPrompt({ dryRun });
-    const result = await installCodexStopHook({
+    const result = await installCodexUserPromptHook({
       dryRun,
-      command: hookCommand(),
+      command: hookPromptCommand(),
     });
     process.stdout.write(
-      `${dryRun ? (result.changed ? 'Would install' : 'Already installed') : result.changed ? 'Installed' : 'Already installed'} Codex Stop hook in ${result.configPath}.\n`,
+      `${dryRun ? (result.changed ? 'Would install' : 'Already installed') : result.changed ? 'Installed' : 'Already installed'} Codex UserPromptSubmit hook in ${result.configPath}.\n`,
     );
     process.stdout.write(
-      `${dryRun ? (promptResult.changed ? 'Would install' : 'Already installed') : promptResult.changed ? 'Installed' : 'Already installed'} /${CODEX_COMPLEX_PROMPT_NAME} prompt in ${promptResult.promptPath}.\n`,
+      `${dryRun ? (skillResult.changed ? 'Would install' : 'Already installed') : skillResult.changed ? 'Installed' : 'Already installed'} $${CODEX_COMPLEX_PROMPT_NAME} skill in ${skillResult.skillPath}.\n`,
+    );
+    process.stdout.write(
+      `${dryRun ? (promptResult.changed ? 'Would install' : 'Already installed') : promptResult.changed ? 'Installed' : 'Already installed'} compatibility prompt in ${promptResult.promptPath}.\n`,
     );
     if (dryRun)
       process.stdout.write(
-        `${JSON.stringify({ config: result.config, prompt: promptResult.content }, null, 2)}\n`,
+        `${JSON.stringify({ config: result.config, skill: skillResult.content, prompt: promptResult.content }, null, 2)}\n`,
       );
     return;
   }
-  if (args[0] === 'hook' && (args[1] === 'remove' || args[1] === 'uninstall')) {
-    const dryRun = args.includes('--dry-run');
-    const result = await removeCodexStopHook({
+  if (
+    args[0] === 'hook' &&
+    (args[1] === 'remove' || args[1] === 'uninstall') &&
+    (args.length === 2 || (args.length === 3 && args[2] === '--dry-run'))
+  ) {
+    const dryRun = args[2] === '--dry-run';
+    const result = await removeCodexUserPromptHook({
       dryRun,
-      command: hookCommand(),
+      command: hookPromptCommand(),
     });
     process.stdout.write(
-      `${dryRun ? (result.changed ? 'Would remove' : 'No matching') : result.changed ? 'Removed' : 'No matching'} Codex Stop hook in ${result.configPath}.\n`,
+      `${dryRun ? (result.changed ? 'Would remove' : 'No matching') : result.changed ? 'Removed' : 'No matching'} Codex UserPromptSubmit hook in ${result.configPath}.\n`,
+    );
+    const skillResult = await removeCodexSkill({ dryRun });
+    process.stdout.write(
+      `${dryRun ? (skillResult.changed ? 'Would remove' : 'No matching') : skillResult.changed ? 'Removed' : 'No matching'} $${CODEX_COMPLEX_PROMPT_NAME} skill in ${skillResult.skillPath}.\n`,
     );
     const promptResult = await removeCodexPrompt({ dryRun });
     process.stdout.write(
-      `${dryRun ? (promptResult.changed ? 'Would remove' : 'No matching') : promptResult.changed ? 'Removed' : 'No matching'} /${CODEX_COMPLEX_PROMPT_NAME} prompt in ${promptResult.promptPath}.\n`,
+      `${dryRun ? (promptResult.changed ? 'Would remove' : 'No matching') : promptResult.changed ? 'Removed' : 'No matching'} compatibility prompt in ${promptResult.promptPath}.\n`,
     );
     if (dryRun)
       process.stdout.write(
-        `${JSON.stringify({ config: result.config, prompt: promptResult.content }, null, 2)}\n`,
+        `${JSON.stringify({ config: result.config, skill: skillResult.content, prompt: promptResult.content }, null, 2)}\n`,
       );
     return;
   }
   if (args.includes('--help') || args.includes('-h')) {
     process.stdout.write(
-      'Usage: complex-prompt [hook stop|hook install|hook remove]\n\n' +
-        'Run the local browser bridge, review Codex Stop events, or manage the Codex hook and /complex-prompt command.\n',
+      'Usage: complex-prompt [hook prompt|hook install|hook remove]\n\n' +
+        'Open a browser command editor for $complex-prompt and manage its Codex hook and skill.\n',
     );
+    return;
+  }
+  if (args.length > 0) {
+    process.stderr.write(`Unknown command: ${args.join(' ')}\n`);
+    process.exitCode = 1;
+    return;
+  }
+  if (args.length === 0) {
+    process.stderr.write(
+      'This CLI is opened by the installed Codex UserPromptSubmit hook. ' +
+        'Run `complex-prompt hook install` first, then invoke $complex-prompt in Codex.\n',
+    );
+    process.exitCode = 1;
     return;
   }
   const webUrl = process.env['COMPLEX_PROMPT_WEB_URL'];
@@ -190,11 +213,11 @@ async function main(): Promise<void> {
   process.once('SIGTERM', shutdown);
 }
 
-function hookCommand(): string {
+function hookPromptCommand(): string {
   const entrypoint = process.argv[1];
   return entrypoint === undefined
-    ? 'complex-prompt hook stop'
-    : `${quoteShell(entrypoint)} hook stop`;
+    ? 'complex-prompt hook prompt'
+    : `${quoteShell(entrypoint)} hook prompt`;
 }
 
 function quoteShell(value: string): string {
@@ -229,8 +252,8 @@ export {
   MockCodexSessionInputAdapter,
 } from './adapters/codex-session-input.js';
 export {
-  installCodexStopHook,
-  removeCodexStopHook,
+  installCodexUserPromptHook,
+  removeCodexUserPromptHook,
   type CodexHookConfigOptions,
   type CodexHookConfigResult,
 } from './codex-hook-config.js';
@@ -238,19 +261,22 @@ export {
   CODEX_COMPLEX_PROMPT_CONTENT,
   CODEX_COMPLEX_PROMPT_FILE_MARKER,
   CODEX_COMPLEX_PROMPT_NAME,
+  CODEX_COMPLEX_SKILL_CONTENT,
+  CODEX_COMPLEX_SKILL_FILE_MARKER,
   defaultCodexPromptPath,
+  defaultCodexSkillPath,
+  installCodexSkill,
   installCodexPrompt,
+  removeCodexSkill,
   removeCodexPrompt,
   type CodexPromptConfigOptions,
   type CodexPromptConfigResult,
+  type CodexSkillConfigOptions,
+  type CodexSkillConfigResult,
 } from './codex-prompt-config.js';
 export {
-  extractReviewContent,
-  parseCodexStopHookInput,
-  runCodexStopHook,
-  type CodexHookContinuation,
-  type CodexHookOutput,
-  type CodexStopHookInput,
-  type CodexStopHookResult,
-  type RunCodexStopHookOptions,
-} from './codex-stop-hook.js';
+  parseCodexUserPromptHookInput,
+  runCodexUserPromptHook,
+  type CodexUserPromptHookOutput,
+  type RunCodexUserPromptHookOptions,
+} from './codex-user-prompt-hook.js';
