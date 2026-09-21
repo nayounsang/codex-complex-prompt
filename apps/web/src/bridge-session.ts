@@ -29,6 +29,11 @@ function parseBridgeUrl(bridge: string): BridgeUrlResult {
   if (!['http:', 'https:'].includes(url.protocol)) {
     return { url: null, error: 'The bridge URL must use HTTP or HTTPS.' };
   }
+  const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  const isLoopbackHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  if (url.protocol === 'http:' && !isLoopbackHost) {
+    return { url: null, error: 'Remote bridge URLs must use HTTPS.' };
+  }
   return { url, error: null };
 }
 
@@ -144,7 +149,9 @@ export function useBridgeSession(): BridgeSession {
       function handleClose(): void {
         if (socketRef.current !== connection) return;
         socketRef.current = null;
-        setState((current) => (current === 'success' ? current : 'disconnected'));
+        setState((current) =>
+          current === 'success' || current === 'error' ? current : 'disconnected',
+        );
       }
 
       function handleError(): void {

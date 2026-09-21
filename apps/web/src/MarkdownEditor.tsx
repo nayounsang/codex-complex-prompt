@@ -1,4 +1,11 @@
-import { forwardRef, useEffect, useEffectEvent, useImperativeHandle, useRef } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useEffectEvent,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 
 import { size } from '@floating-ui/dom';
 import { Crepe } from '@milkdown/crepe';
@@ -49,6 +56,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const rootRef = useRef<HTMLDivElement>(null);
     const crepeRef = useRef<Crepe | null>(null);
     const markdownRef = useRef(defaultMarkdown);
+    const [initializationError, setInitializationError] = useState<Error | null>(null);
     const notifyMarkdownChange = useEffectEvent((markdown: string) => {
       onMarkdownChange?.(markdown);
     });
@@ -106,8 +114,12 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             markdownRef.current = crepe.getMarkdown();
             notifyMarkdownChange(markdownRef.current);
           })
-          .catch(function clearFailedEditor() {
-            if (!disposed) crepeRef.current = null;
+          .catch(function reportFailedEditor(error: unknown) {
+            if (disposed) return;
+            crepeRef.current = null;
+            setInitializationError(
+              error instanceof Error ? error : new Error('The Markdown editor failed to load.'),
+            );
           });
 
         return () => {
@@ -127,6 +139,10 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       },
       [readOnly],
     );
+
+    if (initializationError !== null) {
+      throw initializationError;
+    }
 
     return (
       <div

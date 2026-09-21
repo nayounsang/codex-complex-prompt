@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode } from 'react';
 
 const crepeTestState = vi.hoisted(() => {
-  const state: { instance: MockCrepe | undefined } = { instance: undefined };
+  const state: { instance: MockCrepe | undefined; createError: Error | undefined } = {
+    instance: undefined,
+    createError: undefined,
+  };
 
   class MockCrepe {
     public static readonly Feature = {
@@ -45,6 +48,7 @@ const crepeTestState = vi.hoisted(() => {
     }
 
     public async create(): Promise<this> {
+      if (state.createError !== undefined) throw state.createError;
       const root = this.options['root'];
       if (!(root instanceof HTMLElement)) throw new Error('Crepe root was not provided.');
       const editor = document.createElement('div');
@@ -117,6 +121,7 @@ afterEach(() => {
   MockWebSocket.instance = undefined;
   MockWebSocket.instances = [];
   crepeTestState.state.instance = undefined;
+  crepeTestState.state.createError = undefined;
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -181,6 +186,16 @@ describe('명령 편집기', () => {
     const socket = renderWithSession('https://127.0.0.1:4321');
 
     expect(socket.url).toBe('wss://127.0.0.1:4321/ws');
+  });
+
+  it('원격 HTTP 브리지 URL이면 평문 WebSocket 연결을 만들지 않는다', async () => {
+    window.history.replaceState({}, '', '/?token=test-token&bridge=http%3A%2F%2Fbridge.example');
+    vi.stubGlobal('WebSocket', MockWebSocket);
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('must use HTTPS'));
+    expect(MockWebSocket.instances).toHaveLength(0);
   });
 
   it('Strict Mode에서 폐기된 연결이 활성 연결 상태를 덮어쓰지 않는다', async () => {
@@ -392,13 +407,23 @@ describe('명령 편집기', () => {
     );
   });
 
-  it('WebSocket 오류와 종료를 각각 표시한다', async () => {
+  it('WebSocket 오류가 발생하면 연결 종료 후에도 오류 상태를 유지한다', async () => {
     const socket = renderWithSession();
     socket.emit('error', undefined);
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not connect'));
 
     socket.emit('close', undefined);
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Disconnected'));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not connect'));
+  });
+
+  it('Crepe 초기화가 실패하면 편집기 오류와 재시도 안내를 표시한다', async () => {
+    crepeTestState.state.createError = new Error('Crepe initialization failed.');
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    renderWithSession();
+
+    expect(
+      await screen.findByText('Editor failed to load. Reload to try again.'),
+    ).toBeInTheDocument();
   });
 
   it('React가 편집기를 제거하면 Crepe 인스턴스를 destroy한다', async () => {
