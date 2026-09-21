@@ -244,6 +244,28 @@ describe('Codex Stop 훅 어댑터', () => {
       systemMessage: expect.stringContaining('cancelled'),
     });
   });
+
+  it('리뷰 대기 중 abort 신호가 도착하면 취소 메시지와 함께 계속 진행한다', async () => {
+    const controller = new AbortController();
+    const resultPromise = runCodexStopHook(
+      JSON.stringify({ last_assistant_message: 'Plan text' }),
+      {
+        signal: controller.signal,
+        timeoutMs: 2_000,
+        bridgeOptions: {
+          openBrowser: () => {
+            setTimeout(() => controller.abort(), 0);
+            return Promise.resolve();
+          },
+        },
+      },
+    );
+
+    await expect(resultPromise).resolves.toMatchObject({
+      continue: true,
+      systemMessage: expect.stringContaining('cancelled'),
+    });
+  });
 });
 
 function onceOpen(socket: WebSocket): Promise<void> {

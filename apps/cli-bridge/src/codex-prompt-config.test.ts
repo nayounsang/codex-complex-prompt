@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   CODEX_COMPLEX_PROMPT_CONTENT,
   CODEX_COMPLEX_PROMPT_FILE_MARKER,
+  defaultCodexPromptPath,
   installCodexPrompt,
   removeCodexPrompt,
 } from './codex-prompt-config.js';
@@ -30,6 +31,21 @@ describe('Codex 슬래시 prompt 설정', () => {
     expect(result.changed).toBe(true);
     expect(await readFile(promptPath, 'utf8')).toBe(CODEX_COMPLEX_PROMPT_CONTENT);
     expect(result.content).toContain(CODEX_COMPLEX_PROMPT_FILE_MARKER);
+  });
+
+  it('CODEX_HOME이 지정되면 기본 슬래시 prompt 경로를 그 아래로 계산한다', async () => {
+    const codexHome = await createDirectory();
+    const previousCodexHome = process.env['CODEX_HOME'];
+    process.env['CODEX_HOME'] = codexHome;
+
+    try {
+      const result = await installCodexPrompt();
+
+      expect(defaultCodexPromptPath()).toBe(join(codexHome, 'prompts', 'complex-prompt.md'));
+      expect(result.promptPath).toBe(join(codexHome, 'prompts', 'complex-prompt.md'));
+    } finally {
+      restoreCodexHome(previousCodexHome);
+    }
   });
 
   it('드라이런에서는 슬래시 prompt 파일을 쓰지 않는다', async () => {
@@ -67,10 +83,21 @@ describe('Codex 슬래시 prompt 설정', () => {
     expect(result.changed).toBe(true);
     await expect(readFile(promptPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
+
+  it('읽는 중 오류가 발생한 prompt 경로를 거부한다', async () => {
+    const promptPath = await createDirectory();
+
+    await expect(installCodexPrompt({ promptPath })).rejects.toThrow();
+  });
 });
 
 async function createDirectory(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'codex-prompt-test-'));
   temporaryDirectories.push(directory);
   return directory;
+}
+
+function restoreCodexHome(value: string | undefined): void {
+  if (value === undefined) delete process.env['CODEX_HOME'];
+  else process.env['CODEX_HOME'] = value;
 }
