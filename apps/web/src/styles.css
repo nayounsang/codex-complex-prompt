@@ -78,23 +78,6 @@ textarea:focus {
   outline: 2px solid #9aa5ff;
   outline-offset: 2px;
 }
-.review-content {
-  max-height: 48vh;
-  overflow: auto;
-  padding: 16px;
-  border: 1px solid #3c4250;
-  border-radius: 12px;
-  color: #e8e9ed;
-  background: #101218;
-  font: inherit;
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-.review-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
 button {
   width: 100%;
   margin-top: 16px;
@@ -106,10 +89,6 @@ button {
   font: inherit;
   font-weight: 800;
   cursor: pointer;
-}
-.review-actions button:last-child {
-  color: #e8e9ed;
-  background: #454b5e;
 }
 button:disabled {
   cursor: not-allowed;

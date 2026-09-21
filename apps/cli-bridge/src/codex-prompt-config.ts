@@ -5,22 +5,33 @@ import { defaultCodexHome } from './codex-hook-config.js';
 
 export const CODEX_COMPLEX_PROMPT_NAME = 'complex-prompt';
 export const CODEX_COMPLEX_PROMPT_FILE_MARKER = '<!-- codex-complex-prompt:managed -->';
+export const CODEX_COMPLEX_SKILL_FILE_MARKER = '<!-- codex-complex-prompt:skill-managed -->';
 
 export const CODEX_COMPLEX_PROMPT_CONTENT = `---
-description: Draft a complex request and review the resulting Codex response in a browser.
+description: Open a browser command editor and send a complex command to Codex.
 argument-hint: "[PROMPT=<text>]"
 ---
 
 ${CODEX_COMPLEX_PROMPT_FILE_MARKER}
 Use the Codex Complex Prompt workflow for the request below.
 
-Treat the supplied arguments as the user's request. If no arguments are supplied, use the
-current conversation context. Work through the request normally, and produce a clear final
-response or implementation plan. The installed Codex Stop hook will open the browser review
-when your response is complete.
+Use the browser command editor to write the command that Codex should execute. The editor sends
+the command before Codex processes the request and does not display AI responses.
 
 Request:
 $ARGUMENTS
+`;
+
+export const CODEX_COMPLEX_SKILL_CONTENT = `---
+name: ${CODEX_COMPLEX_PROMPT_NAME}
+description: Open the browser command editor for complex requests and send one command to Codex.
+---
+
+${CODEX_COMPLEX_SKILL_FILE_MARKER}
+Open the Codex Complex Prompt browser command editor for the user's request.
+
+Write the command Codex should execute and send it. The editor is only a command input surface;
+AI responses remain in Codex and are not shown in the browser.
 `;
 
 export interface CodexPromptConfigOptions {
@@ -30,6 +41,17 @@ export interface CodexPromptConfigOptions {
 
 export interface CodexPromptConfigResult {
   readonly promptPath: string;
+  readonly changed: boolean;
+  readonly content: string;
+}
+
+export interface CodexSkillConfigOptions {
+  readonly skillPath?: string;
+  readonly dryRun?: boolean;
+}
+
+export interface CodexSkillConfigResult {
+  readonly skillPath: string;
   readonly changed: boolean;
   readonly content: string;
 }
@@ -61,12 +83,47 @@ export async function removeCodexPrompt(
   };
 }
 
+export async function installCodexSkill(
+  options: CodexSkillConfigOptions = {},
+): Promise<CodexSkillConfigResult> {
+  const skillPath = options.skillPath ?? defaultCodexSkillPath();
+  const current = await readOptionalFile(skillPath);
+  if (current !== undefined && !isOwnedSkill(current)) {
+    throw new Error(`Codex skill file already exists and is not package-owned: ${skillPath}`);
+  }
+  const changed = current !== CODEX_COMPLEX_SKILL_CONTENT;
+  if (changed && options.dryRun !== true) await writeSkill(skillPath);
+  return { skillPath, changed, content: CODEX_COMPLEX_SKILL_CONTENT };
+}
+
+export async function removeCodexSkill(
+  options: CodexSkillConfigOptions = {},
+): Promise<CodexSkillConfigResult> {
+  const skillPath = options.skillPath ?? defaultCodexSkillPath();
+  const current = await readOptionalFile(skillPath);
+  const owned = current !== undefined && isOwnedSkill(current);
+  if (owned && options.dryRun !== true) await unlink(skillPath);
+  return {
+    skillPath,
+    changed: owned,
+    content: current ?? CODEX_COMPLEX_SKILL_CONTENT,
+  };
+}
+
 export function defaultCodexPromptPath(): string {
   return join(defaultCodexHome(), 'prompts', `${CODEX_COMPLEX_PROMPT_NAME}.md`);
 }
 
+export function defaultCodexSkillPath(): string {
+  return join(defaultCodexHome(), 'skills', CODEX_COMPLEX_PROMPT_NAME, 'SKILL.md');
+}
+
 function isOwnedPrompt(content: string): boolean {
   return content.includes(CODEX_COMPLEX_PROMPT_FILE_MARKER);
+}
+
+function isOwnedSkill(content: string): boolean {
+  return content.includes(CODEX_COMPLEX_SKILL_FILE_MARKER);
 }
 
 async function readOptionalFile(path: string): Promise<string | undefined> {
@@ -81,4 +138,9 @@ async function readOptionalFile(path: string): Promise<string | undefined> {
 async function writePrompt(promptPath: string): Promise<void> {
   await mkdir(dirname(promptPath), { recursive: true });
   await writeFile(promptPath, CODEX_COMPLEX_PROMPT_CONTENT, 'utf8');
+}
+
+async function writeSkill(skillPath: string): Promise<void> {
+  await mkdir(dirname(skillPath), { recursive: true });
+  await writeFile(skillPath, CODEX_COMPLEX_SKILL_CONTENT, 'utf8');
 }

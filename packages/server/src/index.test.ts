@@ -49,34 +49,6 @@ function nextMessage(socket: WebSocket, timeoutMs = 1_000): Promise<unknown> {
   });
 }
 
-function collectMessages(socket: WebSocket, count: number): Promise<unknown[]> {
-  return new Promise((resolve, reject) => {
-    const messages: unknown[] = [];
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('WebSocket messages timed out.'));
-    }, 1_000);
-    const onMessage = (value: WebSocket.RawData): void => {
-      messages.push(JSON.parse(rawDataToString(value)) as unknown);
-      if (messages.length === count) {
-        cleanup();
-        resolve(messages);
-      }
-    };
-    const onError = (error: Error): void => {
-      cleanup();
-      reject(error);
-    };
-    const cleanup = (): void => {
-      clearTimeout(timeout);
-      socket.off('message', onMessage);
-      socket.off('error', onError);
-    };
-    socket.on('message', onMessage);
-    socket.once('error', onError);
-  });
-}
-
 function nextClose(socket: WebSocket, timeoutMs = 1_000): Promise<number> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -189,110 +161,6 @@ describe('로컬 브리지 서버', () => {
         status: 'accepted',
       });
       expect(received).toEqual(['Forward me']);
-    } finally {
-      await server.close();
-    }
-  });
-
-  it('리뷰 세션이 브라우저 결과를 훅 어댑터로 전달한다', async () => {
-    const received: string[] = [];
-    const server = await startLocalBridgeServer({
-      onPrompt: async () => undefined,
-      onReview: async (result) => {
-        received.push(`${result.decision}:${result.feedback ?? ''}`);
-      },
-    });
-    const session = server.createSession({
-      review: {
-        reviewId: '00000000-0000-4000-8000-000000000010',
-        title: 'Review response',
-        content: 'A response to review',
-      },
-    });
-
-    try {
-      const socket = await openSocket(server);
-      const initialMessages = collectMessages(socket, 2);
-      socket.send(JSON.stringify({ type: 'session.handshake', token: session.token }));
-      const [, reviewReady] = await initialMessages;
-      expect(reviewReady).toMatchObject({
-        type: 'review.ready',
-        reviewId: '00000000-0000-4000-8000-000000000010',
-      });
-      socket.send(
-        JSON.stringify({
-          type: 'review.submit',
-          reviewId: '00000000-0000-4000-8000-000000000010',
-          decision: 'feedback',
-          feedback: 'Add a test case',
-        }),
-      );
-
-      expect(await nextMessage(socket)).toMatchObject({
-        type: 'review.result',
-        decision: 'feedback',
-      });
-      expect(received).toEqual(['feedback:Add a test case']);
-    } finally {
-      await server.close();
-    }
-  });
-
-  it('리뷰가 없는 세션의 리뷰 제출을 거부한다', async () => {
-    const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
-    const session = server.createSession();
-
-    try {
-      const { socket } = await authenticate(server, session.token);
-      socket.send(
-        JSON.stringify({
-          type: 'review.submit',
-          reviewId: randomUUID(),
-          decision: 'approved',
-        }),
-      );
-
-      expect(await nextMessage(socket)).toMatchObject({
-        type: 'session.error',
-        code: 'invalid_message',
-      });
-    } finally {
-      await server.close();
-    }
-  });
-
-  it('리뷰 어댑터가 실패하면 어댑터 오류를 반환한다', async () => {
-    const server = await startLocalBridgeServer({
-      onPrompt: async () => undefined,
-      onReview: async () => {
-        throw new Error('review unavailable');
-      },
-    });
-    const session = server.createSession({
-      review: {
-        reviewId: '00000000-0000-4000-8000-000000000011',
-        title: 'Review response',
-        content: 'A response to review',
-      },
-    });
-
-    try {
-      const socket = await openSocket(server);
-      const initialMessages = collectMessages(socket, 2);
-      socket.send(JSON.stringify({ type: 'session.handshake', token: session.token }));
-      await initialMessages;
-      socket.send(
-        JSON.stringify({
-          type: 'review.submit',
-          reviewId: '00000000-0000-4000-8000-000000000011',
-          decision: 'approved',
-        }),
-      );
-
-      expect(await nextMessage(socket)).toMatchObject({
-        type: 'session.error',
-        code: 'adapter_error',
-      });
     } finally {
       await server.close();
     }
@@ -573,6 +441,24 @@ describe('로컬 브리지 서버', () => {
       const second = await openSocket(server);
 
       expect(await nextClose(second)).toBe(1013);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('WebSocket이 아닌 경로의 upgrade 요청을 종료한다', async () => {
+    const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
+
+    try {
+      const socket = new WebSocket(`${server.url}/not-ws`);
+      sockets.push(socket);
+
+      const termination = await new Promise<'error' | 'close'>((resolve) => {
+        socket.once('error', () => resolve('error'));
+        socket.once('close', () => resolve('close'));
+      });
+
+      expect(['error', 'close']).toContain(termination);
     } finally {
       await server.close();
     }
