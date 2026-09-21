@@ -139,6 +139,7 @@ function renderWithSession(bridge = 'http://127.0.0.1:4321'): MockWebSocket {
       expiresAt: '2026-09-20T00:00:00.000Z',
     }),
   );
+  fireEvent.pointerEnter(screen.getByRole('button', { name: 'Markdown command editor' }));
   return socket;
 }
 
@@ -153,7 +154,27 @@ describe('명령 편집기', () => {
     render(<App />);
 
     expect(screen.getByRole('status')).toHaveTextContent('needs a bridge session token');
-    expect(screen.getByRole('button')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send to Codex' })).toBeDisabled();
+  });
+
+  it('잘못된 브리지 URL이면 화면을 유지하고 오류 상태를 표시한다', async () => {
+    window.history.replaceState({}, '', '/?token=test-token&bridge=%25');
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('bridge URL is invalid'),
+    );
+    expect(screen.getByRole('button', { name: 'Send to Codex' })).toBeDisabled();
+  });
+
+  it('에디터 영역에 포인터가 들어오면 지연된 Markdown 편집기를 표시한다', async () => {
+    render(<App />);
+
+    const editorPlaceholder = screen.getByRole('button', { name: 'Markdown command editor' });
+    fireEvent.pointerEnter(editorPlaceholder);
+
+    expect(await screen.findByRole('textbox', { name: 'Command' })).toBeInTheDocument();
   });
 
   it('브리지 오리진에 맞는 WebSocket을 연결한다', () => {
@@ -187,23 +208,25 @@ describe('명령 편집기', () => {
         expiresAt: '2026-09-20T00:00:00.000Z',
       }),
     );
-    await waitFor(() =>
-      expect(screen.getByRole('status')).toHaveTextContent('Command editor ready'),
-    );
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Connected'));
 
     discardedConnection.emit('close', undefined);
 
-    expect(screen.getByRole('status')).toHaveTextContent('Command editor ready');
+    expect(screen.getByRole('status')).toHaveTextContent('Connected');
   });
 
   it('연결되면 Markdown 편집기와 비활성 전송 버튼을 표시한다', async () => {
     renderWithSession();
 
     await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent('Command editor ready');
+      expect(screen.getByRole('status')).toHaveTextContent('Connected');
       expect(screen.getByRole('textbox', { name: 'Command' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Send to Codex' })).toBeDisabled();
     });
+    expect(screen.getByRole('banner')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Prompt actions' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Prompt editor' })).toBeInTheDocument();
+    expect(screen.queryByText('New prompt')).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: /textarea/i })).not.toBeInTheDocument();
   });
 
@@ -259,25 +282,27 @@ describe('명령 편집기', () => {
     expect(screen.getByRole('button', { name: 'Send to Codex' })).toBeDisabled();
   });
 
-  it('12,000자를 초과한 Markdown 문서는 전송을 막는다', async () => {
+  it('12,000자를 초과한 Markdown은 제출 시 오류를 표시한다', async () => {
     renderWithSession();
 
     await editMarkdown('a'.repeat(12_001));
 
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('12,000 characters or fewer');
-      expect(screen.getByRole('button', { name: 'Send to Codex' })).toBeDisabled();
-    });
+    const sendButton = await screen.findByRole('button', { name: 'Send to Codex' });
+    expect(sendButton).toBeEnabled();
+
+    fireEvent.click(sendButton);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('12,000 characters or fewer');
   });
 
-  it('Crepe 설정에서 파일 이미지 업로드를 끄고 URL 이미지 안내를 표시한다', async () => {
+  it('Crepe 설정에서 파일 이미지 업로드를 끈다', async () => {
     renderWithSession();
 
     await waitFor(() => expect(crepeTestState.state.instance).toBeDefined());
     expect(crepeTestState.state.instance?.options['features']).toMatchObject({
       'image-block': false,
     });
-    expect(screen.getByText('Images: use Markdown URLs')).toBeInTheDocument();
+    expect(screen.queryByText('Images: use Markdown URLs')).not.toBeInTheDocument();
   });
 
   it('이미지 파일을 붙여넣으면 브라우저 첨부를 막는다', async () => {
@@ -339,7 +364,7 @@ describe('명령 편집기', () => {
       }),
     );
 
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Command sent'));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Sent'));
   });
 
   it('서버가 명령을 거부하면 오류를 표시한다', async () => {
@@ -373,9 +398,7 @@ describe('명령 편집기', () => {
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not connect'));
 
     socket.emit('close', undefined);
-    await waitFor(() =>
-      expect(screen.getByRole('status')).toHaveTextContent('Bridge connection closed'),
-    );
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Disconnected'));
   });
 
   it('React가 편집기를 제거하면 Crepe 인스턴스를 destroy한다', async () => {

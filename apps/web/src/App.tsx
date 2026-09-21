@@ -9,64 +9,77 @@ const MAX_PROMPT_LENGTH = 12_000;
 
 export function App(): React.JSX.Element {
   const [markdown, setMarkdown] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
   const editorRef = useRef<MarkdownEditorHandle>(null);
   const { state, error, closeInSeconds, submit } = useBridgeSession();
   const isSubmitting = state === 'submitting';
-  const trimmedMarkdownLength = markdown.trim().length;
-  const isOverPromptLimit = trimmedMarkdownLength > MAX_PROMPT_LENGTH;
-  const isEmpty = trimmedMarkdownLength === 0;
+  const isEmpty = markdown.trim().length === 0;
   const handleMarkdownChange = useCallback((nextMarkdown: string) => {
     setMarkdown(nextMarkdown);
+    setValidationError(null);
   }, []);
 
   function handleSubmit(event: SyntheticEvent<HTMLFormElement>): void {
     event.preventDefault();
-    submit(editorRef.current?.getMarkdown() ?? markdown);
+    const prompt = editorRef.current?.getMarkdown() ?? markdown;
+    if (prompt.trim().length > MAX_PROMPT_LENGTH) {
+      setValidationError('Markdown commands must be 12,000 characters or fewer.');
+      return;
+    }
+    setValidationError(null);
+    submit(prompt);
   }
 
   return (
     <main className="shell">
-      <section className="editor-card" aria-labelledby="title">
-        <header className="editor-header">
-          <div>
-            <p className="eyebrow">CODEX COMMAND EDITOR</p>
-            <h1 id="title">Write a Markdown command</h1>
-          </div>
-          <p className="format-hint">Markdown is sent directly to Codex</p>
-        </header>
-        <p className={`status status-${state}`} role="status">
-          {state === 'connecting' && 'Connecting to the local bridge…'}
-          {state === 'connected' && 'Command editor ready'}
-          {state === 'submitting' && 'Sending command…'}
-          {state === 'success' && 'Command sent. This window can be closed.'}
-          {state === 'error' && (error ?? 'Something went wrong')}
-          {state === 'disconnected' && 'Bridge connection closed'}
+      <header className="app-header">
+        <div className="brand" aria-label="Codex Prompt">
+          <span className="brand-mark" aria-hidden="true">
+            ◇
+          </span>
+          <span>Codex Prompt</span>
+        </div>
+        <p className={`connection-status connection-status-${state}`} role="status">
+          <span className="status-dot" aria-hidden="true" />
+          <span>
+            {state === 'connecting' && 'Connecting'}
+            {state === 'connected' && 'Connected'}
+            {state === 'submitting' && 'Sending'}
+            {state === 'success' && 'Sent'}
+            {state === 'error' && (error ?? 'Something went wrong')}
+            {state === 'disconnected' && 'Disconnected'}
+          </span>
         </p>
-        <form onSubmit={handleSubmit}>
-          <label htmlFor="markdown-editor">Command</label>
-          <LazyMarkdownEditor
-            ref={editorRef}
-            readOnly={isSubmitting}
-            onMarkdownChange={handleMarkdownChange}
-          />
-          <div className="editor-footer">
-            <span className={isOverPromptLimit ? 'prompt-limit' : undefined}>
-              {trimmedMarkdownLength.toLocaleString()} / {MAX_PROMPT_LENGTH.toLocaleString()}
-            </span>
-            <span>Images: use Markdown URLs</span>
-          </div>
+      </header>
+      <section className="app-action-bar" aria-label="Prompt actions">
+        <div className="action-inner">
           <button
             type="submit"
-            disabled={isSubmitting || state !== 'connected' || isEmpty || isOverPromptLimit}
+            form="prompt-form"
+            disabled={isSubmitting || state !== 'connected' || isEmpty}
           >
             {isSubmitting ? 'Sending…' : 'Send to Codex'}
           </button>
-          {isOverPromptLimit && (
-            <p className="prompt-limit" role="alert">
-              Markdown commands must be 12,000 characters or fewer.
-            </p>
-          )}
-        </form>
+        </div>
+      </section>
+      <section className="editor-scroll-region" aria-label="Prompt editor">
+        <div className="editor-page">
+          <form id="prompt-form" className="prompt-form" onSubmit={handleSubmit}>
+            <label className="sr-only" htmlFor="markdown-editor">
+              Command
+            </label>
+            <LazyMarkdownEditor
+              ref={editorRef}
+              readOnly={isSubmitting}
+              onMarkdownChange={handleMarkdownChange}
+            />
+            {validationError !== null && (
+              <p className="prompt-limit" role="alert">
+                {validationError}
+              </p>
+            )}
+          </form>
+        </div>
       </section>
       {closeInSeconds !== null && (
         <div className="countdown-backdrop">

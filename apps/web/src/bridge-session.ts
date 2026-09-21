@@ -14,12 +14,34 @@ interface BridgeSession {
   readonly submit: (prompt: string) => void;
 }
 
+interface BridgeUrlResult {
+  readonly url: URL | null;
+  readonly error: string | null;
+}
+
+function parseBridgeUrl(bridge: string): BridgeUrlResult {
+  let url: URL;
+  try {
+    url = new URL(bridge);
+  } catch {
+    return { url: null, error: 'The bridge URL is invalid.' };
+  }
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    return { url: null, error: 'The bridge URL must use HTTP or HTTPS.' };
+  }
+  return { url, error: null };
+}
+
 function getInitialConnection(): { state: ConnectionState; error: string | null } {
   if (typeof window === 'undefined') return { state: 'connecting', error: null };
-  const token = new URLSearchParams(window.location.search).get('token');
-  return token === null
-    ? { state: 'error', error: 'This page needs a bridge session token.' }
-    : { state: 'connecting', error: null };
+  const searchParams = new URLSearchParams(window.location.search);
+  if (searchParams.get('token') === null) {
+    return { state: 'error', error: 'This page needs a bridge session token.' };
+  }
+  const bridgeResult = parseBridgeUrl(searchParams.get('bridge') ?? window.location.origin);
+  return bridgeResult.error === null
+    ? { state: 'connecting', error: null }
+    : { state: 'error', error: bridgeResult.error };
 }
 
 export function useBridgeSession(): BridgeSession {
@@ -51,13 +73,15 @@ export function useBridgeSession(): BridgeSession {
         return;
       }
       tokenRef.current = token;
+      const bridge = bridgeRef.current ?? searchParams.get('bridge') ?? window.location.origin;
+      const bridgeResult = parseBridgeUrl(bridge);
+      if (bridgeResult.url === null) return;
+      const bridgeOrigin = bridgeResult.url;
+      bridgeRef.current = bridge;
       const cleanUrl = `${window.location.pathname}${window.location.hash}`;
       if (searchParams.has('token')) {
         window.history.replaceState({}, document.title, cleanUrl);
       }
-      const bridge = bridgeRef.current ?? searchParams.get('bridge') ?? window.location.origin;
-      bridgeRef.current = bridge;
-      const bridgeOrigin = new URL(bridge);
       const protocol = bridgeOrigin.protocol === 'https:' ? 'wss:' : 'ws:';
       const connection = new WebSocket(`${protocol}//${bridgeOrigin.host}/ws`);
       socketRef.current = connection;

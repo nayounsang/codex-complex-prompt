@@ -1,7 +1,9 @@
 import { forwardRef, useEffect, useEffectEvent, useImperativeHandle, useRef } from 'react';
 
+import { size } from '@floating-ui/dom';
 import { Crepe } from '@milkdown/crepe';
-import '@milkdown/crepe/theme/classic-dark.css';
+import '@milkdown/crepe/theme/common/style.css';
+import '@milkdown/crepe/theme/frame.css';
 
 export interface MarkdownEditorHandle {
   getMarkdown: () => string;
@@ -17,10 +19,25 @@ const crepeFeatures = {
   [Crepe.Feature.ImageBlock]: false,
 };
 
+const slashMenuMiddleware = [
+  size({
+    padding: 8,
+    apply({ availableHeight, elements }) {
+      elements.floating.style.maxHeight = `${Math.max(0, availableHeight)}px`;
+      elements.floating.style.overflowY = 'auto';
+    },
+  }),
+];
+
 const crepeFeatureConfigs = {
+  [Crepe.Feature.BlockEdit]: {
+    slashMenu: {
+      middleware: slashMenuMiddleware,
+    },
+  },
   [Crepe.Feature.Placeholder]: {
     mode: 'doc' as const,
-    text: '마크다운으로 Codex 명령을 작성하세요…',
+    text: 'Start writing…',
   },
 };
 
