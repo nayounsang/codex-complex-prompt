@@ -11,9 +11,17 @@ export const PromptSubmitSchema = z.object({
   prompt: z.string().trim().min(1).max(12_000),
 });
 
+export const ReviewSubmitSchema = z.object({
+  type: z.literal('review.submit'),
+  reviewId: z.string().uuid(),
+  decision: z.enum(['approved', 'rejected', 'feedback']),
+  feedback: z.string().trim().max(12_000).optional(),
+});
+
 export const ClientMessageSchema = z.discriminatedUnion('type', [
   SessionHandshakeSchema,
   PromptSubmitSchema,
+  ReviewSubmitSchema,
 ]);
 
 export const SessionReadySchema = z.object({
@@ -27,6 +35,20 @@ export const PromptResultSchema = z.object({
   submissionId: z.string().uuid(),
   status: z.enum(['accepted', 'failed']),
   error: z.string().optional(),
+});
+
+export const ReviewReadySchema = z.object({
+  type: z.literal('review.ready'),
+  reviewId: z.string().uuid(),
+  title: z.string().min(1).max(200),
+  content: z.string().min(1).max(100_000),
+});
+
+export const ReviewResultSchema = z.object({
+  type: z.literal('review.result'),
+  reviewId: z.string().uuid(),
+  decision: z.enum(['approved', 'rejected', 'feedback']),
+  feedback: z.string().optional(),
 });
 
 export const ProtocolErrorSchema = z.object({
@@ -44,12 +66,17 @@ export const ProtocolErrorSchema = z.object({
 export const ServerMessageSchema = z.discriminatedUnion('type', [
   SessionReadySchema,
   PromptResultSchema,
+  ReviewReadySchema,
+  ReviewResultSchema,
   ProtocolErrorSchema,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 export type PromptSubmit = z.infer<typeof PromptSubmitSchema>;
+export type ReviewSubmit = z.infer<typeof ReviewSubmitSchema>;
+export type ReviewReady = z.infer<typeof ReviewReadySchema>;
+export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 
 export function parseClientMessage(input: unknown): ClientMessage {
   return ClientMessageSchema.parse(input);

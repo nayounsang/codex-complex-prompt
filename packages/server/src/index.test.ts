@@ -49,6 +49,34 @@ function nextMessage(socket: WebSocket, timeoutMs = 1_000): Promise<unknown> {
   });
 }
 
+function collectMessages(socket: WebSocket, count: number): Promise<unknown[]> {
+  return new Promise((resolve, reject) => {
+    const messages: unknown[] = [];
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('WebSocket messages timed out.'));
+    }, 1_000);
+    const onMessage = (value: WebSocket.RawData): void => {
+      messages.push(JSON.parse(rawDataToString(value)) as unknown);
+      if (messages.length === count) {
+        cleanup();
+        resolve(messages);
+      }
+    };
+    const onError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      socket.off('message', onMessage);
+      socket.off('error', onError);
+    };
+    socket.on('message', onMessage);
+    socket.once('error', onError);
+  });
+}
+
 function nextClose(socket: WebSocket, timeoutMs = 1_000): Promise<number> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -123,8 +151,8 @@ function getHttp(url: string): Promise<{ statusCode: number | undefined; body: s
   });
 }
 
-describe('로컬 bridge server', () => {
-  it('유효한 session token으로 연결하면 ready 메시지를 보낸다', async () => {
+describe('로컬 브리지 서버', () => {
+  it('유효한 세션 토큰으로 연결하면 준비 메시지를 보낸다', async () => {
     const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
     const session = server.createSession();
 
@@ -137,7 +165,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('인증된 client의 prompt를 adapter로 전달하고 accepted 결과를 보낸다', async () => {
+  it('인증된 클라이언트의 프롬프트를 어댑터로 전달하고 승인 결과를 보낸다', async () => {
     const received: string[] = [];
     const server = await startLocalBridgeServer({
       onPrompt: async (prompt) => {
@@ -166,7 +194,111 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('동일한 submission ID를 두 번 제출하면 두 번째 요청을 거부한다', async () => {
+  it('리뷰 세션이 브라우저 결과를 훅 어댑터로 전달한다', async () => {
+    const received: string[] = [];
+    const server = await startLocalBridgeServer({
+      onPrompt: async () => undefined,
+      onReview: async (result) => {
+        received.push(`${result.decision}:${result.feedback ?? ''}`);
+      },
+    });
+    const session = server.createSession({
+      review: {
+        reviewId: '00000000-0000-4000-8000-000000000010',
+        title: 'Review response',
+        content: 'A response to review',
+      },
+    });
+
+    try {
+      const socket = await openSocket(server);
+      const initialMessages = collectMessages(socket, 2);
+      socket.send(JSON.stringify({ type: 'session.handshake', token: session.token }));
+      const [, reviewReady] = await initialMessages;
+      expect(reviewReady).toMatchObject({
+        type: 'review.ready',
+        reviewId: '00000000-0000-4000-8000-000000000010',
+      });
+      socket.send(
+        JSON.stringify({
+          type: 'review.submit',
+          reviewId: '00000000-0000-4000-8000-000000000010',
+          decision: 'feedback',
+          feedback: 'Add a test case',
+        }),
+      );
+
+      expect(await nextMessage(socket)).toMatchObject({
+        type: 'review.result',
+        decision: 'feedback',
+      });
+      expect(received).toEqual(['feedback:Add a test case']);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('리뷰가 없는 세션의 리뷰 제출을 거부한다', async () => {
+    const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
+    const session = server.createSession();
+
+    try {
+      const { socket } = await authenticate(server, session.token);
+      socket.send(
+        JSON.stringify({
+          type: 'review.submit',
+          reviewId: randomUUID(),
+          decision: 'approved',
+        }),
+      );
+
+      expect(await nextMessage(socket)).toMatchObject({
+        type: 'session.error',
+        code: 'invalid_message',
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('리뷰 어댑터가 실패하면 어댑터 오류를 반환한다', async () => {
+    const server = await startLocalBridgeServer({
+      onPrompt: async () => undefined,
+      onReview: async () => {
+        throw new Error('review unavailable');
+      },
+    });
+    const session = server.createSession({
+      review: {
+        reviewId: '00000000-0000-4000-8000-000000000011',
+        title: 'Review response',
+        content: 'A response to review',
+      },
+    });
+
+    try {
+      const socket = await openSocket(server);
+      const initialMessages = collectMessages(socket, 2);
+      socket.send(JSON.stringify({ type: 'session.handshake', token: session.token }));
+      await initialMessages;
+      socket.send(
+        JSON.stringify({
+          type: 'review.submit',
+          reviewId: '00000000-0000-4000-8000-000000000011',
+          decision: 'approved',
+        }),
+      );
+
+      expect(await nextMessage(socket)).toMatchObject({
+        type: 'session.error',
+        code: 'adapter_error',
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('동일한 제출 ID를 두 번 제출하면 두 번째 요청을 거부한다', async () => {
     const received: string[] = [];
     const server = await startLocalBridgeServer({
       onPrompt: async (prompt) => {
@@ -194,7 +326,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('이미 사용한 session token의 재사용을 거부한다', async () => {
+  it('이미 사용한 세션 토큰의 재사용을 거부한다', async () => {
     const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
     const session = server.createSession();
 
@@ -212,7 +344,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('유효하지 않은 session token을 거부한다', async () => {
+  it('유효하지 않은 세션 토큰을 거부한다', async () => {
     const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
 
     try {
@@ -228,7 +360,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('handshake 전에 prompt를 제출하면 연결을 종료한다', async () => {
+  it('핸드셰이크 전에 프롬프트를 제출하면 연결을 종료한다', async () => {
     const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
 
     try {
@@ -251,7 +383,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('handshake timeout이 지나면 인증 오류와 함께 연결을 종료한다', async () => {
+  it('핸드셰이크 타임아웃이 지나면 인증 오류와 함께 연결을 종료한다', async () => {
     const server = await startLocalBridgeServer({
       handshakeTimeoutMs: 20,
       onPrompt: async () => undefined,
@@ -287,7 +419,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('인증 후 다시 handshake를 보내면 invalid message를 반환한다', async () => {
+  it('인증 후 다시 핸드셰이크를 보내면 잘못된 메시지를 반환한다', async () => {
     const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
     const session = server.createSession();
 
@@ -304,7 +436,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('protocol schema에 맞지 않는 메시지를 거부한다', async () => {
+  it('프로토콜 스키마에 맞지 않는 메시지를 거부한다', async () => {
     const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
     const session = server.createSession();
 
@@ -321,7 +453,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('session TTL이 지나면 연결을 종료한다', async () => {
+  it('세션 TTL이 지나면 연결을 종료한다', async () => {
     const server = await startLocalBridgeServer({
       ttlMs: 20,
       onPrompt: async () => undefined,
@@ -340,7 +472,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('adapter가 실패하면 failed 결과를 보낸다', async () => {
+  it('어댑터가 실패하면 실패 결과를 보낸다', async () => {
     const server = await startLocalBridgeServer({
       onPrompt: async () => {
         throw new Error('adapter unavailable');
@@ -368,7 +500,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('adapter 응답이 timeout을 초과하면 failed 결과를 보낸다', async () => {
+  it('어댑터 응답이 타임아웃을 초과하면 실패 결과를 보낸다', async () => {
     const server = await startLocalBridgeServer({
       promptTimeoutMs: 20,
       onPrompt: async () => new Promise<void>(() => undefined),
@@ -394,7 +526,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('동시에 도착한 prompt를 adapter에 제출 순서대로 전달한다', async () => {
+  it('동시에 도착한 프롬프트를 어댑터에 제출 순서대로 전달한다', async () => {
     const received: string[] = [];
     let releaseFirst!: () => void;
     const firstPromptFinished = new Promise<void>((resolve) => {
@@ -430,7 +562,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('최대 연결 수를 초과한 client를 거부한다', async () => {
+  it('최대 연결 수를 초과한 클라이언트를 거부한다', async () => {
     const server = await startLocalBridgeServer({
       maxConnections: 1,
       onPrompt: async () => undefined,
@@ -446,7 +578,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('최대 WebSocket payload를 초과한 frame을 종료한다', async () => {
+  it('최대 WebSocket 페이로드를 초과한 프레임을 종료한다', async () => {
     const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
 
     try {
@@ -460,7 +592,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('staticDir가 없으면 bridge 상태를 HTTP로 반환한다', async () => {
+  it('정적 디렉터리가 없으면 브리지 상태를 HTTP로 반환한다', async () => {
     const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
 
     try {
@@ -475,7 +607,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('staticDir의 index 문서를 제공한다', async () => {
+  it('정적 디렉터리의 색인 문서를 제공한다', async () => {
     const staticDir = await mkdtemp(join(tmpdir(), 'codex-complex-prompt-'));
     await writeFile(join(staticDir, 'index.html'), '<h1>bridge</h1>');
     const server = await startLocalBridgeServer({
@@ -493,7 +625,7 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('staticDir에 없는 문서 요청에 404를 반환한다', async () => {
+  it('정적 디렉터리에 없는 문서 요청에 404를 반환한다', async () => {
     const staticDir = await mkdtemp(join(tmpdir(), 'codex-complex-prompt-'));
     const server = await startLocalBridgeServer({
       staticDir,
@@ -510,11 +642,11 @@ describe('로컬 bridge server', () => {
     }
   });
 
-  it('static 경로가 root 밖을 가리키면 경로를 반환하지 않는다', () => {
+  it('정적 경로가 루트 밖을 가리키면 경로를 반환하지 않는다', () => {
     expect(resolveStaticPath('/tmp/codex-static', '/../../secret')).toBeUndefined();
   });
 
-  it('사용 중인 port로 bridge를 시작하면 실패한다', async () => {
+  it('사용 중인 포트로 브리지를 시작하면 실패한다', async () => {
     const firstServer = await startLocalBridgeServer({ onPrompt: async () => undefined });
 
     try {

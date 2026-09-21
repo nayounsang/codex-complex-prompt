@@ -1,8 +1,30 @@
 {
   "name": "@codex-complex-prompt/cli-bridge",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
+  "description": "A browser bridge and Codex Stop hook for reviewing complex prompts and responses.",
   "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nayunsang/codex-complex-prompt.git",
+    "directory": "apps/cli-bridge"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "files": [
+    "dist/**",
+    "!dist/**/*.test.*",
+    "!dist/smoke.*",
+    "web/dist/**",
+    "README.md",
+    "LICENSE"
+  ],
   "bin": {
     "complex-prompt": "dist/index.js"
   },
@@ -13,12 +35,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "build": "tsc -p tsconfig.build.json",
-    "smoke": "tsx src/smoke.ts"
+    "build": "tsx scripts/prepare-build.ts && tsc -p tsconfig.build.json && tsx scripts/build-package.ts",
+    "prepack": "pnpm build",
+    "smoke": "tsx src/smoke.ts",
+    "package:smoke": "tsx scripts/package-smoke.ts"
   },
   "dependencies": {
-    "@codex-complex-prompt/server": "workspace:*",
-    "open": "^10.1.0"
+    "open": "^10.1.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
@@ -27,9 +51,26 @@
     "@typescript-eslint/parser": "^8.24.0",
     "@vitest/coverage-v8": "^3.2.7",
     "eslint": "^9.22.0",
+    "esbuild": "^0.25.2",
+    "@codex-complex-prompt/server": "workspace:*",
+    "@codex-complex-prompt/protocol": "workspace:*",
+    "@codex-complex-prompt/web": "workspace:*",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vitest": "^3.0.8",
     "ws": "^8.18.0"
-  }
+  },
+  "main": "dist/index.js",
+  "keywords": [
+    "codex",
+    "cli",
+    "prompt",
+    "hooks"
+  ],
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/nayunsang/codex-complex-prompt/issues"
+  },
+  "homepage": "https://github.com/nayunsang/codex-complex-prompt#readme",
+  "types": "./dist/index.d.ts"
 }

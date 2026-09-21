@@ -13,10 +13,14 @@
     "test": "turbo test",
     "test:coverage": "turbo test:coverage",
     "build": "turbo build",
+    "package:smoke": "pnpm build && pnpm --filter @codex-complex-prompt/cli-bridge package:smoke",
+    "changeset": "changeset",
+    "changeset:status": "changeset status",
     "format:check": "prettier --check .",
     "format": "prettier --write ."
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.7",
     "@vitest/eslint-plugin": "^1.6.18",
     "prettier": "^3.5.3",
     "turbo": "^2.5.6"

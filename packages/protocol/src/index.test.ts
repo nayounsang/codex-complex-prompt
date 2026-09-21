@@ -9,7 +9,7 @@ import {
 } from './index.js';
 
 describe('프로토콜 스키마', () => {
-  it('유효한 prompt 제출 메시지를 수락한다', () => {
+  it('유효한 프롬프트 제출 메시지를 수락한다', () => {
     const result = ClientMessageSchema.safeParse({
       type: 'prompt.submit',
       submissionId: '00000000-0000-4000-8000-000000000001',
@@ -19,7 +19,18 @@ describe('프로토콜 스키마', () => {
     expect(result.success).toBe(true);
   });
 
-  it('잘못된 submission ID를 거부한다', () => {
+  it('유효한 리뷰 피드백 메시지를 수락한다', () => {
+    const result = ClientMessageSchema.safeParse({
+      type: 'review.submit',
+      reviewId: '00000000-0000-4000-8000-000000000010',
+      decision: 'feedback',
+      feedback: 'Add a test case',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('잘못된 제출 ID를 거부한다', () => {
     const result = ClientMessageSchema.safeParse({
       type: 'prompt.submit',
       submissionId: 'not-a-uuid',
@@ -29,7 +40,7 @@ describe('프로토콜 스키마', () => {
     expect(result.success).toBe(false);
   });
 
-  it('빈 prompt를 거부한다', () => {
+  it('빈 프롬프트를 거부한다', () => {
     const result = ClientMessageSchema.safeParse({
       type: 'prompt.submit',
       submissionId: '00000000-0000-4000-8000-000000000001',
@@ -39,7 +50,7 @@ describe('프로토콜 스키마', () => {
     expect(result.success).toBe(false);
   });
 
-  it('12,000자를 초과한 prompt를 거부한다', () => {
+  it('12,000자를 초과한 프롬프트를 거부한다', () => {
     const result = ClientMessageSchema.safeParse({
       type: 'prompt.submit',
       submissionId: '00000000-0000-4000-8000-000000000001',
@@ -49,7 +60,7 @@ describe('프로토콜 스키마', () => {
     expect(result.success).toBe(false);
   });
 
-  it('유효한 client 메시지를 파싱해 반환한다', () => {
+  it('유효한 클라이언트 메시지를 파싱해 반환한다', () => {
     const message = parseClientMessage({
       type: 'session.handshake',
       token: 'a'.repeat(32),
@@ -58,7 +69,7 @@ describe('프로토콜 스키마', () => {
     expect(message).toEqual({ type: 'session.handshake', token: 'a'.repeat(32) });
   });
 
-  it('유효한 server ready 메시지를 검증한다', () => {
+  it('유효한 서버 준비 메시지를 검증한다', () => {
     expect(
       ServerMessageSchema.safeParse({
         type: 'session.ready',
@@ -68,7 +79,7 @@ describe('프로토콜 스키마', () => {
     ).toBe(true);
   });
 
-  it('유효한 server 메시지를 JSON으로 인코딩한다', () => {
+  it('유효한 서버 메시지를 JSON으로 인코딩한다', () => {
     const message: ServerMessage = {
       type: 'session.ready',
       sessionId: '00000000-0000-4000-8000-000000000002',
@@ -78,7 +89,7 @@ describe('프로토콜 스키마', () => {
     expect(encodeServerMessage(message)).toBe(JSON.stringify(message));
   });
 
-  it('유효하지 않은 server 메시지 인코딩을 거부한다', () => {
+  it('유효하지 않은 서버 메시지 인코딩을 거부한다', () => {
     expect(() =>
       encodeServerMessage({ type: 'session.ready', sessionId: 'invalid' } as ServerMessage),
     ).toThrow();

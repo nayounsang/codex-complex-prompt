@@ -11,6 +11,8 @@ Apply this workflow whenever tests are written, changed, refactored, or reviewed
 
 ## Standard
 
+> Write tests with Korean
+
 Each new or changed test proves one scenario: one relevant actor or caller performs one coherent action or flow in one condition and observes one outcome. Split a test when it proves independent behaviors, conditions, or outcomes.
 
 Write each test in Arrange, Act, Assert (AAA) order:
@@ -66,7 +68,7 @@ Useful result verbs include `returns`, `rejects`, `stores`, `persists`, `adds`, 
 
 These representative title changes come from the #189–#192 test cleanup. They show how a compound or enumerating title becomes separately reviewable scenarios.
 
-### Browser CLI (#189)
+### Example 1
 
 ```ts
 // Before
@@ -78,7 +80,7 @@ it("keeps a pending command open after receiving a malformed CDP message", ...)
 it("keeps a pending command open after receiving another command's response", ...)
 ```
 
-### CLI core (#190)
+### Example 2
 
 ```ts
 // Before
@@ -90,7 +92,7 @@ it("rejects a flag that requires a value when it is the final argument", ...)
 it("rejects a flag that requires a value when the next argument is another flag", ...)
 ```
 
-### Core (#191)
+### Example 3
 
 ```ts
 // Before
@@ -102,7 +104,7 @@ it("writes the initial HTTP handler snapshot when a Node Dev Tool session starts
 it("applies an external handler behavior change during Node session synchronization", ...)
 ```
 
-### Node CLI (#192)
+### Example 4
 
 ```ts
 // Before

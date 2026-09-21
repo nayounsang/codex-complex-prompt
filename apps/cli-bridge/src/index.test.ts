@@ -9,8 +9,8 @@ import { startCliBridge } from './index.js';
 
 vi.mock('open', () => ({ default: () => Promise.resolve() }));
 
-describe('cli bridge', () => {
-  it('브라우저를 열지 않고 session token이 포함된 URL을 생성한다', async () => {
+describe('CLI 브리지 동작', () => {
+  it('브라우저를 열지 않고 세션 토큰이 포함된 URL을 생성한다', async () => {
     const adapter = new MockCodexSessionInputAdapter();
     const bridge = await startCliBridge({
       inputAdapter: adapter,
@@ -22,7 +22,7 @@ describe('cli bridge', () => {
     await bridge.stop();
   });
 
-  it('브라우저 연동 실패를 bridge 실패로 처리하지 않는다', async () => {
+  it('브라우저 연동 실패를 브리지 실패로 처리하지 않는다', async () => {
     const bridge = await startCliBridge({
       openBrowser: async () => {
         throw new Error('browser unavailable');
@@ -33,7 +33,7 @@ describe('cli bridge', () => {
     await bridge.stop();
   });
 
-  it('별도 loopback web URL에 bridge origin을 전달한다', async () => {
+  it('별도 루프백 웹 URL에 브리지 오리진을 전달한다', async () => {
     const bridge = await startCliBridge({
       webUrl: 'http://127.0.0.1:5173',
       openBrowser: () => Promise.resolve(),
@@ -45,25 +45,25 @@ describe('cli bridge', () => {
     await bridge.stop();
   });
 
-  it('loopback이 아닌 web URL로 session token을 보내지 않는다', async () => {
+  it('루프백이 아닌 웹 URL로 세션 토큰을 보내지 않는다', async () => {
     await expect(
       startCliBridge({ webUrl: 'https://attacker.example', openBrowser: () => Promise.resolve() }),
     ).rejects.toThrow('loopback');
   });
 
-  it('파싱할 수 없는 web URL을 거부한다', async () => {
+  it('파싱할 수 없는 웹 URL을 거부한다', async () => {
     await expect(
       startCliBridge({ webUrl: 'not-a-url', openBrowser: () => Promise.resolve() }),
     ).rejects.toThrow('valid local HTTP(S) URL');
   });
 
-  it('loopback이 아닌 protocol의 web URL을 거부한다', async () => {
+  it('루프백이 아닌 프로토콜의 웹 URL을 거부한다', async () => {
     await expect(
       startCliBridge({ webUrl: 'ftp://127.0.0.1:5173', openBrowser: () => Promise.resolve() }),
     ).rejects.toThrow('loopback');
   });
 
-  it('credentials가 포함된 web URL을 거부한다', async () => {
+  it('인증 정보가 포함된 웹 URL을 거부한다', async () => {
     await expect(
       startCliBridge({
         webUrl: 'http://user:password@127.0.0.1:5173',
@@ -72,11 +72,11 @@ describe('cli bridge', () => {
     ).rejects.toThrow('credentials');
   });
 
-  it('기본 Codex adapter는 미지원 오류를 반환한다', async () => {
+  it('기본 Codex 어댑터는 미지원 오류를 반환한다', async () => {
     await expect(new CodexSessionInputAdapter().submit('Prompt')).rejects.toThrow('not available');
   });
 
-  it('mock Codex adapter는 제출한 prompt를 저장한다', async () => {
+  it('모의 Codex 어댑터는 제출한 프롬프트를 저장한다', async () => {
     const adapter = new MockCodexSessionInputAdapter();
 
     await adapter.submit('Prompt');
@@ -84,7 +84,7 @@ describe('cli bridge', () => {
     expect(adapter.prompts).toEqual(['Prompt']);
   });
 
-  it('선택적 server 설정을 bridge에 전달한다', async () => {
+  it('선택적 서버 설정을 브리지에 전달한다', async () => {
     const bridge = await startCliBridge({
       inputAdapter: new MockCodexSessionInputAdapter(),
       port: 0,
@@ -97,7 +97,7 @@ describe('cli bridge', () => {
     await bridge.stop();
   });
 
-  it('브라우저 prompt를 mock Codex adapter에 전달한다', async () => {
+  it('브라우저 프롬프트를 모의 Codex 어댑터에 전달한다', async () => {
     const adapter = new MockCodexSessionInputAdapter();
     const bridge = await startCliBridge({
       inputAdapter: adapter,

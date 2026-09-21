@@ -1,10 +1,17 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 
+export interface ReviewSessionData {
+  readonly reviewId: string;
+  readonly title: string;
+  readonly content: string;
+}
+
 export interface SessionRecord {
   readonly id: string;
   readonly token: string;
   readonly expiresAt: Date;
   connected: boolean;
+  readonly review?: ReviewSessionData;
 }
 
 export interface SessionStoreOptions {
@@ -25,13 +32,14 @@ export class SessionStore {
     }
   }
 
-  public create(): SessionRecord {
+  public create(options: { readonly review?: ReviewSessionData } = {}): SessionRecord {
     this.removeExpired();
     const session: SessionRecord = {
       id: randomUUID(),
       token: randomBytes(32).toString('base64url'),
       expiresAt: new Date(this.now().getTime() + this.ttlMs),
       connected: false,
+      ...(options.review === undefined ? {} : { review: options.review }),
     };
     this.sessions.set(session.token, session);
     return session;
@@ -43,6 +51,14 @@ export class SessionStore {
     if (session === undefined || session.connected) return undefined;
     session.connected = true;
     return session;
+  }
+
+  public get(id: string): SessionRecord | undefined {
+    this.removeExpired();
+    for (const session of this.sessions.values()) {
+      if (session.id === id) return session;
+    }
+    return undefined;
   }
 
   public revoke(token: string): void {
