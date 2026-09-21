@@ -45,6 +45,13 @@ describe('세션 저장소', () => {
     expect(store.get('missing-session')).toBeUndefined();
   });
 
+  it('생성한 세션 ID로 세션을 조회한다', () => {
+    const store = new SessionStore();
+    const session = store.create();
+
+    expect(store.get(session.id)).toBe(session);
+  });
+
   it('유효하지 않은 TTL 설정을 거부한다', () => {
     expect(() => new SessionStore({ ttlMs: 0 })).toThrow('positive integer');
   });

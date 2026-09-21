@@ -19,17 +19,6 @@ describe('프로토콜 스키마', () => {
     expect(result.success).toBe(true);
   });
 
-  it('유효한 리뷰 피드백 메시지를 수락한다', () => {
-    const result = ClientMessageSchema.safeParse({
-      type: 'review.submit',
-      reviewId: '00000000-0000-4000-8000-000000000010',
-      decision: 'feedback',
-      feedback: 'Add a test case',
-    });
-
-    expect(result.success).toBe(true);
-  });
-
   it('잘못된 제출 ID를 거부한다', () => {
     const result = ClientMessageSchema.safeParse({
       type: 'prompt.submit',
@@ -90,8 +79,6 @@ describe('프로토콜 스키마', () => {
   });
 
   it('유효하지 않은 서버 메시지 인코딩을 거부한다', () => {
-    expect(() =>
-      encodeServerMessage({ type: 'session.ready', sessionId: 'invalid' } as ServerMessage),
-    ).toThrow();
+    expect(() => encodeServerMessage({ type: 'session.ready', sessionId: 'invalid' })).toThrow();
   });
 });

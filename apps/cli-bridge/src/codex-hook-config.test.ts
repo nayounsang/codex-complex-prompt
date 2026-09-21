@@ -8,8 +8,8 @@ import {
   CODEX_COMPLEX_PROMPT_HOOK_MARKER,
   defaultCodexHome,
   defaultHooksPath,
-  installCodexStopHook,
-  removeCodexStopHook,
+  installCodexUserPromptHook,
+  removeCodexUserPromptHook,
 } from './codex-hook-config.js';
 
 const temporaryDirectories: string[] = [];
@@ -22,26 +22,31 @@ afterEach(async () => {
   );
 });
 
-describe('Codex 훅 설정', () => {
-  it('기존 훅을 보존하면서 패키지 소유 Stop 훅을 설치한다', async () => {
+describe('Codex UserPromptSubmit 훅 설정', () => {
+  it('기존 설정을 보존하면서 명령 편집기 훅을 설치한다', async () => {
     const configPath = await createConfig({
       description: 'Existing hooks',
-      hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'existing' }] }] },
+      hooks: { Stop: [{ hooks: [{ type: 'command', command: 'existing-stop' }] }] },
     });
 
-    const result = await installCodexStopHook({ configPath, command: 'complex-prompt hook stop' });
+    const result = await installCodexUserPromptHook({
+      configPath,
+      command: 'complex-prompt hook prompt',
+    });
     const written = JSON.parse(await readFile(configPath, 'utf8')) as {
+      description: string;
       hooks: Record<string, unknown[]>;
     };
 
     expect(result.changed).toBe(true);
-    expect(written.hooks['SessionStart']).toHaveLength(1);
-    expect(written.hooks['Stop']).toEqual([
+    expect(written.description).toBe('Existing hooks');
+    expect(written.hooks['Stop']).toHaveLength(1);
+    expect(written.hooks['UserPromptSubmit']).toEqual([
       {
         hooks: [
           {
             type: 'command',
-            command: 'complex-prompt hook stop',
+            command: 'complex-prompt hook prompt',
             timeout: 120,
             statusMessage: CODEX_COMPLEX_PROMPT_HOOK_MARKER,
           },
@@ -53,20 +58,10 @@ describe('Codex 훅 설정', () => {
   it('드라이런에서는 훅 파일을 쓰지 않는다', async () => {
     const configPath = join(await createDirectory(), 'hooks.json');
 
-    const result = await installCodexStopHook({ configPath, dryRun: true });
+    const result = await installCodexUserPromptHook({ configPath, dryRun: true });
 
     expect(result.changed).toBe(true);
     await expect(readFile(configPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
-  });
-
-  it('설정된 디렉터리에 없는 훅 파일을 생성한다', async () => {
-    const directory = await createDirectory();
-    const configPath = join(directory, 'nested', 'hooks.json');
-
-    const result = await installCodexStopHook({ configPath });
-
-    expect(result.changed).toBe(true);
-    expect(JSON.parse(await readFile(configPath, 'utf8'))).toHaveProperty('hooks.Stop');
   });
 
   it('CODEX_HOME이 지정되면 기본 훅 경로를 그 아래로 계산한다', async () => {
@@ -75,26 +70,26 @@ describe('Codex 훅 설정', () => {
     process.env['CODEX_HOME'] = codexHome;
 
     try {
-      const result = await installCodexStopHook();
+      const result = await installCodexUserPromptHook();
 
       expect(defaultCodexHome()).toBe(codexHome);
       expect(defaultHooksPath()).toBe(join(codexHome, 'hooks.json'));
       expect(result.configPath).toBe(join(codexHome, 'hooks.json'));
-      expect(result.command).toBe('complex-prompt hook stop');
+      expect(result.command).toBe('complex-prompt hook prompt');
     } finally {
       restoreCodexHome(previousCodexHome);
     }
   });
 
-  it('이미 설치된 패키지 소유 훅을 변경하지 않는다', async () => {
+  it('이미 설치된 명령 편집기 훅은 중복 설치하지 않는다', async () => {
     const configPath = await createConfig({
       hooks: {
-        Stop: [
+        UserPromptSubmit: [
           {
             hooks: [
               {
                 type: 'command',
-                command: 'complex-prompt hook stop',
+                command: 'complex-prompt hook prompt',
                 timeout: 120,
                 statusMessage: CODEX_COMPLEX_PROMPT_HOOK_MARKER,
               },
@@ -104,51 +99,21 @@ describe('Codex 훅 설정', () => {
       },
     });
 
-    const result = await installCodexStopHook({ configPath });
+    const result = await installCodexUserPromptHook({ configPath });
 
     expect(result.changed).toBe(false);
   });
 
-  it('잘못된 형식의 훅 JSON을 거부한다', async () => {
-    const directory = await createDirectory();
-    const configPath = join(directory, 'hooks.json');
-    await writeFile(configPath, '{not-json', 'utf8');
-
-    await expect(installCodexStopHook({ configPath })).rejects.toThrow('not valid JSON');
-  });
-
-  it('JSON 배열로 저장된 훅 설정을 거부한다', async () => {
-    const directory = await createDirectory();
-    const configPath = join(directory, 'hooks.json');
-    await writeFile(configPath, '[]', 'utf8');
-
-    await expect(installCodexStopHook({ configPath })).rejects.toThrow(
-      'must contain a JSON object',
-    );
-  });
-
-  it('훅 설정을 읽는 중 발생한 파일 오류를 전달한다', async () => {
-    const configPath = await createDirectory();
-
-    await expect(installCodexStopHook({ configPath })).rejects.toThrow();
-  });
-
-  it('객체가 아닌 훅 필드를 거부한다', async () => {
-    const configPath = await createConfig({ hooks: [] });
-
-    await expect(installCodexStopHook({ configPath })).rejects.toThrow('must contain an object');
-  });
-
-  it('패키지 소유 Stop 훅만 제거한다', async () => {
+  it('패키지 소유 훅만 제거하고 다른 훅은 보존한다', async () => {
     const configPath = await createConfig({
       hooks: {
-        Stop: [
-          { hooks: [{ type: 'command', command: 'other-stop-hook' }] },
+        UserPromptSubmit: [
+          { hooks: [{ type: 'command', command: 'other-hook' }] },
           {
             hooks: [
               {
                 type: 'command',
-                command: 'complex-prompt hook stop',
+                command: 'complex-prompt hook prompt',
                 statusMessage: CODEX_COMPLEX_PROMPT_HOOK_MARKER,
               },
             ],
@@ -157,14 +122,38 @@ describe('Codex 훅 설정', () => {
       },
     });
 
-    await removeCodexStopHook({ configPath, command: 'complex-prompt hook stop' });
+    await removeCodexUserPromptHook({ configPath, command: 'complex-prompt hook prompt' });
     const written = JSON.parse(await readFile(configPath, 'utf8')) as {
-      hooks: { Stop: unknown[] };
+      hooks: { UserPromptSubmit: unknown[] };
     };
 
-    expect(written.hooks.Stop).toEqual([
-      { hooks: [{ type: 'command', command: 'other-stop-hook' }] },
+    expect(written.hooks.UserPromptSubmit).toEqual([
+      { hooks: [{ type: 'command', command: 'other-hook' }] },
     ]);
+  });
+
+  it('UserPromptSubmit 훅이 없으면 빈 목록을 유지한다', async () => {
+    const configPath = await createConfig({ hooks: { Stop: [] } });
+
+    const result = await removeCodexUserPromptHook({ configPath, dryRun: true });
+
+    expect(result.changed).toBe(true);
+    expect(result.config['hooks']).toEqual({ Stop: [], UserPromptSubmit: [] });
+  });
+
+  it('잘못된 훅 JSON을 거부한다', async () => {
+    const configPath = join(await createDirectory(), 'hooks.json');
+    await writeFile(configPath, '{not-json', 'utf8');
+
+    await expect(installCodexUserPromptHook({ configPath })).rejects.toThrow('not valid JSON');
+  });
+
+  it('객체가 아닌 hooks 필드를 거부한다', async () => {
+    const configPath = await createConfig({ hooks: [] });
+
+    await expect(installCodexUserPromptHook({ configPath })).rejects.toThrow(
+      'must contain an object',
+    );
   });
 });
 

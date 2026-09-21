@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-export const CODEX_COMPLEX_PROMPT_HOOK_MARKER = 'Codex Complex Prompt browser review';
+export const CODEX_COMPLEX_PROMPT_HOOK_MARKER = 'Codex Complex Prompt command editor';
 
 export interface CodexHookConfigOptions {
   readonly configPath?: string;
@@ -17,16 +17,20 @@ export interface CodexHookConfigResult {
   readonly command: string;
 }
 
-export async function installCodexStopHook(
+export async function installCodexUserPromptHook(
   options: CodexHookConfigOptions = {},
 ): Promise<CodexHookConfigResult> {
   const configPath = options.configPath ?? defaultHooksPath();
-  const command = options.command ?? 'complex-prompt hook stop';
+  const command = options.command ?? 'complex-prompt hook prompt';
   const config = await readHooksConfig(configPath);
   const hooks = getHooks(config);
-  const stopHooks = Array.isArray(hooks['Stop']) ? [...hooks['Stop']] : [];
-  const nextStopHooks = stopHooks.filter((group) => !containsOwnCommand(group, command));
-  nextStopHooks.push({
+  const userPromptHooks = Array.isArray(hooks['UserPromptSubmit'])
+    ? [...hooks['UserPromptSubmit']]
+    : [];
+  const nextUserPromptHooks = userPromptHooks.filter(
+    (group) => !containsOwnCommand(group, command),
+  );
+  nextUserPromptHooks.push({
     hooks: [
       {
         type: 'command',
@@ -36,25 +40,27 @@ export async function installCodexStopHook(
       },
     ],
   });
-  hooks['Stop'] = nextStopHooks;
+  hooks['UserPromptSubmit'] = nextUserPromptHooks;
   const nextConfig = { ...config, hooks };
   const changed = JSON.stringify(config) !== JSON.stringify(nextConfig);
   if (changed && options.dryRun !== true) await writeHooksConfig(configPath, nextConfig);
   return { configPath, changed, config: nextConfig, command };
 }
 
-export async function removeCodexStopHook(
+export async function removeCodexUserPromptHook(
   options: CodexHookConfigOptions = {},
 ): Promise<CodexHookConfigResult> {
   const configPath = options.configPath ?? defaultHooksPath();
-  const command = options.command ?? 'complex-prompt hook stop';
+  const command = options.command ?? 'complex-prompt hook prompt';
   const config = await readHooksConfig(configPath);
   const hooks = getHooks(config);
-  const stopHooks = Array.isArray(hooks['Stop']) ? [...hooks['Stop']] : [];
-  const nextStopHooks = stopHooks
+  const userPromptHooks = Array.isArray(hooks['UserPromptSubmit'])
+    ? [...hooks['UserPromptSubmit']]
+    : [];
+  const nextUserPromptHooks = userPromptHooks
     .map((group) => removeOwnCommands(group, command))
     .filter((group) => group !== undefined);
-  const nextConfig = { ...config, hooks: { ...hooks, Stop: nextStopHooks } };
+  const nextConfig = { ...config, hooks: { ...hooks, UserPromptSubmit: nextUserPromptHooks } };
   const changed = JSON.stringify(config) !== JSON.stringify(nextConfig);
   if (changed && options.dryRun !== true) await writeHooksConfig(configPath, nextConfig);
   return { configPath, changed, config: nextConfig, command };
@@ -114,7 +120,7 @@ function containsOwnCommand(group: unknown, command: string): boolean {
       typeof handler === 'object' &&
       (handler as Record<string, unknown>)['type'] === 'command' &&
       ((handler as Record<string, unknown>)['command'] === command ||
-        (handler as Record<string, unknown>)['statusMessage'] === CODEX_COMPLEX_PROMPT_HOOK_MARKER),
+        isOwnStatusMessage((handler as Record<string, unknown>)['statusMessage'])),
   );
 }
 
@@ -131,11 +137,14 @@ function removeOwnCommands(group: unknown, command: string): Record<string, unkn
         typeof handler === 'object' &&
         (handler as Record<string, unknown>)['type'] === 'command' &&
         ((handler as Record<string, unknown>)['command'] === command ||
-          (handler as Record<string, unknown>)['statusMessage'] ===
-            CODEX_COMPLEX_PROMPT_HOOK_MARKER)
+          isOwnStatusMessage((handler as Record<string, unknown>)['statusMessage']))
       ),
   );
   return remaining.length === 0 ? undefined : { ...record, hooks: remaining };
+}
+
+function isOwnStatusMessage(value: unknown): boolean {
+  return value === CODEX_COMPLEX_PROMPT_HOOK_MARKER;
 }
 
 function isMissingFile(error: unknown): boolean {
