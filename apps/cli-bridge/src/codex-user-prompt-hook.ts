@@ -20,7 +20,7 @@ export interface RunCodexUserPromptHookOptions {
   readonly signal?: AbortSignal;
 }
 
-const COMPLEX_PROMPT_INVOCATION = /(?:^|\s)(?:\$|\/)complex-prompt(?:\s|$)/;
+const COMPLEX_PROMPT_INVOCATION = /^\s*(?:\$|\/)complex-prompt(?:\s|$)/;
 
 export function parseCodexUserPromptHookInput(rawInput: string): CodexUserPromptSubmitInput {
   if (rawInput.trim() === '') throw new Error('Codex UserPromptSubmit hook input is empty.');

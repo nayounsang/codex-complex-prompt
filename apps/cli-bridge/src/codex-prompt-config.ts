@@ -13,13 +13,9 @@ argument-hint: "[PROMPT=<text>]"
 ---
 
 ${CODEX_COMPLEX_PROMPT_FILE_MARKER}
-Use the Codex Complex Prompt workflow for the request below.
-
-Use the browser command editor to write the command that Codex should execute. The editor sends
-the command before Codex processes the request and does not display AI responses.
-
-Request:
-$ARGUMENTS
+This is a browser-only command entrypoint. Do not analyze or answer this request before the
+UserPromptSubmit hook returns. The hook opens one browser command editor; do not invoke the CLI or
+open another browser. After the hook returns, execute only the command in its additionalContext.
 `;
 
 export const CODEX_COMPLEX_SKILL_CONTENT = `---
@@ -28,10 +24,9 @@ description: Open the browser command editor for complex requests and send one c
 ---
 
 ${CODEX_COMPLEX_SKILL_FILE_MARKER}
-Open the Codex Complex Prompt browser command editor for the user's request.
-
-Write the command Codex should execute and send it. The editor is only a command input surface;
-AI responses remain in Codex and are not shown in the browser.
+This is a browser-only command entrypoint. Do not analyze or answer the request. The installed
+UserPromptSubmit hook opens one browser command editor for this invocation; do not invoke the CLI or
+open another browser. After the hook returns, execute only the command in its additionalContext.
 `;
 
 export interface CodexPromptConfigOptions {

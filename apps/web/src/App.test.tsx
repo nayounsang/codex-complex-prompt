@@ -33,6 +33,7 @@ class MockWebSocket {
 afterEach(() => {
   cleanup();
   MockWebSocket.instance = undefined;
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.history.replaceState({}, '', '/');
@@ -98,14 +99,26 @@ describe('명령 편집기', () => {
         prompt: 'Fix the tests',
       }),
     );
-    expect(closeSpy).toHaveBeenCalledOnce();
+    expect(closeSpy).not.toHaveBeenCalled();
   });
 
-  it('명령이 접수되면 브라우저 창을 닫는다', async () => {
-    const socket = renderWithSession();
+  it('명령을 전송하면 3초 뒤 브라우저 창을 닫는다', () => {
+    vi.useFakeTimers();
+    renderWithSession();
     const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Run the tests' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send command' }));
+
+    expect(closeSpy).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(2_999);
+    expect(closeSpy).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(closeSpy).toHaveBeenCalledOnce();
+  });
+
+  it('명령 접수 결과가 성공이면 성공 상태를 표시한다', async () => {
+    const socket = renderWithSession();
     socket.emit(
       'message',
       JSON.stringify({
@@ -115,7 +128,7 @@ describe('명령 편집기', () => {
       }),
     );
 
-    await waitFor(() => expect(closeSpy).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Command sent'));
   });
 
   it('서버가 명령을 거부하면 오류를 표시한다', async () => {

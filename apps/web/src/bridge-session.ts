@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { ServerMessageSchema } from '@codex-complex-prompt/protocol';
 
+const COMMAND_WINDOW_CLOSE_DELAY_MS = 3_000;
+
 export type ConnectionState =
   'connecting' | 'connected' | 'submitting' | 'success' | 'error' | 'disconnected';
 
@@ -55,7 +57,6 @@ export function useBridgeSession(): BridgeSession {
         if (message.data.status === 'accepted') {
           setState('success');
           setError(null);
-          window.close();
         } else {
           setState('error');
           setError(message.data.error ?? 'The command could not be sent.');
@@ -89,7 +90,7 @@ export function useBridgeSession(): BridgeSession {
           prompt: prompt.trim(),
         }),
       );
-      window.close();
+      window.setTimeout(() => window.close(), COMMAND_WINDOW_CLOSE_DELAY_MS);
     },
     [socket],
   );

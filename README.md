@@ -113,7 +113,7 @@ pnpm dev
 - `packages/server`: loopback HTTP/WebSocket 서버와 세션 정책
 - `packages/core`: transport와 무관한 draft, 제출 이력, 실행 상태 모델
 
-### Release 
+### Release
 
 1. 기능 변경이 있을 시 `pnpm changeset`으로 changeset을 추가해주세요. 이 프로젝트는 [semver](https://semver.org/lang/ko/)를 따릅니다.
 2. 작업 PR이 merge되면 changeset을 반영한 version PR이 생성됩니다.

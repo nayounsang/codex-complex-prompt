@@ -169,6 +169,14 @@ async function main(): Promise<void> {
     );
     return;
   }
+  if (args.length === 0) {
+    process.stderr.write(
+      'This CLI is opened by the installed Codex UserPromptSubmit hook. ' +
+        'Run `complex-prompt hook install` first, then invoke $complex-prompt in Codex.\n',
+    );
+    process.exitCode = 1;
+    return;
+  }
   const webUrl = process.env['COMPLEX_PROMPT_WEB_URL'];
   const bridge = await startCliBridge({
     ...(webUrl === undefined ? {} : { webUrl }),

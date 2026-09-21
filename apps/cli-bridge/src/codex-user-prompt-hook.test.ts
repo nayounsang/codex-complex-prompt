@@ -37,6 +37,58 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
     expect(result).toEqual({ continue: true });
   });
 
+  it('프롬프트 중간에 포함된 호출 문자열은 브라우저를 열지 않는다', async () => {
+    const result = await runCodexUserPromptHook(
+      JSON.stringify({ prompt: '설명에 $complex-prompt 문자열이 포함된 일반 요청' }),
+      { bridgeOptions: { openBrowser: () => Promise.reject(new Error('must not open')) } },
+    );
+
+    expect(result).toEqual({ continue: true });
+  });
+
+  it('/complex-prompt 호출도 브라우저 명령으로 연결한다', async () => {
+    let browserUrl: string | undefined;
+    const resultPromise = runCodexUserPromptHook(
+      JSON.stringify({ prompt: '/complex-prompt 요청' }),
+      {
+        timeoutMs: 2_000,
+        bridgeOptions: {
+          openBrowser: (url) => {
+            browserUrl = url;
+            return Promise.resolve();
+          },
+        },
+      },
+    );
+
+    await waitFor(() => browserUrl !== undefined);
+    if (browserUrl === undefined) throw new Error('Browser URL was not captured.');
+    const url = new URL(browserUrl);
+    const bridgeUrl = new URL(url.searchParams.get('bridge') ?? '');
+    const socket = new WebSocket(
+      `${bridgeUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${bridgeUrl.host}/ws`,
+    );
+    sockets.push(socket);
+    await onceOpen(socket);
+    const readyMessage = collectMessages(socket, 1);
+    socket.send(
+      JSON.stringify({ type: 'session.handshake', token: url.searchParams.get('token') }),
+    );
+    await readyMessage;
+    socket.send(
+      JSON.stringify({
+        type: 'prompt.submit',
+        submissionId: '00000000-0000-4000-8000-000000000011',
+        prompt: '  slash command 테스트  ',
+      }),
+    );
+
+    await expect(resultPromise).resolves.toMatchObject({
+      continue: true,
+      hookSpecificOutput: { hookEventName: 'UserPromptSubmit' },
+    });
+  });
+
   it('복합 명령을 브라우저에서 입력하면 additionalContext로 반환한다', async () => {
     let browserUrl: string | undefined;
     const resultPromise = runCodexUserPromptHook(
