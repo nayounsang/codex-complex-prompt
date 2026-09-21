@@ -26,6 +26,8 @@ export function useBridgeSession(): BridgeSession {
   const [state, setState] = useState<ConnectionState>(() => getInitialConnection().state);
   const [error, setError] = useState<string | null>(() => getInitialConnection().error);
   const [closeInSeconds, setCloseInSeconds] = useState<number | null>(null);
+  const tokenRef = useRef<string | null>(null);
+  const bridgeRef = useRef<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const closeTimer = useRef<number | undefined>(undefined);
   const countdownTimer = useRef<number | undefined>(undefined);
@@ -44,20 +46,29 @@ export function useBridgeSession(): BridgeSession {
   useEffect(
     function connectToBridge() {
       const searchParams = new URLSearchParams(window.location.search);
-      const token = searchParams.get('token');
+      const token = tokenRef.current ?? searchParams.get('token');
       if (token === null) {
         return;
       }
+      tokenRef.current = token;
       const cleanUrl = `${window.location.pathname}${window.location.hash}`;
-      window.history.replaceState({}, document.title, cleanUrl);
-      const bridgeOrigin = new URL(searchParams.get('bridge') ?? window.location.origin);
+      if (searchParams.has('token')) {
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+      const bridge = bridgeRef.current ?? searchParams.get('bridge') ?? window.location.origin;
+      bridgeRef.current = bridge;
+      const bridgeOrigin = new URL(bridge);
       const protocol = bridgeOrigin.protocol === 'https:' ? 'wss:' : 'ws:';
       const connection = new WebSocket(`${protocol}//${bridgeOrigin.host}/ws`);
       socketRef.current = connection;
-      connection.addEventListener('open', () => {
+
+      function handleOpen(): void {
+        if (socketRef.current !== connection) return;
         connection.send(JSON.stringify({ type: 'session.handshake', token }));
-      });
-      connection.addEventListener('message', (event) => {
+      }
+
+      function handleMessage(event: MessageEvent): void {
+        if (socketRef.current !== connection) return;
         let input: unknown;
         try {
           input = JSON.parse(String(event.data));
@@ -104,18 +115,34 @@ export function useBridgeSession(): BridgeSession {
           setState('error');
           setError(message.data.message);
         }
-      });
-      connection.addEventListener('close', () => {
+      }
+
+      function handleClose(): void {
+        if (socketRef.current !== connection) return;
         socketRef.current = null;
         setState((current) => (current === 'success' ? current : 'disconnected'));
-      });
-      connection.addEventListener('error', () => {
+      }
+
+      function handleError(): void {
+        if (socketRef.current !== connection) return;
         setState('error');
         setError('Could not connect to the local bridge.');
-      });
+      }
+
+      connection.addEventListener('open', handleOpen);
+      connection.addEventListener('message', handleMessage);
+      connection.addEventListener('close', handleClose);
+      connection.addEventListener('error', handleError);
+
       return function cleanupBridgeConnection() {
         clearCloseTimers();
-        socketRef.current = null;
+        connection.removeEventListener('open', handleOpen);
+        connection.removeEventListener('message', handleMessage);
+        connection.removeEventListener('close', handleClose);
+        connection.removeEventListener('error', handleError);
+        if (socketRef.current === connection) {
+          socketRef.current = null;
+        }
         connection.close();
       };
     },

@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
 
 const crepeTestState = vi.hoisted(() => {
   const state: { instance: MockCrepe | undefined } = { instance: undefined };
@@ -77,6 +78,7 @@ class MockWebSocket {
   public static readonly OPEN = 1;
   public static readonly CLOSED = 3;
   public static instance: MockWebSocket | undefined;
+  public static instances: MockWebSocket[] = [];
   public readonly readyState = MockWebSocket.OPEN;
   public readonly listeners = new Map<string, Array<(event: MessageEvent) => void>>();
   public readonly url: string;
@@ -86,11 +88,21 @@ class MockWebSocket {
   public constructor(url: string) {
     this.url = url;
     MockWebSocket.instance = this;
+    MockWebSocket.instances.push(this);
   }
 
   public addEventListener(type: string, listener: (event: MessageEvent) => void): void {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
     if (type === 'open') listener(new MessageEvent('open'));
+  }
+
+  public removeEventListener(type: string, listener: (event: MessageEvent) => void): void {
+    this.listeners.set(
+      type,
+      (this.listeners.get(type) ?? []).filter(
+        (registeredListener) => registeredListener !== listener,
+      ),
+    );
   }
 
   public emit(type: string, data: unknown): void {
@@ -103,6 +115,7 @@ class MockWebSocket {
 afterEach(() => {
   cleanup();
   MockWebSocket.instance = undefined;
+  MockWebSocket.instances = [];
   crepeTestState.state.instance = undefined;
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -147,6 +160,40 @@ describe('명령 편집기', () => {
     const socket = renderWithSession('https://127.0.0.1:4321');
 
     expect(socket.url).toBe('wss://127.0.0.1:4321/ws');
+  });
+
+  it('Strict Mode에서 폐기된 연결이 활성 연결 상태를 덮어쓰지 않는다', async () => {
+    window.history.replaceState({}, '', '/?token=test-token&bridge=http%3A%2F%2F127.0.0.1%3A4321');
+    vi.stubGlobal('WebSocket', MockWebSocket);
+
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2));
+    const [discardedConnection, activeConnection] = MockWebSocket.instances;
+    if (discardedConnection === undefined || activeConnection === undefined) {
+      throw new Error('Strict Mode did not create both WebSocket connections.');
+    }
+
+    expect(activeConnection.url).toBe('ws://127.0.0.1:4321/ws');
+    activeConnection.emit(
+      'message',
+      JSON.stringify({
+        type: 'session.ready',
+        sessionId: '00000000-0000-4000-8000-000000000005',
+        expiresAt: '2026-09-20T00:00:00.000Z',
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('Command editor ready'),
+    );
+
+    discardedConnection.emit('close', undefined);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Command editor ready');
   });
 
   it('연결되면 Markdown 편집기와 비활성 전송 버튼을 표시한다', async () => {

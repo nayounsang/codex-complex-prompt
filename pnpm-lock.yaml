@@ -79,10 +79,10 @@ importers:
         specifier: ^7.22.1
         version: 7.22.1(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-view@1.42.4)(typescript@5.9.3)
       react:
-        specifier: ^19.0.0
+        specifier: ^19.2.0
         version: 19.3.0
       react-dom:
-        specifier: ^19.0.0
+        specifier: ^19.2.0
         version: 19.3.0(react@19.3.0)
     devDependencies:
       '@antimatter-labs/eslint-plugin-no-anonymous-use-effect-callback-rule':
@@ -95,10 +95,10 @@ importers:
         specifier: ^16.2.0
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@types/react':
-        specifier: ^19.0.8
+        specifier: ^19.2.0
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19.0.3
+        specifier: ^19.2.0
         version: 19.3.0(@types/react@19.3.0)
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.24.0
