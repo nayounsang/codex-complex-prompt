@@ -51,7 +51,7 @@ jobs:
       - run: pnpm format:check
       - run: pnpm build
       - run: pnpm package:smoke
-      - run: pnpm --filter @codex-complex-prompt/cli-bridge pack --dry-run
+      - run: pnpm --filter @codex-complex-prompt/cli-bridge exec npm pack --dry-run
       - run: pnpm changeset publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
