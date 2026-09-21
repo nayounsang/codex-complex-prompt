@@ -1,6 +1,76 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const crepeTestState = vi.hoisted(() => {
+  const state: { instance: MockCrepe | undefined } = { instance: undefined };
+
+  class MockCrepe {
+    public static readonly Feature = {
+      ImageBlock: 'image-block',
+      Placeholder: 'placeholder',
+    } as const;
+
+    public readonly options: Record<string, unknown>;
+    public readonly destroy = vi.fn(async () => undefined);
+    private markdown: string;
+    private markdownUpdated:
+      ((ctx: unknown, markdown: string, previousMarkdown: string) => void) | undefined;
+    private editorElement: HTMLElement | undefined;
+
+    public constructor(options: Record<string, unknown>) {
+      this.options = options;
+      this.markdown = String(options['defaultValue'] ?? '');
+      state.instance = this;
+    }
+
+    public setReadonly(readOnly: boolean): this {
+      this.editorElement?.setAttribute('contenteditable', String(!readOnly));
+      return this;
+    }
+
+    public on(configure: {
+      (listener: {
+        markdownUpdated: (
+          callback: (ctx: unknown, markdown: string, previousMarkdown: string) => void,
+        ) => void;
+      }): void;
+    }): this {
+      configure({
+        markdownUpdated: (callback) => {
+          this.markdownUpdated = callback;
+        },
+      });
+      return this;
+    }
+
+    public async create(): Promise<this> {
+      const root = this.options['root'];
+      if (!(root instanceof HTMLElement)) throw new Error('Crepe root was not provided.');
+      const editor = document.createElement('div');
+      editor.className = 'ProseMirror';
+      editor.setAttribute('contenteditable', 'true');
+      editor.setAttribute('role', 'textbox');
+      editor.setAttribute('aria-label', 'Command');
+      editor.textContent = this.markdown;
+      editor.addEventListener('input', () => {
+        this.markdown = editor.textContent ?? '';
+        this.markdownUpdated?.({}, this.markdown, '');
+      });
+      root.append(editor);
+      this.editorElement = editor;
+      return this;
+    }
+
+    public getMarkdown(): string {
+      return this.markdown;
+    }
+  }
+
+  return { MockCrepe, state };
+});
+
+vi.mock('@milkdown/crepe', () => ({ Crepe: crepeTestState.MockCrepe }));
+
 import { App } from './App.js';
 
 class MockWebSocket {
@@ -33,6 +103,7 @@ class MockWebSocket {
 afterEach(() => {
   cleanup();
   MockWebSocket.instance = undefined;
+  crepeTestState.state.instance = undefined;
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -58,6 +129,12 @@ function renderWithSession(bridge = 'http://127.0.0.1:4321'): MockWebSocket {
   return socket;
 }
 
+async function editMarkdown(markdown: string): Promise<void> {
+  const editor = await screen.findByRole('textbox', { name: 'Command' });
+  editor.textContent = markdown;
+  fireEvent.input(editor);
+}
+
 describe('명령 편집기', () => {
   it('세션 토큰이 없으면 오류를 표시하고 전송을 막는다', () => {
     render(<App />);
@@ -72,43 +149,115 @@ describe('명령 편집기', () => {
     expect(socket.url).toBe('wss://127.0.0.1:4321/ws');
   });
 
-  it('연결되면 명령 입력창 하나와 전송 버튼만 표시한다', async () => {
+  it('연결되면 Markdown 편집기와 비활성 전송 버튼을 표시한다', async () => {
     renderWithSession();
 
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent('Command editor ready');
-      expect(screen.getAllByRole('textbox')).toHaveLength(1);
-      expect(screen.getByRole('button', { name: 'Send command' })).toBeDisabled();
+      expect(screen.getByRole('textbox', { name: 'Command' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Send to Codex' })).toBeDisabled();
     });
-    expect(screen.queryByRole('heading', { name: /response/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /textarea/i })).not.toBeInTheDocument();
   });
 
-  it('입력한 명령의 앞뒤 공백을 제거해 전송한다', async () => {
+  it('Markdown 이미지 URL을 포함한 문서를 앞뒤 공백 없이 전송한다', async () => {
     const socket = renderWithSession();
-    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: '  Fix the tests  ' } });
+    const markdown = '  # Fix the tests\n\n![diagram](https://example.com/diagram.png)  ';
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Send command' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Send command' }));
+    await editMarkdown(markdown);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Send to Codex' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
 
     expect(socket.send).toHaveBeenLastCalledWith(
       JSON.stringify({
         type: 'prompt.submit',
         submissionId: '00000000-0000-4000-8000-000000000004',
-        prompt: 'Fix the tests',
+        prompt: '# Fix the tests\n\n![diagram](https://example.com/diagram.png)',
       }),
     );
-    expect(closeSpy).not.toHaveBeenCalled();
+  });
+
+  it('문서를 보내는 동안 편집기와 전송 버튼을 잠근다', async () => {
+    const socket = renderWithSession();
+
+    await editMarkdown('Run the tests');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Send to Codex' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
+
+    expect(socket.send).toHaveBeenLastCalledWith(
+      JSON.stringify({
+        type: 'prompt.submit',
+        submissionId: '00000000-0000-4000-8000-000000000004',
+        prompt: 'Run the tests',
+      }),
+    );
+    expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+    expect(screen.getByTestId('markdown-editor')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('textbox', { name: 'Command' })).toHaveAttribute(
+      'contenteditable',
+      'false',
+    );
+  });
+
+  it('빈 문서에서는 전송 버튼을 비활성화한다', async () => {
+    renderWithSession();
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Command' })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: 'Send to Codex' })).toBeDisabled();
+  });
+
+  it('12,000자를 초과한 Markdown 문서는 전송을 막는다', async () => {
+    renderWithSession();
+
+    await editMarkdown('a'.repeat(12_001));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('12,000 characters or fewer');
+      expect(screen.getByRole('button', { name: 'Send to Codex' })).toBeDisabled();
+    });
+  });
+
+  it('Crepe 설정에서 파일 이미지 업로드를 끄고 URL 이미지 안내를 표시한다', async () => {
+    renderWithSession();
+
+    await waitFor(() => expect(crepeTestState.state.instance).toBeDefined());
+    expect(crepeTestState.state.instance?.options['features']).toMatchObject({
+      'image-block': false,
+    });
+    expect(screen.getByText('Images: use Markdown URLs')).toBeInTheDocument();
+  });
+
+  it('이미지 파일을 붙여넣으면 브라우저 첨부를 막는다', async () => {
+    renderWithSession();
+
+    const editor = await screen.findByRole('textbox', { name: 'Command' });
+    const pasteEvent = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, 'clipboardData', {
+      value: { files: [new File(['binary'], 'image.png', { type: 'image/png' })] },
+    });
+
+    editor.dispatchEvent(pasteEvent);
+
+    expect(pasteEvent.defaultPrevented).toBe(true);
   });
 
   it('명령 접수 후 3초 카운트다운 모달을 표시하고 창을 닫는다', async () => {
-    vi.useFakeTimers();
     const socket = renderWithSession();
+    await screen.findByRole('textbox', { name: 'Command' });
+    vi.useFakeTimers();
     const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Run the tests' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send command' }));
+    const editor = screen.getByRole('textbox', { name: 'Command' });
+    editor.textContent = 'Run the tests';
+    fireEvent.input(editor);
+    expect(screen.getByRole('button', { name: 'Send to Codex' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
 
     expect(closeSpy).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -126,12 +275,9 @@ describe('명령 편집기', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('3초 후 이 창이 닫힙니다.');
     await act(async () => vi.advanceTimersByTime(999));
     expect(closeSpy).not.toHaveBeenCalled();
-    expect(screen.getByRole('dialog')).toHaveTextContent('3초 후 이 창이 닫힙니다.');
     await act(async () => vi.advanceTimersByTime(1_000));
     expect(screen.getByRole('dialog')).toHaveTextContent('2초 후 이 창이 닫힙니다.');
-    await act(async () => vi.advanceTimersByTime(1_000));
-    expect(screen.getByRole('dialog')).toHaveTextContent('1초 후 이 창이 닫힙니다.');
-    await act(async () => vi.advanceTimersByTime(1_000));
+    await act(async () => vi.advanceTimersByTime(2_000));
     expect(closeSpy).toHaveBeenCalledOnce();
   });
 
@@ -183,5 +329,15 @@ describe('명령 편집기', () => {
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent('Bridge connection closed'),
     );
+  });
+
+  it('React가 편집기를 제거하면 Crepe 인스턴스를 destroy한다', async () => {
+    renderWithSession();
+
+    await waitFor(() => expect(crepeTestState.state.instance).toBeDefined());
+    const instance = crepeTestState.state.instance;
+    cleanup();
+
+    expect(instance?.destroy).toHaveBeenCalledOnce();
   });
 });

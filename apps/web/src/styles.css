@@ -1,6 +1,6 @@
 :root {
-  color: #e8e9ed;
-  background: #111318;
+  color: #f2eadf;
+  background: #120f0c;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -13,86 +13,170 @@ body {
   min-width: 320px;
 }
 
+button,
+textarea {
+  font: inherit;
+}
+
 .shell {
   display: grid;
   min-height: 100vh;
   place-items: center;
-  padding: 24px;
+  padding: clamp(16px, 4vw, 48px);
+  background:
+    radial-gradient(circle at 10% 0%, #3d2c1b 0, transparent 36%),
+    radial-gradient(circle at 100% 100%, #241a13 0, transparent 34%), #120f0c;
 }
 
-.card {
-  width: min(100%, 720px);
-  padding: clamp(28px, 7vw, 64px);
-  border: 1px solid #2d313c;
-  border-radius: 24px;
-  background: #191c24;
-  box-shadow: 0 24px 80px #0005;
+.editor-card {
+  width: min(100%, 1040px);
+  overflow: hidden;
+  border: 1px solid #493d31;
+  border-radius: 28px;
+  background: #1b1713;
+  box-shadow: 0 28px 100px #0009;
+}
+
+.editor-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: clamp(24px, 5vw, 48px) clamp(24px, 6vw, 64px) 22px;
 }
 
 .eyebrow {
   margin: 0 0 14px;
-  color: #9aa5ff;
+  color: #f4bd6f;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.16em;
 }
+
 h1 {
   margin: 0;
-  font-size: clamp(32px, 7vw, 58px);
+  color: #f8eee2;
+  font-family: Georgia, Cambria, 'Times New Roman', Times, serif;
+  font-size: clamp(30px, 5vw, 58px);
+  font-weight: 500;
   letter-spacing: -0.05em;
 }
-.intro {
-  color: #aeb4c1;
-  line-height: 1.6;
+
+.format-hint {
+  max-width: 220px;
+  margin: 0 0 5px;
+  color: #b9a999;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: right;
 }
+
 .status {
   min-height: 24px;
-  margin: 24px 0;
-  color: #bfc6ff;
+  margin: 0;
+  padding: 13px clamp(24px, 6vw, 64px);
+  border-block: 1px solid #332a22;
+  color: #e4bd85;
+  background: #17130f;
   font-size: 14px;
 }
+
 .status-error {
-  color: #ff9b9b;
+  color: #ffaaa0;
 }
+
 .status-success {
-  color: #8fe0b1;
+  color: #a6e0b4;
 }
+
+form {
+  padding: clamp(20px, 4vw, 36px) clamp(24px, 6vw, 64px) 44px;
+}
+
 label {
   display: block;
   margin-bottom: 10px;
-  font-size: 14px;
-  font-weight: 700;
+  color: #ddcfc2;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
-textarea {
-  width: 100%;
-  resize: vertical;
-  padding: 16px;
-  border: 1px solid #3c4250;
-  border-radius: 12px;
-  color: inherit;
-  background: #101218;
-  font: inherit;
-  line-height: 1.5;
+
+.markdown-editor {
+  min-height: 440px;
+  overflow: hidden;
+  border: 1px solid #5a4b3c;
+  border-radius: 16px;
+  background: #1f1b16;
+  transition:
+    border-color 160ms ease,
+    opacity 160ms ease;
 }
-textarea:focus {
-  outline: 2px solid #9aa5ff;
+
+.markdown-editor:focus-within {
+  border-color: #f4bd6f;
+  outline: 2px solid #f4bd6f55;
   outline-offset: 2px;
 }
+
+.markdown-editor[aria-disabled='true'] {
+  opacity: 0.65;
+}
+
+.markdown-editor-loading {
+  display: grid;
+  min-height: 440px;
+  place-items: center;
+  color: #9e9083;
+}
+
+.markdown-editor .milkdown {
+  min-height: 440px;
+  padding: 24px 30px 40px;
+  background: transparent;
+}
+
+.markdown-editor .milkdown .editor {
+  min-height: 340px;
+}
+
+.editor-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 2px 0;
+  color: #9e9083;
+  font-size: 12px;
+}
+
+.prompt-limit {
+  color: #ffaaa0;
+}
+
 button {
   width: 100%;
-  margin-top: 16px;
-  padding: 14px 18px;
+  margin-top: 22px;
+  padding: 15px 20px;
   border: 0;
-  border-radius: 10px;
-  color: #111318;
-  background: #bfc6ff;
-  font: inherit;
+  border-radius: 12px;
+  color: #25170c;
+  background: #f4bd6f;
   font-weight: 800;
   cursor: pointer;
+  transition:
+    background 160ms ease,
+    transform 160ms ease;
 }
+
+button:hover:not(:disabled) {
+  background: #ffd08a;
+  transform: translateY(-1px);
+}
+
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
 .countdown-backdrop {
@@ -101,26 +185,57 @@ button:disabled {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: #0008;
+  background: #000b;
 }
 
 .countdown-modal {
   width: min(100%, 440px);
   padding: 32px;
-  border: 1px solid #515875;
+  border: 1px solid #80603c;
   border-radius: 20px;
-  background: #202532;
-  box-shadow: 0 24px 80px #0008;
+  background: #2a2118;
+  box-shadow: 0 24px 80px #000b;
   text-align: center;
 }
 
 .countdown-modal h2 {
   margin: 0;
+  color: #f8eee2;
+  font-family: Georgia, Cambria, 'Times New Roman', Times, serif;
   font-size: clamp(24px, 5vw, 36px);
+  font-weight: 500;
   letter-spacing: -0.04em;
 }
 
 .countdown-modal p:last-child {
   margin: 16px 0 0;
-  color: #bfc6ff;
+  color: #e4bd85;
+}
+
+@media (max-width: 640px) {
+  .editor-header {
+    align-items: start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .format-hint {
+    max-width: none;
+    text-align: left;
+  }
+
+  .markdown-editor,
+  .markdown-editor .milkdown {
+    min-height: 380px;
+  }
+
+  .markdown-editor .milkdown {
+    padding: 20px 18px 32px;
+  }
+
+  .editor-footer {
+    align-items: end;
+    flex-direction: column;
+    gap: 4px;
+  }
 }

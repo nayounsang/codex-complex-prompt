@@ -1,26 +1,39 @@
-import { type FormEvent, useState } from 'react';
+import { type SyntheticEvent, useCallback, useRef, useState } from 'react';
 
 import { useBridgeSession } from './bridge-session.js';
+import { LazyMarkdownEditor } from './LazyMarkdownEditor.js';
+import type { MarkdownEditorHandle } from './MarkdownEditor.js';
 import './styles.css';
 
+const MAX_PROMPT_LENGTH = 12_000;
+
 export function App(): React.JSX.Element {
-  const [command, setCommand] = useState('');
+  const [markdown, setMarkdown] = useState('');
+  const editorRef = useRef<MarkdownEditorHandle>(null);
   const { state, error, closeInSeconds, submit } = useBridgeSession();
   const isSubmitting = state === 'submitting';
+  const trimmedMarkdownLength = markdown.trim().length;
+  const isOverPromptLimit = trimmedMarkdownLength > MAX_PROMPT_LENGTH;
+  const isEmpty = trimmedMarkdownLength === 0;
+  const handleMarkdownChange = useCallback((nextMarkdown: string) => {
+    setMarkdown(nextMarkdown);
+  }, []);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+  function handleSubmit(event: SyntheticEvent<HTMLFormElement>): void {
     event.preventDefault();
-    submit(command);
+    submit(editorRef.current?.getMarkdown() ?? markdown);
   }
 
   return (
     <main className="shell">
-      <section className="card" aria-labelledby="title">
-        <p className="eyebrow">CODEX COMMAND EDITOR</p>
-        <h1 id="title">Send a command to Codex</h1>
-        <p className="intro">
-          Write the command here. AI responses stay in Codex; this window only sends your command.
-        </p>
+      <section className="editor-card" aria-labelledby="title">
+        <header className="editor-header">
+          <div>
+            <p className="eyebrow">CODEX COMMAND EDITOR</p>
+            <h1 id="title">Write a Markdown command</h1>
+          </div>
+          <p className="format-hint">Markdown is sent directly to Codex</p>
+        </header>
         <p className={`status status-${state}`} role="status">
           {state === 'connecting' && 'Connecting to the local bridge…'}
           {state === 'connected' && 'Command editor ready'}
@@ -30,21 +43,29 @@ export function App(): React.JSX.Element {
           {state === 'disconnected' && 'Bridge connection closed'}
         </p>
         <form onSubmit={handleSubmit}>
-          <label htmlFor="command">Command</label>
-          <textarea
-            id="command"
-            value={command}
-            onChange={(event) => setCommand(event.target.value)}
-            placeholder="예: 테스트를 보강하고 실패 원인을 수정해줘…"
-            rows={9}
-            disabled={isSubmitting}
+          <label htmlFor="markdown-editor">Command</label>
+          <LazyMarkdownEditor
+            ref={editorRef}
+            readOnly={isSubmitting}
+            onMarkdownChange={handleMarkdownChange}
           />
+          <div className="editor-footer">
+            <span className={isOverPromptLimit ? 'prompt-limit' : undefined}>
+              {trimmedMarkdownLength.toLocaleString()} / {MAX_PROMPT_LENGTH.toLocaleString()}
+            </span>
+            <span>Images: use Markdown URLs</span>
+          </div>
           <button
             type="submit"
-            disabled={isSubmitting || state !== 'connected' || command.trim() === ''}
+            disabled={isSubmitting || state !== 'connected' || isEmpty || isOverPromptLimit}
           >
-            {isSubmitting ? 'Sending…' : 'Send command'}
+            {isSubmitting ? 'Sending…' : 'Send to Codex'}
           </button>
+          {isOverPromptLimit && (
+            <p className="prompt-limit" role="alert">
+              Markdown commands must be 12,000 characters or fewer.
+            </p>
+          )}
         </form>
       </section>
       {closeInSeconds !== null && (
