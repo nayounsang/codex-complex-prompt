@@ -188,13 +188,13 @@ describe('명령 편집기', () => {
     expect(socket.url).toBe('wss://127.0.0.1:4321/ws');
   });
 
-  it('원격 HTTP 브리지 URL이면 평문 WebSocket 연결을 만들지 않는다', async () => {
-    window.history.replaceState({}, '', '/?token=test-token&bridge=http%3A%2F%2Fbridge.example');
+  it('원격 브리지 URL이면 WebSocket 연결을 만들지 않는다', async () => {
+    window.history.replaceState({}, '', '/?token=test-token&bridge=https%3A%2F%2Fbridge.example');
     vi.stubGlobal('WebSocket', MockWebSocket);
 
     render(<App />);
 
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('must use HTTPS'));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('loopback host'));
     expect(MockWebSocket.instances).toHaveLength(0);
   });
 

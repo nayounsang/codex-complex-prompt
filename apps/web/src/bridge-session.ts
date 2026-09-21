@@ -31,8 +31,8 @@ function parseBridgeUrl(bridge: string): BridgeUrlResult {
   }
   const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   const isLoopbackHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-  if (url.protocol === 'http:' && !isLoopbackHost) {
-    return { url: null, error: 'Remote bridge URLs must use HTTPS.' };
+  if (!isLoopbackHost) {
+    return { url: null, error: 'The bridge URL must point to a loopback host.' };
   }
   return { url, error: null };
 }
