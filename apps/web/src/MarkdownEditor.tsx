@@ -7,7 +7,6 @@ import {
   useState,
 } from 'react';
 
-import { size } from '@floating-ui/dom';
 import { Crepe } from '@milkdown/crepe';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
@@ -20,27 +19,19 @@ export interface MarkdownEditorProps {
   readonly defaultMarkdown?: string;
   readonly readOnly?: boolean;
   readonly onMarkdownChange?: (markdown: string) => void;
+  readonly className?: string;
+  readonly testId?: string;
+  readonly ariaLabel?: string;
+  readonly onReady?: (root: HTMLDivElement) => void;
 }
 
 const crepeFeatures = {
   [Crepe.Feature.ImageBlock]: false,
 };
 
-const slashMenuMiddleware = [
-  size({
-    padding: 8,
-    apply({ availableHeight, elements }) {
-      elements.floating.style.maxHeight = `${Math.max(0, availableHeight)}px`;
-      elements.floating.style.overflowY = 'auto';
-    },
-  }),
-];
-
 const crepeFeatureConfigs = {
   [Crepe.Feature.BlockEdit]: {
-    slashMenu: {
-      middleware: slashMenuMiddleware,
-    },
+    slashMenu: {},
   },
   [Crepe.Feature.Placeholder]: {
     mode: 'doc' as const,
@@ -50,7 +41,15 @@ const crepeFeatureConfigs = {
 
 export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
   function MarkdownEditor(
-    { defaultMarkdown = '', readOnly = false, onMarkdownChange },
+    {
+      defaultMarkdown = '',
+      readOnly = false,
+      onMarkdownChange,
+      className,
+      testId = 'markdown-editor',
+      ariaLabel = 'Markdown command editor',
+      onReady,
+    },
     forwardedRef,
   ): React.JSX.Element {
     const rootRef = useRef<HTMLDivElement>(null);
@@ -61,6 +60,12 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       onMarkdownChange?.(markdown);
     });
     const getCurrentReadOnly = useEffectEvent(() => readOnly);
+    const getEditorAriaLabel = useEffectEvent(() =>
+      ariaLabel === 'Markdown command editor' ? 'Command' : ariaLabel,
+    );
+    const notifyReady = useEffectEvent((root: HTMLDivElement) => {
+      onReady?.(root);
+    });
 
     useImperativeHandle(
       forwardedRef,
@@ -104,15 +109,30 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           });
         });
 
+        let readyTimer: number | undefined;
+        const syncInitialMarkdown = (): void => {
+          if (disposed) return;
+          const proseMirror = editorRoot.querySelector<HTMLElement>('.ProseMirror');
+          if (proseMirror === null) return;
+          if (readyTimer !== undefined) window.clearTimeout(readyTimer);
+          readyTimer = window.setTimeout(() => {
+            if (disposed) return;
+            const stableProseMirror = editorRoot.querySelector<HTMLElement>('.ProseMirror');
+            if (stableProseMirror === null) return;
+            editorObserver.disconnect();
+            stableProseMirror.setAttribute('aria-label', getEditorAriaLabel());
+            notifyReady(editorRoot);
+            markdownRef.current = crepe?.getMarkdown() ?? defaultMarkdown;
+            notifyMarkdownChange(markdownRef.current);
+          }, 50);
+        };
+        const editorObserver = new MutationObserver(syncInitialMarkdown);
+        editorObserver.observe(editorRoot, { childList: true, subtree: true });
+
         void crepe
           .create()
-          .then(function syncInitialMarkdown() {
-            if (disposed) return;
-            editorRoot
-              .querySelector<HTMLElement>('.ProseMirror')
-              ?.setAttribute('aria-label', 'Command');
-            markdownRef.current = crepe.getMarkdown();
-            notifyMarkdownChange(markdownRef.current);
+          .then(function syncInitialMarkdownAfterCreate() {
+            syncInitialMarkdown();
           })
           .catch(function reportFailedEditor(error: unknown) {
             if (disposed) return;
@@ -124,6 +144,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
 
         return () => {
           disposed = true;
+          if (readyTimer !== undefined) window.clearTimeout(readyTimer);
+          editorObserver.disconnect();
           editorRoot.removeEventListener('paste', blockFileTransfer, true);
           editorRoot.removeEventListener('drop', blockFileTransfer, true);
           crepeRef.current = null;
@@ -148,10 +170,10 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       <div
         ref={rootRef}
         id="markdown-editor"
-        className="markdown-editor markdown-surface markdown-content"
-        data-testid="markdown-editor"
+        className={`markdown-editor markdown-surface markdown-content${className === undefined ? '' : ` ${className}`}`}
+        data-testid={testId}
         role="group"
-        aria-label="Markdown command editor"
+        aria-label={ariaLabel}
         aria-disabled={readOnly}
       />
     );

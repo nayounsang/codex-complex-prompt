@@ -69,6 +69,7 @@ button:focus-visible,
   --app-header-height: 64px;
   display: grid;
   height: 100%;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--app-header-height) var(--action-bar-height) minmax(0, 1fr);
   overflow: hidden;
   background: #f7f7f5;
@@ -313,9 +314,118 @@ button:focus-visible,
 }
 
 .markdown-editor .milkdown .milkdown-code-block {
+  margin: 0 0 12px;
+  padding: 4px 12px 12px;
   border: 1px solid #e5e5e5;
   border-radius: 8px;
   background: #fafafa;
+}
+
+.feedback-markdown-renderer {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.feedback-markdown-renderer[aria-disabled='true'] {
+  opacity: 1;
+}
+
+.feedback-markdown-renderer .ProseMirror {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.feedback-markdown-renderer:focus-within {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.markdown-content a,
+.markdown-editor .milkdown .ProseMirror a {
+  color: #37352f;
+  text-decoration: underline;
+  text-decoration-color: #a4a3a0;
+  text-underline-offset: 3px;
+}
+
+.markdown-content :is(ul, ol) ul,
+.markdown-content :is(ul, ol) ol,
+.markdown-editor .milkdown .ProseMirror :is(ul, ol) ul,
+.markdown-editor .milkdown .ProseMirror :is(ul, ol) ol {
+  margin-bottom: 0;
+}
+
+.markdown-content input[type='checkbox'],
+.markdown-editor .milkdown .ProseMirror input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  margin: 0 8px 0 0;
+  accent-color: #737373;
+  vertical-align: -2px;
+}
+
+.markdown-content table,
+.markdown-editor .milkdown .milkdown-table-block table {
+  width: max-content;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+  color: #37352f;
+  background: #fff;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.markdown-content .milkdown-table-block,
+.markdown-editor .milkdown .milkdown-table-block {
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.markdown-content :is(th, td),
+.markdown-editor .milkdown .milkdown-table-block :is(th, td) {
+  width: 12ch;
+  min-width: 12ch;
+  max-width: 12ch;
+  padding: 6px 10px;
+  border: 1px solid #eaeaea;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.markdown-content :is(th, td) > p,
+.markdown-editor .milkdown .milkdown-table-block :is(th, td) > p {
+  margin: 0;
+}
+
+.markdown-content th,
+.markdown-editor .milkdown .milkdown-table-block th {
+  color: #1f1f1f;
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.markdown-content .milkdown-table-block.feedback-table-highlight,
+.markdown-editor .milkdown .milkdown-table-block.feedback-table-highlight {
+  border-color: #eecb54;
+  background: #fff8d8;
+  box-shadow: 0 0 0 2px rgb(238 203 84 / 22%);
+}
+
+.markdown-content td,
+.markdown-editor .milkdown .milkdown-table-block td {
+  background: #fff;
 }
 
 .markdown-editor .milkdown .milkdown-code-block .cm-editor,
@@ -323,9 +433,22 @@ button:focus-visible,
   background: #fafafa;
 }
 
+.markdown-content .milkdown-code-block.feedback-code-highlight,
+.markdown-editor .milkdown .milkdown-code-block.feedback-code-highlight {
+  border-color: #eecb54;
+  background: #fff8d8;
+  box-shadow: 0 0 0 2px rgb(238 203 84 / 22%);
+}
+
+.markdown-content .milkdown-code-block.feedback-code-highlight .cm-editor,
+.markdown-content .milkdown-code-block.feedback-code-highlight .cm-gutters,
+.markdown-editor .milkdown .milkdown-code-block.feedback-code-highlight .cm-editor,
+.markdown-editor .milkdown .milkdown-code-block.feedback-code-highlight .cm-gutters {
+  background: #fff8d8;
+}
+
 .markdown-editor .milkdown .milkdown-slash-menu {
   z-index: 20;
-  overflow-y: auto;
 }
 
 .markdown-editor .milkdown .ProseMirror p.is-empty::before {
@@ -457,14 +580,20 @@ button:focus-visible,
 
 .global-feedback-icon,
 .feedback-scope-icon {
-  color: #2383e2;
-  font-size: 10px;
-  line-height: 1;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2383e2;
 }
 
 .header-feedback-button.has-global-feedback .global-feedback-icon,
 .feedback-scope-global .feedback-scope-icon {
-  color: #168274;
+  background: #168274;
+}
+
+.button-secondary:disabled .global-feedback-icon {
+  background: #a4a3a0;
 }
 
 .global-feedback-state {
@@ -525,9 +654,10 @@ button:focus-visible,
   grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
   gap: 16px;
   width: min(100%, 1120px);
+  min-width: 0;
   min-height: 100%;
   margin: 0 auto;
-  padding: 16px clamp(7px, 1vw, 11px);
+  padding: 8px clamp(7px, 1vw, 11px);
 }
 
 .feedback-document-column {
@@ -554,14 +684,14 @@ button:focus-visible,
   word-break: break-word;
 }
 
-.feedback-highlight {
+.feedback-markdown-renderer ::highlight(feedback-annotation) {
   border-radius: 3px;
   background: #fff0a8;
   box-shadow: 0 0 0 2px rgb(238 191 38 / 20%);
 }
 
 .feedback-popover {
-  z-index: 10;
+  z-index: 30;
   width: min(384px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
   padding: 0;

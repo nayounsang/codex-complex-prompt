@@ -42,9 +42,7 @@ export function PromptActions({
               }
               disabled={isSubmitting}
             >
-              <span className="global-feedback-icon" aria-hidden="true">
-                ●
-              </span>
+              <span className="global-feedback-icon" aria-hidden="true" />
               <span>Global feedback</span>
               {globalFeedback !== undefined && <span className="global-feedback-state">Added</span>}
             </Popover.Trigger>
