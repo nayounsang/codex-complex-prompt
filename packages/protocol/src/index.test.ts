@@ -19,6 +19,17 @@ describe('프로토콜 스키마', () => {
     expect(result.success).toBe(true);
   });
 
+  it('feedback 모드 제출 메시지의 선택적 모드를 수락한다', () => {
+    const result = ClientMessageSchema.safeParse({
+      type: 'prompt.submit',
+      submissionId: '00000000-0000-4000-8000-000000000001',
+      prompt: '## AI Feedback',
+      mode: 'feedback',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('잘못된 제출 ID를 거부한다', () => {
     const result = ClientMessageSchema.safeParse({
       type: 'prompt.submit',
@@ -66,6 +77,22 @@ describe('프로토콜 스키마', () => {
         expiresAt: '2026-09-20T00:00:00.000Z',
       }).success,
     ).toBe(true);
+  });
+
+  it('feedback 결과의 최신 Markdown과 새 세션을 검증한다', () => {
+    const result = ServerMessageSchema.safeParse({
+      type: 'prompt.result',
+      submissionId: '00000000-0000-4000-8000-000000000002',
+      status: 'accepted',
+      prompt: '# Updated',
+      nextSession: {
+        token: 'a'.repeat(32),
+        sessionId: '00000000-0000-4000-8000-000000000003',
+        expiresAt: '2026-09-20T00:00:00.000Z',
+      },
+    });
+
+    expect(result.success).toBe(true);
   });
 
   it('유효한 서버 메시지를 JSON으로 인코딩한다', () => {

@@ -148,7 +148,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       <div
         ref={rootRef}
         id="markdown-editor"
-        className="markdown-editor"
+        className="markdown-editor markdown-surface markdown-content"
         data-testid="markdown-editor"
         role="group"
         aria-label="Markdown command editor"

@@ -24,7 +24,10 @@ export type { SessionRecord, SessionStoreOptions } from './session-store.js';
 export interface PromptContext {
   readonly sessionId: string;
   readonly submissionId: string;
+  readonly mode: 'edit' | 'feedback';
 }
+
+export type PromptAdapterResult = string | void;
 
 export interface LocalBridgeServerOptions extends SessionStoreOptions {
   readonly host?: string;
@@ -33,7 +36,7 @@ export interface LocalBridgeServerOptions extends SessionStoreOptions {
   readonly promptTimeoutMs?: number;
   readonly maxConnections?: number;
   readonly handshakeTimeoutMs?: number;
-  readonly onPrompt: (prompt: string, context: PromptContext) => Promise<void>;
+  readonly onPrompt: (prompt: string, context: PromptContext) => Promise<PromptAdapterResult>;
 }
 
 export interface RunningLocalBridgeServer {
@@ -238,18 +241,29 @@ function attachConnection(
     }
     submissions.add(submission.submissionId);
     try {
-      await withTimeout(
+      const latestMarkdown = await withTimeout(
         onPrompt(submission.prompt, {
           sessionId: sessionId as string,
           submissionId: submission.submissionId,
+          mode: submission.mode ?? 'edit',
         }),
         promptTimeoutMs,
       );
-      send(webSocket, {
+      const result: ServerMessage = {
         type: 'prompt.result',
         submissionId: submission.submissionId,
         status: 'accepted',
-      });
+        ...(latestMarkdown === undefined ? {} : { prompt: latestMarkdown }),
+      };
+      if (submission.mode === 'feedback') {
+        const nextSession = store.create();
+        result.nextSession = {
+          token: nextSession.token,
+          sessionId: nextSession.id,
+          expiresAt: nextSession.expiresAt.toISOString(),
+        };
+      }
+      send(webSocket, result);
     } catch {
       send(webSocket, {
         type: 'prompt.result',

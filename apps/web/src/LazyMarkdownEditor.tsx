@@ -1,4 +1,5 @@
 import { Component, forwardRef, lazy, Suspense, useCallback, useState } from 'react';
+import { Button } from '@base-ui/react/button';
 
 import type { MarkdownEditorHandle, MarkdownEditorProps } from './MarkdownEditor.js';
 
@@ -9,7 +10,9 @@ const MarkdownEditor = lazy(async function loadMarkdownEditor() {
 
 export const LazyMarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
   function LazyMarkdownEditor(props, forwardedRef): React.JSX.Element {
-    const [isEditorRequested, setIsEditorRequested] = useState(false);
+    const [isEditorRequested, setIsEditorRequested] = useState(
+      () => (props.defaultMarkdown ?? '').trim().length > 0,
+    );
     const requestEditor = useCallback(function requestEditor(): void {
       setIsEditorRequested(true);
     }, []);
@@ -44,32 +47,20 @@ function MarkdownEditorFallback({
   const activateOnPointer = onActivate === undefined || error ? undefined : activate;
 
   return (
-    <div
+    <Button
       id="markdown-editor"
       className="markdown-editor markdown-editor-loading"
-      data-testid="markdown-editor"
-      role={onActivate === undefined ? 'group' : 'button'}
+      disabled={onActivate === undefined || readOnly}
       aria-label="Markdown command editor"
       aria-busy="true"
       aria-disabled={readOnly}
-      tabIndex={onActivate === undefined ? undefined : 0}
       onClick={activate}
       onPointerEnter={activateOnPointer}
       onPointerDown={activateOnPointer}
       onFocus={activateOnPointer}
-      onKeyDown={
-        onActivate === undefined
-          ? undefined
-          : (event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                onActivate();
-              }
-            }
-      }
     >
       {error ? 'Editor failed to load. Reload to try again.' : 'Start writing…'}
-    </div>
+    </Button>
   );
 }
 

@@ -12,6 +12,7 @@ import {
 
 import {
   CodexSessionInputAdapter,
+  type CodexSessionInputContext,
   type CodexSessionInput,
 } from './adapters/codex-session-input.js';
 import { installCodexUserPromptHook, removeCodexUserPromptHook } from './codex-hook-config.js';
@@ -46,7 +47,8 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
   const inputAdapter = options.inputAdapter ?? new CodexSessionInputAdapter();
   const staticDir = options.staticDir ?? resolveStaticDir();
   const serverOptions = {
-    onPrompt: (prompt: string) => inputAdapter.submit(prompt),
+    onPrompt: (prompt: string, context: CodexSessionInputContext) =>
+      inputAdapter.submit(prompt, context),
     ...(staticDir === undefined ? {} : { staticDir }),
     ...(options.port === undefined ? {} : { port: options.port }),
     ...(options.sessionTtlMs === undefined ? {} : { ttlMs: options.sessionTtlMs }),
