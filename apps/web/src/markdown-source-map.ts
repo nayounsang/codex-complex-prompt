@@ -322,7 +322,11 @@ function isDecoratedUiText(element: Element): boolean {
   );
 }
 
-export function getMappedSourceOffset(root: HTMLElement, container: Node, offset: number): number | null {
+export function getMappedSourceOffset(
+  root: HTMLElement,
+  container: Node,
+  offset: number,
+): number | null {
   const proseMirror = root.matches('.ProseMirror')
     ? root
     : root.querySelector<HTMLElement>('.ProseMirror');
@@ -365,7 +369,8 @@ export function locateMappedText(
   for (const mapping of mappings) {
     const first = mapping.characters[0];
     const last = mapping.characters.at(-1);
-    if (first === undefined || last === undefined || target < first.start || target > last.end) continue;
+    if (first === undefined || last === undefined || target < first.start || target > last.end)
+      continue;
     for (const character of mapping.characters) {
       if (target <= character.end) {
         return {
@@ -399,12 +404,14 @@ function paintFeedbackHighlights(
 ): void {
   type HighlightInstance = { add: (range: Range) => void; readonly size: number };
   type HighlightConstructor = new () => HighlightInstance;
-  const cssHighlights = (CSS as typeof CSS & {
-    highlights?: {
-      set: (name: string, highlight: HighlightInstance) => void;
-      delete: (name: string) => void;
-    };
-  }).highlights;
+  const cssHighlights = (
+    CSS as typeof CSS & {
+      highlights?: {
+        set: (name: string, highlight: HighlightInstance) => void;
+        delete: (name: string) => void;
+      };
+    }
+  ).highlights;
   const HighlightClass = (globalThis as typeof globalThis & { Highlight?: HighlightConstructor })
     .Highlight;
   if (cssHighlights === undefined || HighlightClass === undefined) return;
@@ -518,13 +525,18 @@ function appendInline(source: string, sourceStart: number, target: SourceCharact
       continue;
     }
     const character = String.fromCodePoint(source.codePointAt(cursor) ?? 0);
-    appendCharacter(character, sourceStart + cursor, sourceStart + cursor + character.length, target);
+    appendCharacter(
+      character,
+      sourceStart + cursor,
+      sourceStart + cursor + character.length,
+      target,
+    );
     cursor += character.length;
   }
 }
 
 function appendLiteral(source: string, sourceStart: number, target: SourceCharacter[]): void {
-  for (let index = 0; index < source.length; ) {
+  for (let index = 0; index < source.length;) {
     const character = String.fromCodePoint(source.codePointAt(index) ?? 0);
     appendCharacter(character, sourceStart + index, sourceStart + index + character.length, target);
     index += character.length;
