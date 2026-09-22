@@ -120,6 +120,9 @@ export function AnnotatedMarkdownView({
       pendingSelectionRef.current = null;
       selectionDismissedRef.current = true;
       window.getSelection()?.removeAllRanges();
+      rootRef.current
+        ?.querySelectorAll('.milkdown-table-block .selectedCell')
+        .forEach((cell) => cell.classList.remove('selectedCell'));
     },
     [selectionPopoverOpen],
   );

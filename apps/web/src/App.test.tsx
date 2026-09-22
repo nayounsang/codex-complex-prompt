@@ -722,6 +722,33 @@ describe('명령 편집기', () => {
     expect(composer.closest('form')?.querySelector('q')?.textContent).toBe(markdown);
   });
 
+  it('표 CellSelection feedback을 닫은 뒤 문단을 선택하면 문단 feedback composer를 표시한다', async () => {
+    renderWithSession();
+    const markdown = 'Outside text\n\n| Name | Value |\n| --- | --- |\n| mode | feedback |';
+    await editMarkdown(markdown);
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    const table = await waitFor(() => {
+      const renderedTable = article.querySelector('.milkdown-table-block');
+      expect(renderedTable).not.toBeNull();
+      return renderedTable as HTMLElement;
+    });
+    table.querySelectorAll('td').forEach((cell) => cell.classList.add('selectedCell'));
+    fireEvent.mouseDown(article);
+    fireEvent.mouseUp(article);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    expect(table.querySelector('.selectedCell')).toBeNull();
+    await waitFor(() => expect(hasRenderedSourceMap(article)).toBe(true));
+
+    const outsideTextStart = markdown.indexOf('Outside text');
+    selectSourceRange(article, outsideTextStart, outsideTextStart + 'Outside text'.length);
+
+    const composer = await screen.findByRole('textbox', { name: 'Feedback on selection' });
+    expect(composer.closest('form')?.querySelector('q')?.textContent).toBe('Outside text');
+  });
+
   it('global feedback을 추가하면 feedback 목록과 전송 버튼의 개수를 갱신한다', async () => {
     renderWithSession();
     await editMarkdown('# Review this');
