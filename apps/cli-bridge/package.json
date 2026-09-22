@@ -10,7 +10,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nayunsang/codex-complex-prompt.git",
+    "url": "git+https://github.com/nayounsang/codex-complex-prompt.git",
     "directory": "apps/cli-bridge"
   },
   "publishConfig": {
@@ -69,8 +69,8 @@
   ],
   "author": "",
   "bugs": {
-    "url": "https://github.com/nayunsang/codex-complex-prompt/issues"
+    "url": "https://github.com/nayounsang/codex-complex-prompt/issues"
   },
-  "homepage": "https://github.com/nayunsang/codex-complex-prompt#readme",
+  "homepage": "https://github.com/nayounsang/codex-complex-prompt#readme",
   "types": "./dist/index.d.ts"
 }
