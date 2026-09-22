@@ -14,6 +14,7 @@ export interface SelectionAnchor {
   readonly start: number;
   readonly end: number;
   readonly rect: SelectionRect;
+  readonly annotationId?: string;
 }
 
 export interface SelectionRect {

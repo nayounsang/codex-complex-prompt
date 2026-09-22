@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { getSelectionAnchor } from './selection-anchor.js';
 import type { FeedbackAnnotation, SelectionAnchor } from './feedback-types.js';
@@ -34,6 +34,7 @@ export function AnnotatedMarkdownView({
   onSelection,
 }: AnnotatedMarkdownViewProps): React.JSX.Element {
   const rootRef = useRef<HTMLElement>(null);
+  const pointerSelectingRef = useRef(false);
   const ranges = annotations
     .filter(
       (annotation) =>
@@ -49,6 +50,70 @@ export function AnnotatedMarkdownView({
     }))
     .sort((left, right) => left.start - right.start);
   const blocks = parseMarkdown(markdown);
+  const handleSelection = useCallback((): void => {
+    const root = rootRef.current;
+    if (root === null) return;
+    const selection = window.getSelection();
+    if (
+      selection === null ||
+      selection.rangeCount === 0 ||
+      selection.isCollapsed ||
+      !root.contains(selection.getRangeAt(0).startContainer) ||
+      !root.contains(selection.getRangeAt(0).endContainer)
+    ) {
+      onSelection(null);
+      return;
+    }
+    const anchor = getSelectionAnchor(root);
+    if (anchor === null) {
+      onSelection(null);
+      return;
+    }
+    const existing = annotations.find(
+      (annotation) =>
+        annotation.scope === 'selection' &&
+        annotation.start !== undefined &&
+        annotation.end !== undefined &&
+        annotation.start < anchor.end &&
+        annotation.end > anchor.start,
+    );
+    if (existing === undefined) {
+      onSelection(anchor);
+      return;
+    }
+    const start = Math.min(anchor.start, existing.start as number);
+    const end = Math.max(anchor.end, existing.end as number);
+    onSelection({
+      ...anchor,
+      annotationId: existing.id,
+      quote: markdown.slice(start, end),
+      start,
+      end,
+    });
+  }, [annotations, markdown, onSelection]);
+
+  useEffect(
+    function listenForKeyboardSelection() {
+      const handleDocumentSelectionChange = (): void => {
+        if (pointerSelectingRef.current) return;
+        const root = rootRef.current;
+        const selection = window.getSelection();
+        if (
+          root === null ||
+          selection === null ||
+          selection.rangeCount === 0 ||
+          !root.contains(selection.getRangeAt(0).startContainer) ||
+          !root.contains(selection.getRangeAt(0).endContainer)
+        ) {
+          return;
+        }
+        handleSelection();
+      };
+      document.addEventListener('selectionchange', handleDocumentSelectionChange);
+      return () => document.removeEventListener('selectionchange', handleDocumentSelectionChange);
+    },
+    [handleSelection],
+  );
 
   return (
     <article
@@ -56,9 +121,13 @@ export function AnnotatedMarkdownView({
       className="annotated-markdown markdown-surface markdown-content"
       data-testid="annotated-markdown"
       aria-label="Markdown with feedback annotations"
-      onMouseUp={() =>
-        onSelection(rootRef.current === null ? null : getSelectionAnchor(rootRef.current))
-      }
+      onMouseDown={() => {
+        pointerSelectingRef.current = true;
+      }}
+      onMouseUp={() => {
+        pointerSelectingRef.current = false;
+        handleSelection();
+      }}
     >
       {blocks.map((block, index) => (
         <MarkdownBlockView key={`${block.contentStart}-${index}`} block={block} ranges={ranges} />
@@ -125,7 +194,7 @@ function renderMappedText(
       );
     }
     for (const range of matchingRanges) {
-      const selectedStart = Math.max(part.start, range.start);
+      const selectedStart = Math.max(part.start, range.start, part.start + cursor);
       const selectedEnd = Math.min(part.end, range.end);
       const beforeEnd = selectedStart - part.start;
       if (beforeEnd > cursor) {
@@ -152,7 +221,9 @@ function renderMappedText(
           </mark>,
         );
       }
-      cursor = Math.max(cursor, selectedEnd - part.start);
+      if (selectedEnd > selectedStart) {
+        cursor = Math.max(cursor, selectedEnd - part.start);
+      }
     }
     if (cursor < part.text.length) {
       parts.push(

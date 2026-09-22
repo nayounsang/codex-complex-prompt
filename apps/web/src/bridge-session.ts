@@ -11,6 +11,7 @@ interface BridgeSession {
   readonly state: ConnectionState;
   readonly error: string | null;
   readonly closeInSeconds: number | null;
+  readonly bridgeUrl: string | null;
   readonly submit: (prompt: string, mode?: 'edit' | 'feedback') => Promise<PromptResult>;
 }
 
@@ -64,6 +65,10 @@ export function useBridgeSession(): BridgeSession {
   const [state, setState] = useState<ConnectionState>(() => getInitialConnection().state);
   const [error, setError] = useState<string | null>(() => getInitialConnection().error);
   const [closeInSeconds, setCloseInSeconds] = useState<number | null>(null);
+  const [bridgeUrl, setBridgeUrl] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('bridge') ?? window.location.origin;
+  });
   const tokenRef = useRef<string | null>(null);
   const bridgeRef = useRef<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -95,6 +100,7 @@ export function useBridgeSession(): BridgeSession {
       if (bridgeResult.url === null) return;
       const bridgeOrigin = bridgeResult.url;
       bridgeRef.current = bridge;
+      setBridgeUrl(bridge);
       const cleanUrl = `${window.location.pathname}${window.location.hash}`;
       if (searchParams.has('token')) {
         window.history.replaceState({}, document.title, cleanUrl);
@@ -102,6 +108,12 @@ export function useBridgeSession(): BridgeSession {
       const protocol = bridgeOrigin.protocol === 'https:' ? 'wss:' : 'ws:';
       const connection = new WebSocket(`${protocol}//${bridgeOrigin.host}/ws`);
       socketRef.current = connection;
+
+      function failPendingResults(message: string): void {
+        const pending = pendingResults.current;
+        pendingResults.current = new Map();
+        for (const resolve of pending.values()) resolve({ status: 'failed', error: message });
+      }
 
       function handleOpen(): void {
         if (socketRef.current !== connection) return;
@@ -114,12 +126,14 @@ export function useBridgeSession(): BridgeSession {
         try {
           input = JSON.parse(String(event.data));
         } catch {
+          failPendingResults('The bridge returned an invalid message.');
           setState('error');
           setError('The bridge returned an invalid message.');
           return;
         }
         const message = ServerMessageSchema.safeParse(input);
         if (!message.success) {
+          failPendingResults('The bridge returned an invalid message.');
           setState('error');
           setError('The bridge returned an invalid message.');
           return;
@@ -168,6 +182,7 @@ export function useBridgeSession(): BridgeSession {
             setCloseInSeconds(null);
           }
         } else if (message.data.type === 'session.error') {
+          failPendingResults(message.data.message);
           setState('error');
           setError(message.data.message);
         }
@@ -176,6 +191,7 @@ export function useBridgeSession(): BridgeSession {
       function handleClose(): void {
         if (socketRef.current !== connection) return;
         socketRef.current = null;
+        failPendingResults('The bridge connection closed.');
         setState((current) =>
           current === 'success' || current === 'error' ? current : 'disconnected',
         );
@@ -183,6 +199,7 @@ export function useBridgeSession(): BridgeSession {
 
       function handleError(): void {
         if (socketRef.current !== connection) return;
+        failPendingResults('Could not connect to the local bridge.');
         setState('error');
         setError('Could not connect to the local bridge.');
       }
@@ -193,6 +210,7 @@ export function useBridgeSession(): BridgeSession {
       connection.addEventListener('error', handleError);
 
       return function cleanupBridgeConnection() {
+        failPendingResults('The bridge connection closed.');
         clearCloseTimers();
         connection.removeEventListener('open', handleOpen);
         connection.removeEventListener('message', handleMessage);
@@ -220,18 +238,25 @@ export function useBridgeSession(): BridgeSession {
       const result = new Promise<PromptResult>((resolve) => {
         pendingResults.current.set(submissionId, resolve);
       });
-      socket.send(
-        JSON.stringify({
-          type: 'prompt.submit',
-          submissionId,
-          prompt: prompt.trim(),
-          ...(mode === 'edit' ? {} : { mode }),
-        }),
-      );
+      try {
+        socket.send(
+          JSON.stringify({
+            type: 'prompt.submit',
+            submissionId,
+            prompt: prompt.trim(),
+            ...(mode === 'edit' ? {} : { mode }),
+          }),
+        );
+      } catch {
+        pendingResults.current.delete(submissionId);
+        setState('error');
+        setError('The bridge connection closed.');
+        return Promise.resolve({ status: 'failed', error: 'The bridge connection closed.' });
+      }
       return result;
     },
     [],
   );
 
-  return { state, error, closeInSeconds, submit };
+  return { state, error, closeInSeconds, bridgeUrl, submit };
 }

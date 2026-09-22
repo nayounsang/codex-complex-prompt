@@ -65,7 +65,8 @@ function elementSourceOffset(element: Element, offset: number): number | null {
   const mapped =
     target instanceof Element
       ? offset === children.length
-        ? (target.querySelector('[data-source-end]') ?? target.closest('[data-source-end]'))
+        ? (Array.from(target.querySelectorAll('[data-source-end]')).at(-1) ??
+          (target.matches('[data-source-end]') ? target : target.closest('[data-source-end]')))
         : (target.querySelector('[data-source-start]') ?? target.closest('[data-source-start]'))
       : target?.parentElement?.closest(
           offset === children.length ? '[data-source-end]' : '[data-source-start]',

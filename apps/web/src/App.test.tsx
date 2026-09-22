@@ -148,6 +148,37 @@ function renderWithSession(bridge = 'http://127.0.0.1:4321'): MockWebSocket {
   return socket;
 }
 
+function selectSourceRange(root: HTMLElement, start: number, end: number): void {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let current = walker.nextNode();
+  let startPoint: { node: Text; offset: number } | null = null;
+  let endPoint: { node: Text; offset: number } | null = null;
+  while (current !== null) {
+    const textNode = current as Text;
+    const sourceStart = Number(
+      textNode.parentElement?.closest('[data-source-start]')?.getAttribute('data-source-start'),
+    );
+    const sourceEnd = Number(
+      textNode.parentElement?.closest('[data-source-end]')?.getAttribute('data-source-end'),
+    );
+    if (startPoint === null && start >= sourceStart && start <= sourceEnd) {
+      startPoint = { node: textNode, offset: start - sourceStart };
+    }
+    if (endPoint === null && end >= sourceStart && end <= sourceEnd) {
+      endPoint = { node: textNode, offset: end - sourceStart };
+    }
+    current = walker.nextNode();
+  }
+  if (startPoint === null || endPoint === null) throw new Error('Source range was not rendered.');
+  const range = document.createRange();
+  range.setStart(startPoint.node, startPoint.offset);
+  range.setEnd(endPoint.node, endPoint.offset);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  fireEvent.mouseUp(root);
+}
+
 async function editMarkdown(markdown: string): Promise<void> {
   const editor = await screen.findByRole('textbox', { name: 'Command' });
   editor.textContent = markdown;
@@ -416,6 +447,18 @@ describe('명령 편집기', () => {
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not connect'));
   });
 
+  it('제출 중 브리지 연결이 종료되면 전송 상태를 해제한다', async () => {
+    const socket = renderWithSession();
+    await editMarkdown('Submit while connected');
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
+
+    expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+    socket.emit('close', undefined);
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Disconnected'));
+    expect(screen.queryByRole('button', { name: 'Sending…' })).not.toBeInTheDocument();
+  });
+
   it('Crepe 초기화가 실패하면 편집기 오류와 재시도 안내를 표시한다', async () => {
     crepeTestState.state.createError = new Error('Crepe initialization failed.');
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -523,6 +566,52 @@ describe('명령 편집기', () => {
     expect(within(article).getByText('Review this')).toBeInTheDocument();
   });
 
+  it('키보드로 문서를 선택하면 선택 영역 위에 feedback tooltip을 표시한다', async () => {
+    renderWithSession();
+    await editMarkdown('Keyboard selection');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    const textNode = article.querySelector('p span')?.firstChild;
+    if (!(textNode instanceof Text)) throw new Error('Rendered paragraph text was not found.');
+    const range = document.createRange();
+    range.selectNodeContents(textNode);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+
+    expect(
+      await screen.findByRole('textbox', { name: 'Feedback on selection' }),
+    ).toBeInTheDocument();
+  });
+
+  it('겹치는 선택 영역은 기존 feedback을 열고 확장된 범위로 저장한다', async () => {
+    renderWithSession();
+    await editMarkdown('Plain text for selection');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    selectSourceRange(article, 0, 5);
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Feedback on selection' }), {
+      target: { value: 'Keep this context.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+
+    selectSourceRange(screen.getByTestId('annotated-markdown'), 3, 8);
+    const composer = await screen.findByRole('textbox', { name: 'Feedback on selection' });
+    expect(composer).toHaveValue('Keep this context.');
+    expect(screen.getByRole('button', { name: 'Send Feedback (1)' })).toBeInTheDocument();
+
+    fireEvent.change(composer, { target: { value: 'Use the expanded context.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+
+    expect(screen.getByRole('complementary', { name: 'Feedback list' })).toHaveTextContent(
+      'Use the expanded context.',
+    );
+    expect(screen.getByRole('button', { name: 'Send Feedback (1)' })).toBeInTheDocument();
+  });
+
   it('feedback을 전송하면 최신 Markdown으로 Edit Mode를 다시 연다', async () => {
     const socket = renderWithSession();
     await editMarkdown('# Review this');
@@ -566,6 +655,52 @@ describe('명령 편집기', () => {
     expect(screen.queryByText('Make the title more specific.')).not.toBeInTheDocument();
     expect(openSpy).toHaveBeenCalledOnce();
     expect(new URL(openSpy.mock.calls[0]?.[0] ?? '').searchParams.get('markdown')).toBe(
+      '# Updated by Codex',
+    );
+    expect(closeSpy).toHaveBeenCalledOnce();
+  });
+
+  it('새 세션 팝업이 차단되면 저장된 bridge와 Markdown으로 다시 시도한다', async () => {
+    const socket = renderWithSession('http://127.0.0.1:4321');
+    await editMarkdown('# Original');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add global feedback' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Global feedback' }), {
+      target: { value: 'Update the heading.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+    const openSpy = vi
+      .spyOn(window, 'open')
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce({} as Window);
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+    fireEvent.click(screen.getByRole('button', { name: 'Send Feedback (1)' }));
+
+    await act(async () => {
+      socket.emit(
+        'message',
+        JSON.stringify({
+          type: 'prompt.result',
+          submissionId: '00000000-0000-4000-8000-000000000004',
+          status: 'accepted',
+          prompt: '# Updated by Codex',
+          nextSession: {
+            token: 'b'.repeat(43),
+            sessionId: '00000000-0000-4000-8000-000000000007',
+            expiresAt: '2026-09-20T00:00:00.000Z',
+          },
+        }),
+      );
+    });
+
+    const retryButton = await screen.findByRole('button', { name: 'Retry opening session' });
+    expect(new URL(openSpy.mock.calls[0]?.[0] ?? '').searchParams.get('bridge')).toBe(
+      'http://127.0.0.1:4321',
+    );
+    fireEvent.click(retryButton);
+
+    expect(openSpy).toHaveBeenCalledTimes(2);
+    expect(new URL(openSpy.mock.calls[1]?.[0] ?? '').searchParams.get('markdown')).toBe(
       '# Updated by Codex',
     );
     expect(closeSpy).toHaveBeenCalledOnce();

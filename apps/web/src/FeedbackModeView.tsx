@@ -20,6 +20,12 @@ interface FeedbackModeViewProps {
 }
 
 export function FeedbackModeView(props: FeedbackModeViewProps): React.JSX.Element {
+  const pendingAnnotation =
+    props.pendingSelection?.annotationId === undefined
+      ? undefined
+      : props.annotations.find(
+          (annotation) => annotation.id === props.pendingSelection?.annotationId,
+        );
   const selectionAnchor =
     props.pendingSelection === null
       ? null
@@ -60,7 +66,9 @@ export function FeedbackModeView(props: FeedbackModeViewProps): React.JSX.Elemen
                   <Popover.Popup className="feedback-popover" initialFocus={true}>
                     {props.pendingSelection !== null && (
                       <FeedbackComposer
+                        key={`${props.pendingSelection.annotationId ?? 'new'}-${props.pendingSelection.start}-${props.pendingSelection.end}`}
                         selection={props.pendingSelection}
+                        initialFeedback={pendingAnnotation?.feedback ?? ''}
                         onSubmit={props.onAdd}
                         onCancel={props.onCancel}
                       />

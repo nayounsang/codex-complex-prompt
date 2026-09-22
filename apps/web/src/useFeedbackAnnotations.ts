@@ -21,19 +21,35 @@ export function useFeedbackAnnotations(): FeedbackAnnotations {
     (feedback: string): void => {
       const trimmed = feedback.trim();
       if (trimmed === '') return;
-      setAnnotations((current) => [
-        ...current,
-        pendingSelection === null
-          ? { id: crypto.randomUUID(), scope: 'global', feedback: trimmed }
-          : {
-              id: crypto.randomUUID(),
-              scope: 'selection',
-              quote: pendingSelection.quote,
-              start: pendingSelection.start,
-              end: pendingSelection.end,
-              feedback: trimmed,
-            },
-      ]);
+      setAnnotations((current) => {
+        if (pendingSelection?.annotationId !== undefined) {
+          return current.map((annotation) =>
+            annotation.id === pendingSelection.annotationId
+              ? {
+                  ...annotation,
+                  scope: 'selection',
+                  quote: pendingSelection.quote,
+                  start: pendingSelection.start,
+                  end: pendingSelection.end,
+                  feedback: trimmed,
+                }
+              : annotation,
+          );
+        }
+        return [
+          ...current,
+          pendingSelection === null
+            ? { id: crypto.randomUUID(), scope: 'global', feedback: trimmed }
+            : {
+                id: crypto.randomUUID(),
+                scope: 'selection',
+                quote: pendingSelection.quote,
+                start: pendingSelection.start,
+                end: pendingSelection.end,
+                feedback: trimmed,
+              },
+        ];
+      });
       setPendingSelection(null);
     },
     [pendingSelection],

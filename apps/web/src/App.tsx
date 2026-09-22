@@ -21,11 +21,12 @@ export function App(): React.JSX.Element {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const editorRef = useRef<MarkdownEditorHandle>(null);
-  const { state, error, closeInSeconds, submit } = useBridgeSession();
+  const { state, error, closeInSeconds, bridgeUrl, submit } = useBridgeSession();
   const feedback = useFeedbackAnnotations();
   const feedbackSubmission = useFeedbackSubmission({
     markdown,
     annotations: feedback.annotations,
+    bridgeUrl,
     submit,
     onMarkdownChange: setMarkdown,
     onComplete: () => {
@@ -111,9 +112,16 @@ export function App(): React.JSX.Element {
         onDeleteFeedback={feedback.removeFeedback}
       />
       {feedbackSubmission.reopenError !== null && mode === 'edit' && (
-        <p className="reopen-notice reopen-notice-global" role="status">
-          {feedbackSubmission.reopenError}
-        </p>
+        <div className="reopen-notice reopen-notice-global" role="status">
+          <p>{feedbackSubmission.reopenError}</p>
+          <Button
+            type="button"
+            className="button-secondary"
+            onClick={feedbackSubmission.retryReopen}
+          >
+            Retry opening session
+          </Button>
+        </div>
       )}
       <form
         id="prompt-form"
