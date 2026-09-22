@@ -1,5 +1,9 @@
+export interface CodexSessionInputContext {
+  readonly mode: 'edit' | 'feedback';
+}
+
 export interface CodexSessionInput {
-  submit(prompt: string): Promise<void>;
+  submit(prompt: string, context?: CodexSessionInputContext): Promise<string | void>;
 }
 
 /**
@@ -7,7 +11,7 @@ export interface CodexSessionInput {
  * limitation behind one small adapter so the bridge protocol stays usable.
  */
 export class CodexSessionInputAdapter implements CodexSessionInput {
-  public submit(prompt: string): Promise<void> {
+  public submit(prompt: string): Promise<string | void> {
     void prompt;
     return Promise.reject(
       new Error('Codex CLI session input injection is not available in this runtime.'),
@@ -17,9 +21,10 @@ export class CodexSessionInputAdapter implements CodexSessionInput {
 
 export class MockCodexSessionInputAdapter implements CodexSessionInput {
   public readonly prompts: string[] = [];
+  public feedbackResult: string | undefined;
 
-  public submit(prompt: string): Promise<void> {
+  public submit(prompt: string, context?: CodexSessionInputContext): Promise<string | void> {
     this.prompts.push(prompt);
-    return Promise.resolve();
+    return Promise.resolve(context?.mode === 'feedback' ? this.feedbackResult : undefined);
   }
 }

@@ -1,34 +1,68 @@
 import { type SyntheticEvent, useCallback, useRef, useState } from 'react';
+import { Button } from '@base-ui/react/button';
+import { Dialog } from '@base-ui/react/dialog';
 
 import { useBridgeSession } from './bridge-session.js';
-import { LazyMarkdownEditor } from './LazyMarkdownEditor.js';
 import type { MarkdownEditorHandle } from './MarkdownEditor.js';
+import { PromptSessionShell } from './PromptSessionShell.js';
+import { SubmitFeedbackDialog } from './SubmitFeedbackDialog.js';
+import { useFeedbackAnnotations } from './useFeedbackAnnotations.js';
+import { useFeedbackSubmission } from './useFeedbackSubmission.js';
 import './styles.css';
 
 const MAX_PROMPT_LENGTH = 12_000;
 
 export function App(): React.JSX.Element {
-  const [markdown, setMarkdown] = useState('');
+  const [markdown, setMarkdown] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('markdown') ?? '';
+  });
+  const [mode, setMode] = useState<'edit' | 'feedback'>('edit');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const editorRef = useRef<MarkdownEditorHandle>(null);
   const { state, error, closeInSeconds, submit } = useBridgeSession();
-  const isSubmitting = state === 'submitting';
-  const isEmpty = markdown.trim().length === 0;
-  const handleMarkdownChange = useCallback((nextMarkdown: string) => {
+  const feedback = useFeedbackAnnotations();
+  const feedbackSubmission = useFeedbackSubmission({
+    markdown,
+    annotations: feedback.annotations,
+    submit,
+    onMarkdownChange: setMarkdown,
+    onComplete: () => {
+      feedback.clearFeedback();
+      setMode('edit');
+    },
+  });
+  const isConnected = state === 'connected';
+  const isSubmitting = state === 'submitting' || feedbackSubmission.isSubmitting;
+
+  const handleMarkdownChange = useCallback((nextMarkdown: string): void => {
     setMarkdown(nextMarkdown);
     setValidationError(null);
   }, []);
 
-  function handleSubmit(event: SyntheticEvent<HTMLFormElement>): void {
-    event.preventDefault();
+  const submitMarkdown = useCallback((): void => {
     const prompt = editorRef.current?.getMarkdown() ?? markdown;
     if (prompt.trim().length > MAX_PROMPT_LENGTH) {
       setValidationError('Markdown commands must be 12,000 characters or fewer.');
       return;
     }
     setValidationError(null);
-    submit(prompt);
-  }
+    void submit(prompt);
+  }, [markdown, submit]);
+
+  const handlePromptSubmit = useCallback((): void => {
+    if (feedback.annotations.length > 0) {
+      setShowSubmitDialog(true);
+      return;
+    }
+    submitMarkdown();
+  }, [feedback.annotations.length, submitMarkdown]);
+
+  const handleApproveAnyway = useCallback((): void => {
+    setShowSubmitDialog(false);
+    submitMarkdown();
+  }, [submitMarkdown]);
 
   return (
     <main className="shell">
@@ -51,49 +85,70 @@ export function App(): React.JSX.Element {
           </span>
         </p>
       </header>
-      <section className="app-action-bar" aria-label="Prompt actions">
-        <div className="action-inner">
-          <button
-            type="submit"
-            form="prompt-form"
-            disabled={isSubmitting || state !== 'connected' || isEmpty}
-          >
-            {isSubmitting ? 'Sending…' : 'Send to Codex'}
-          </button>
-        </div>
-      </section>
-      <section className="editor-scroll-region" aria-label="Prompt editor">
-        <div className="editor-page">
-          <form id="prompt-form" className="prompt-form" onSubmit={handleSubmit}>
-            <label className="sr-only" htmlFor="markdown-editor">
-              Command
-            </label>
-            <LazyMarkdownEditor
-              ref={editorRef}
-              readOnly={isSubmitting}
-              onMarkdownChange={handleMarkdownChange}
-            />
-            {validationError !== null && (
-              <p className="prompt-limit" role="alert">
-                {validationError}
-              </p>
-            )}
-          </form>
-        </div>
-      </section>
+      <PromptSessionShell
+        mode={mode}
+        markdown={markdown}
+        editorRef={editorRef}
+        isConnected={isConnected}
+        isSubmitting={isSubmitting}
+        feedback={feedback.annotations}
+        globalFeedback={feedback.annotations.find((annotation) => annotation.scope === 'global')}
+        pendingSelection={feedback.pendingSelection}
+        validationError={validationError}
+        feedbackError={feedbackSubmission.error}
+        reopenError={feedbackSubmission.reopenError}
+        onModeChange={setMode}
+        onMarkdownChange={handleMarkdownChange}
+        onSubmit={handlePromptSubmit}
+        onSendFeedback={() => {
+          void feedbackSubmission.sendFeedback();
+        }}
+        onAddGlobalFeedback={feedback.addGlobalFeedback}
+        onSelection={feedback.setPendingSelection}
+        onAddFeedback={feedback.addFeedback}
+        onCancelSelection={() => feedback.setPendingSelection(null)}
+        onUpdateFeedback={feedback.updateFeedback}
+        onDeleteFeedback={feedback.removeFeedback}
+      />
+      {feedbackSubmission.reopenError !== null && mode === 'edit' && (
+        <p className="reopen-notice reopen-notice-global" role="status">
+          {feedbackSubmission.reopenError}
+        </p>
+      )}
+      <form
+        id="prompt-form"
+        onSubmit={(event: SyntheticEvent<HTMLFormElement>) => {
+          event.preventDefault();
+          handlePromptSubmit();
+        }}
+        className="submit-proxy-form"
+      >
+        <Button type="submit" aria-label="Submit prompt" tabIndex={-1} />
+      </form>
+      {showSubmitDialog && (
+        <SubmitFeedbackDialog
+          onCancel={() => setShowSubmitDialog(false)}
+          onSendFeedback={() => {
+            setShowSubmitDialog(false);
+            setMode('feedback');
+            void feedbackSubmission.sendFeedback();
+          }}
+          onApproveAnyway={handleApproveAnyway}
+        />
+      )}
       {closeInSeconds !== null && (
-        <div className="countdown-backdrop">
-          <section
-            className="countdown-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="countdown-title"
-          >
-            <p className="eyebrow">COMMAND SENT</p>
-            <h2 id="countdown-title">명령이 전송되었습니다</h2>
-            <p>{closeInSeconds}초 후 이 창이 닫힙니다.</p>
-          </section>
-        </div>
+        <Dialog.Root open modal disablePointerDismissal>
+          <Dialog.Portal>
+            <Dialog.Backdrop className="countdown-backdrop" />
+            <Dialog.Viewport className="dialog-viewport">
+              <Dialog.Popup className="countdown-modal">
+                <p className="eyebrow">COMMAND SENT</p>
+                <Dialog.Title id="countdown-title">명령이 전송되었습니다</Dialog.Title>
+                <Dialog.Description>{closeInSeconds}초 후 이 창이 닫힙니다.</Dialog.Description>
+              </Dialog.Popup>
+            </Dialog.Viewport>
+          </Dialog.Portal>
+        </Dialog.Root>
       )}
     </main>
   );

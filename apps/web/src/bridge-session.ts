@@ -11,7 +11,18 @@ interface BridgeSession {
   readonly state: ConnectionState;
   readonly error: string | null;
   readonly closeInSeconds: number | null;
-  readonly submit: (prompt: string) => void;
+  readonly submit: (prompt: string, mode?: 'edit' | 'feedback') => Promise<PromptResult>;
+}
+
+export interface PromptResult {
+  readonly status: 'accepted' | 'failed';
+  readonly error?: string;
+  readonly prompt?: string;
+  readonly nextSession?: {
+    readonly token: string;
+    readonly sessionId: string;
+    readonly expiresAt: string;
+  };
 }
 
 interface BridgeUrlResult {
@@ -58,6 +69,7 @@ export function useBridgeSession(): BridgeSession {
   const socketRef = useRef<WebSocket | null>(null);
   const closeTimer = useRef<number | undefined>(undefined);
   const countdownTimer = useRef<number | undefined>(undefined);
+  const pendingResults = useRef(new Map<string, (result: PromptResult) => void>());
 
   const clearCloseTimers = useCallback((): void => {
     if (closeTimer.current !== undefined) {
@@ -116,24 +128,39 @@ export function useBridgeSession(): BridgeSession {
           setState('connected');
           setError(null);
         } else if (message.data.type === 'prompt.result') {
+          const result: PromptResult = {
+            status: message.data.status,
+            ...(message.data.error === undefined ? {} : { error: message.data.error }),
+            ...(message.data.prompt === undefined ? {} : { prompt: message.data.prompt }),
+            ...(message.data.nextSession === undefined
+              ? {}
+              : { nextSession: message.data.nextSession }),
+          };
+          pendingResults.current.get(message.data.submissionId)?.(result);
+          pendingResults.current.delete(message.data.submissionId);
           if (message.data.status === 'accepted') {
-            setState('success');
-            setError(null);
-            clearCloseTimers();
-            setCloseInSeconds(COMMAND_WINDOW_CLOSE_DELAY_MS / 1_000);
-            closeTimer.current = window.setTimeout(() => {
-              closeTimer.current = undefined;
-              window.close();
-            }, COMMAND_WINDOW_CLOSE_DELAY_MS);
-            countdownTimer.current = window.setInterval(() => {
-              setCloseInSeconds((current) => {
-                if (current === null || current <= 1) {
-                  clearCloseTimers();
-                  return 0;
-                }
-                return current - 1;
-              });
-            }, 1_000);
+            if (message.data.nextSession === undefined) {
+              setState('success');
+              setError(null);
+              clearCloseTimers();
+              setCloseInSeconds(COMMAND_WINDOW_CLOSE_DELAY_MS / 1_000);
+              closeTimer.current = window.setTimeout(() => {
+                closeTimer.current = undefined;
+                window.close();
+              }, COMMAND_WINDOW_CLOSE_DELAY_MS);
+              countdownTimer.current = window.setInterval(() => {
+                setCloseInSeconds((current) => {
+                  if (current === null || current <= 1) {
+                    clearCloseTimers();
+                    return 0;
+                  }
+                  return current - 1;
+                });
+              }, 1_000);
+            } else {
+              setState('connected');
+              setError(null);
+            }
           } else {
             setState('error');
             setError(message.data.error ?? 'The command could not be sent.');
@@ -180,20 +207,31 @@ export function useBridgeSession(): BridgeSession {
     [clearCloseTimers],
   );
 
-  const submit = useCallback((prompt: string): void => {
-    const socket = socketRef.current;
-    /* c8 ignore next -- the button disables this path when no authenticated socket exists. */
-    if (socket === null || socket.readyState !== WebSocket.OPEN || prompt.trim() === '') return;
-    setState('submitting');
-    setError(null);
-    socket.send(
-      JSON.stringify({
-        type: 'prompt.submit',
-        submissionId: crypto.randomUUID(),
-        prompt: prompt.trim(),
-      }),
-    );
-  }, []);
+  const submit = useCallback(
+    (prompt: string, mode: 'edit' | 'feedback' = 'edit'): Promise<PromptResult> => {
+      const socket = socketRef.current;
+      /* c8 ignore next -- the button disables this path when no authenticated socket exists. */
+      if (socket === null || socket.readyState !== WebSocket.OPEN || prompt.trim() === '') {
+        return Promise.resolve({ status: 'failed', error: 'The bridge is not connected.' });
+      }
+      setState('submitting');
+      setError(null);
+      const submissionId = crypto.randomUUID();
+      const result = new Promise<PromptResult>((resolve) => {
+        pendingResults.current.set(submissionId, resolve);
+      });
+      socket.send(
+        JSON.stringify({
+          type: 'prompt.submit',
+          submissionId,
+          prompt: prompt.trim(),
+          ...(mode === 'edit' ? {} : { mode }),
+        }),
+      );
+      return result;
+    },
+    [],
+  );
 
   return { state, error, closeInSeconds, submit };
 }

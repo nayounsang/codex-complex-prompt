@@ -16,6 +16,7 @@ export const PromptSubmitSchema = z.object({
   type: z.literal('prompt.submit'),
   submissionId: z.string().uuid(),
   prompt: z.string().trim().min(1).max(12_000),
+  mode: z.enum(['edit', 'feedback']).optional(),
 });
 
 export const ClientMessageSchema = z.discriminatedUnion('type', [
@@ -34,6 +35,14 @@ export const PromptResultSchema = z.object({
   submissionId: z.string().uuid(),
   status: z.enum(['accepted', 'failed']),
   error: z.string().optional(),
+  prompt: z.string().max(12_000).optional(),
+  nextSession: z
+    .object({
+      token: z.string().min(32).max(256),
+      sessionId: z.string().uuid(),
+      expiresAt: z.string().datetime(),
+    })
+    .optional(),
 });
 
 export const ProtocolErrorSchema = z.object({
@@ -58,6 +67,7 @@ export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 export type CodexUserPromptSubmitInput = z.infer<typeof CodexUserPromptSubmitInputSchema>;
 export type PromptSubmit = z.infer<typeof PromptSubmitSchema>;
+export type PromptSubmitMode = NonNullable<PromptSubmit['mode']>;
 
 export function parseClientMessage(input: unknown): ClientMessage {
   return ClientMessageSchema.parse(input);

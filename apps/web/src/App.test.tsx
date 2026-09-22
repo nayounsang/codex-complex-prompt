@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode } from 'react';
 
@@ -434,5 +434,163 @@ describe('명령 편집기', () => {
     cleanup();
 
     expect(instance?.destroy).toHaveBeenCalledOnce();
+  });
+
+  it('AI Feedback Mode로 전환하면 Markdown을 읽기 전용으로 표시한다', async () => {
+    renderWithSession();
+    await editMarkdown('# Review this');
+    expect(screen.getByTestId('markdown-editor')).toHaveClass('markdown-content');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    expect(screen.getByRole('tab', { name: 'AI Feedback Mode' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByRole('heading', { name: 'Review this' })).toBeInTheDocument();
+    expect(screen.getByTestId('annotated-markdown')).not.toHaveTextContent('# Review this');
+    expect(screen.getByTestId('annotated-markdown')).toHaveClass('markdown-content');
+    expect(screen.queryByRole('textbox', { name: 'Command' })).not.toBeInTheDocument();
+  });
+
+  it('global feedback을 추가하면 feedback 목록과 전송 버튼의 개수를 갱신한다', async () => {
+    renderWithSession();
+    await editMarkdown('# Review this');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add global feedback' }));
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Global feedback' }), {
+      target: { value: 'Make the title more specific.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+
+    expect(screen.getByRole('region', { name: 'Prompt actions' })).toHaveTextContent(
+      'Send Feedback (1)',
+    );
+    expect(screen.getByRole('complementary', { name: 'Feedback list' })).toHaveTextContent(
+      'Make the title more specific.',
+    );
+    expect(screen.getByRole('button', { name: 'Edit global feedback' })).toHaveTextContent('Added');
+  });
+
+  it('기존 global feedback을 다시 열면 새 항목 대신 기존 내용을 수정한다', async () => {
+    renderWithSession();
+    await editMarkdown('# Review this');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add global feedback' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Global feedback' }), {
+      target: { value: 'Make the title more specific.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit global feedback' }));
+
+    const composer = screen.getByRole('textbox', { name: 'Global feedback' });
+    expect(composer).toHaveValue('Make the title more specific.');
+    fireEvent.change(composer, { target: { value: 'Use a concise title.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+
+    expect(screen.getByRole('complementary', { name: 'Feedback list' })).toHaveTextContent(
+      'Use a concise title.',
+    );
+    expect(screen.getByRole('complementary', { name: 'Feedback list' })).not.toHaveTextContent(
+      'Make the title more specific.',
+    );
+    expect(screen.getByRole('region', { name: 'Prompt actions' })).toHaveTextContent(
+      'Send Feedback (1)',
+    );
+  });
+
+  it('문서에서 텍스트를 선택하면 선택 영역 위에 feedback tooltip을 표시한다', async () => {
+    renderWithSession();
+    await editMarkdown('# Review this\n\nSecond paragraph');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    const textNode = article.querySelector('h1 span')?.firstChild;
+    if (!(textNode instanceof Text)) throw new Error('Rendered heading text was not found.');
+    const range = document.createRange();
+    range.selectNodeContents(textNode);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    fireEvent.mouseUp(article);
+
+    expect(
+      await screen.findByRole('textbox', { name: 'Feedback on selection' }),
+    ).toBeInTheDocument();
+    expect(within(article).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(article).getByText('Review this')).toBeInTheDocument();
+  });
+
+  it('feedback을 전송하면 최신 Markdown으로 Edit Mode를 다시 연다', async () => {
+    const socket = renderWithSession();
+    await editMarkdown('# Review this');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add global feedback' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Global feedback' }), {
+      target: { value: 'Use a stronger title.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send Feedback (1)' }));
+    expect(socket.send).toHaveBeenLastCalledWith(expect.stringContaining('"mode":"feedback"'));
+    await act(async () => {
+      socket.emit(
+        'message',
+        JSON.stringify({
+          type: 'prompt.result',
+          submissionId: '00000000-0000-4000-8000-000000000004',
+          status: 'accepted',
+          prompt: '# Updated by Codex',
+          nextSession: {
+            token: 'a'.repeat(43),
+            sessionId: '00000000-0000-4000-8000-000000000006',
+            expiresAt: '2026-09-20T00:00:00.000Z',
+          },
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Edit Mode' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      expect(screen.getByRole('textbox', { name: 'Command' })).toHaveTextContent(
+        '# Updated by Codex',
+      );
+    });
+    expect(screen.queryByText('Make the title more specific.')).not.toBeInTheDocument();
+    expect(openSpy).toHaveBeenCalledOnce();
+    expect(new URL(openSpy.mock.calls[0]?.[0] ?? '').searchParams.get('markdown')).toBe(
+      '# Updated by Codex',
+    );
+    expect(closeSpy).toHaveBeenCalledOnce();
+  });
+
+  it('제출 전에 미전송 feedback 경고에서 Approve anyway를 선택하면 일반 제출을 보낸다', async () => {
+    const socket = renderWithSession();
+    await editMarkdown('Submit this document');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add global feedback' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Global feedback' }), {
+      target: { value: 'Ignore this for now.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Approve anyway' }));
+
+    expect(socket.send).toHaveBeenLastCalledWith(
+      JSON.stringify({
+        type: 'prompt.submit',
+        submissionId: '00000000-0000-4000-8000-000000000004',
+        prompt: 'Submit this document',
+      }),
+    );
   });
 });
