@@ -1,72 +1,76 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { getSelectionAnchor } from './selection-anchor.js';
+import { LazyMarkdownEditor } from './LazyMarkdownEditor.js';
+import { makeMarkdownImagesInert } from './markdown-rendering.js';
+import { decorateMarkdownRoot, type SourceFeedbackRange } from './markdown-source-map.js';
+import {
+  getCodeBlockSelectionAnchor,
+  getSelectionAnchor,
+  getTableSelectionAnchor,
+} from './selection-anchor.js';
 import type { FeedbackAnnotation, SelectionAnchor } from './feedback-types.js';
 
 interface AnnotatedMarkdownViewProps {
   readonly markdown: string;
   readonly annotations: readonly FeedbackAnnotation[];
+  readonly selectionPopoverOpen: boolean;
   readonly onSelection: (selection: SelectionAnchor | null) => void;
-}
-
-interface MarkdownBlock {
-  readonly type: 'heading' | 'paragraph' | 'quote' | 'unordered-list' | 'ordered-list' | 'code';
-  readonly level?: number;
-  readonly content: string;
-  readonly contentStart: number;
-}
-
-interface SourcePart {
-  readonly text: string;
-  readonly start: number;
-  readonly end: number;
-}
-
-interface FeedbackRange {
-  readonly start: number;
-  readonly end: number;
-  readonly id: string;
 }
 
 export function AnnotatedMarkdownView({
   markdown,
   annotations,
+  selectionPopoverOpen,
   onSelection,
 }: AnnotatedMarkdownViewProps): React.JSX.Element {
   const rootRef = useRef<HTMLElement>(null);
+  const [rendererRoot, setRendererRoot] = useState<HTMLDivElement | null>(null);
   const pointerSelectingRef = useRef(false);
-  const ranges = annotations
-    .filter(
-      (annotation) =>
-        annotation.scope === 'selection' &&
-        annotation.start !== undefined &&
-        annotation.end !== undefined &&
-        markdown.slice(annotation.start, annotation.end) === annotation.quote,
-    )
-    .map((annotation) => ({
-      start: annotation.start as number,
-      end: annotation.end as number,
-      id: annotation.id,
-    }))
-    .sort((left, right) => left.start - right.start);
-  const blocks = parseMarkdown(markdown);
+  const pendingSelectionRef = useRef<SelectionAnchor | null>(null);
+  const selectionDismissedRef = useRef(false);
+  const selectionWasOpenRef = useRef(false);
+  const renderedMarkdown = useMemo(() => makeMarkdownImagesInert(markdown), [markdown]);
+  const decorationRangeKey = JSON.stringify(
+    annotations.flatMap((annotation) =>
+      annotation.scope === 'selection' &&
+      annotation.start !== undefined &&
+      annotation.end !== undefined &&
+      annotation.end > annotation.start &&
+      markdown.slice(annotation.start, annotation.end) === annotation.quote
+        ? [{ id: annotation.id, start: annotation.start, end: annotation.end }]
+        : [],
+    ),
+  );
+  const publishSelection = useCallback(
+    (selection: SelectionAnchor | null): void => {
+      pendingSelectionRef.current = selection;
+      onSelection(selection);
+    },
+    [onSelection],
+  );
+  const handleRendererReady = useCallback((root: HTMLDivElement): void => {
+    root.setAttribute('aria-label', 'Markdown feedback document');
+    setRendererRoot(root);
+  }, []);
+
   const handleSelection = useCallback((): void => {
     const root = rootRef.current;
     if (root === null) return;
+    const tableAnchor = getTableSelectionAnchor(root, markdown);
+    const codeBlockAnchor = getCodeBlockSelectionAnchor(root, markdown);
     const selection = window.getSelection();
-    if (
-      selection === null ||
+    const anchor =
+      tableAnchor ??
+      codeBlockAnchor ??
+      (selection === null ||
       selection.rangeCount === 0 ||
       selection.isCollapsed ||
       !root.contains(selection.getRangeAt(0).startContainer) ||
       !root.contains(selection.getRangeAt(0).endContainer)
-    ) {
-      onSelection(null);
-      return;
-    }
-    const anchor = getSelectionAnchor(root);
+        ? null
+        : getSelectionAnchor(root));
     if (anchor === null) {
-      onSelection(null);
+      publishSelection(null);
       return;
     }
     const existing = annotations.find(
@@ -78,26 +82,77 @@ export function AnnotatedMarkdownView({
         annotation.end > anchor.start,
     );
     if (existing === undefined) {
-      onSelection(anchor);
+      publishSelection(anchor);
       return;
     }
     const start = Math.min(anchor.start, existing.start as number);
     const end = Math.max(anchor.end, existing.end as number);
-    onSelection({
+    publishSelection({
       ...anchor,
       annotationId: existing.id,
       quote: markdown.slice(start, end),
       start,
       end,
     });
-  }, [annotations, markdown, onSelection]);
+  }, [annotations, markdown, publishSelection]);
+
+  useEffect(
+    function decorateReadOnlyMarkdown() {
+      if (rendererRoot === null) return;
+      decorateMarkdownRoot(
+        rendererRoot,
+        renderedMarkdown,
+        JSON.parse(decorationRangeKey) as SourceFeedbackRange[],
+      );
+    },
+    [decorationRangeKey, rendererRoot, renderedMarkdown],
+  );
+
+  useEffect(
+    function dismissNativeSelectionAfterPopoverClose() {
+      if (selectionPopoverOpen) {
+        selectionWasOpenRef.current = true;
+        selectionDismissedRef.current = false;
+        return;
+      }
+      if (!selectionWasOpenRef.current) return;
+      selectionWasOpenRef.current = false;
+      pendingSelectionRef.current = null;
+      selectionDismissedRef.current = true;
+      window.getSelection()?.removeAllRanges();
+    },
+    [selectionPopoverOpen],
+  );
+
+  useEffect(
+    function finishSelectionWhenPointerLeavesDocument() {
+      const finishPointerSelection = (): void => {
+        if (!pointerSelectingRef.current) return;
+        pointerSelectingRef.current = false;
+        handleSelection();
+      };
+      const resetPointerSelection = (): void => {
+        pointerSelectingRef.current = false;
+      };
+
+      document.addEventListener('mouseup', finishPointerSelection, true);
+      window.addEventListener('blur', resetPointerSelection);
+      return () => {
+        document.removeEventListener('mouseup', finishPointerSelection, true);
+        window.removeEventListener('blur', resetPointerSelection);
+      };
+    },
+    [handleSelection],
+  );
 
   useEffect(
     function listenForKeyboardSelection() {
       const handleDocumentSelectionChange = (): void => {
         if (pointerSelectingRef.current) return;
+        if (selectionDismissedRef.current) return;
         const root = rootRef.current;
         const selection = window.getSelection();
+        if (selection?.isCollapsed && pendingSelectionRef.current !== null) return;
         if (
           root === null ||
           selection === null ||
@@ -121,242 +176,27 @@ export function AnnotatedMarkdownView({
       className="annotated-markdown markdown-surface markdown-content"
       data-testid="annotated-markdown"
       aria-label="Markdown with feedback annotations"
-      onMouseDown={() => {
+      onMouseDownCapture={() => {
         pointerSelectingRef.current = true;
+        selectionDismissedRef.current = false;
       }}
-      onMouseUp={() => {
+      onKeyDown={() => {
+        selectionDismissedRef.current = false;
+      }}
+      onMouseUpCapture={() => {
         pointerSelectingRef.current = false;
         handleSelection();
       }}
     >
-      {blocks.map((block, index) => (
-        <MarkdownBlockView key={`${block.contentStart}-${index}`} block={block} ranges={ranges} />
-      ))}
+      <LazyMarkdownEditor
+        defaultMarkdown={renderedMarkdown}
+        readOnly
+        loadImmediately
+        className="feedback-markdown-renderer"
+        testId="feedback-markdown-editor"
+        ariaLabel="Markdown feedback document"
+        onReady={handleRendererReady}
+      />
     </article>
   );
-}
-
-function MarkdownBlockView({
-  block,
-  ranges,
-}: {
-  readonly block: MarkdownBlock;
-  readonly ranges: readonly FeedbackRange[];
-}): React.JSX.Element {
-  if (block.type === 'code') {
-    return (
-      <pre className="markdown-code-block">
-        {renderMappedText(block.content, block.contentStart, ranges)}
-      </pre>
-    );
-  }
-  const content = renderMappedText(block.content, block.contentStart, ranges);
-  if (block.type === 'heading') {
-    const Heading = `h${block.level ?? 1}` as keyof React.JSX.IntrinsicElements;
-    return <Heading>{content}</Heading>;
-  }
-  if (block.type === 'quote') return <blockquote>{content}</blockquote>;
-  if (block.type === 'unordered-list')
-    return (
-      <ul>
-        <li>{content}</li>
-      </ul>
-    );
-  if (block.type === 'ordered-list')
-    return (
-      <ol>
-        <li>{content}</li>
-      </ol>
-    );
-  return <p>{content}</p>;
-}
-
-function renderMappedText(
-  source: string,
-  sourceStart: number,
-  ranges: readonly FeedbackRange[],
-): React.JSX.Element[] {
-  return parseInline(source, sourceStart).map((part, index) => {
-    const parts: React.JSX.Element[] = [];
-    let cursor = 0;
-    const matchingRanges = ranges.filter(
-      (range) => range.start < part.end && range.end > part.start,
-    );
-    if (matchingRanges.length === 0) {
-      return (
-        <span
-          key={`${part.start}-${index}`}
-          data-source-start={part.start}
-          data-source-end={part.end}
-        >
-          {part.text}
-        </span>
-      );
-    }
-    for (const range of matchingRanges) {
-      const selectedStart = Math.max(part.start, range.start, part.start + cursor);
-      const selectedEnd = Math.min(part.end, range.end);
-      const beforeEnd = selectedStart - part.start;
-      if (beforeEnd > cursor) {
-        parts.push(
-          <span
-            key={`${part.start}-${index}-before-${cursor}`}
-            data-source-start={part.start + cursor}
-            data-source-end={part.start + beforeEnd}
-          >
-            {part.text.slice(cursor, beforeEnd)}
-          </span>,
-        );
-      }
-      if (selectedEnd > selectedStart) {
-        parts.push(
-          <mark
-            key={`${range.id}-${selectedStart}`}
-            data-feedback-id={range.id}
-            data-source-start={selectedStart}
-            data-source-end={selectedEnd}
-            className="feedback-highlight"
-          >
-            {part.text.slice(selectedStart - part.start, selectedEnd - part.start)}
-          </mark>,
-        );
-      }
-      if (selectedEnd > selectedStart) {
-        cursor = Math.max(cursor, selectedEnd - part.start);
-      }
-    }
-    if (cursor < part.text.length) {
-      parts.push(
-        <span
-          key={`${part.start}-${index}-after-${cursor}`}
-          data-source-start={part.start + cursor}
-          data-source-end={part.end}
-        >
-          {part.text.slice(cursor)}
-        </span>,
-      );
-    }
-    return <span key={`${part.start}-${index}`}>{parts}</span>;
-  });
-}
-
-function parseMarkdown(markdown: string): MarkdownBlock[] {
-  const lines = markdown.split('\n');
-  const offsets: number[] = [];
-  let offset = 0;
-  for (const line of lines) {
-    offsets.push(offset);
-    offset += line.length + 1;
-  }
-  const blocks: MarkdownBlock[] = [];
-  let index = 0;
-  while (index < lines.length) {
-    const line = lines[index] ?? '';
-    if (line.trim() === '') {
-      index += 1;
-      continue;
-    }
-    const start = offsets[index] ?? 0;
-    if (/^\s*```/.test(line)) {
-      const endFence = lines.findIndex(
-        (candidate, candidateIndex) => candidateIndex > index && /^\s*```/.test(candidate),
-      );
-      const contentStart = offsets[index + 1] ?? markdown.length;
-      const contentEnd = endFence === -1 ? markdown.length : (offsets[endFence] ?? markdown.length);
-      blocks.push({
-        type: 'code',
-        content: markdown.slice(contentStart, contentEnd),
-        contentStart,
-      });
-      index = endFence === -1 ? lines.length : endFence + 1;
-      continue;
-    }
-    const heading = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
-    if (heading !== null) {
-      const level = heading[1] ?? '';
-      const content = heading[2] ?? '';
-      blocks.push({
-        type: 'heading',
-        level: level.length,
-        content,
-        contentStart: start + line.indexOf(content),
-      });
-      index += 1;
-      continue;
-    }
-    const list = line.match(/^\s*([-*+] |\d+[.] )(.+)$/);
-    if (list !== null) {
-      const marker = list[1] ?? '';
-      const content = list[2] ?? '';
-      blocks.push({
-        type: /^\d/.test(marker) ? 'ordered-list' : 'unordered-list',
-        content,
-        contentStart: start + line.indexOf(content),
-      });
-      index += 1;
-      continue;
-    }
-    const quote = line.match(/^\s*>\s?(.*)$/);
-    if (quote !== null) {
-      const content = quote[1] ?? '';
-      blocks.push({
-        type: 'quote',
-        content,
-        contentStart: start + line.indexOf(content),
-      });
-      index += 1;
-      continue;
-    }
-    const paragraphStart = index;
-    while (
-      index + 1 < lines.length &&
-      (lines[index + 1] ?? '').trim() !== '' &&
-      !/^\s*(#{1,6})\s+/.test(lines[index + 1] ?? '') &&
-      !/^\s*([-*+] |\d+[.] |>|```)/.test(lines[index + 1] ?? '')
-    ) {
-      index += 1;
-    }
-    const paragraphEnd = offsets[index] ?? start;
-    blocks.push({
-      type: 'paragraph',
-      content: markdown.slice(
-        offsets[paragraphStart] ?? start,
-        paragraphEnd + (lines[index]?.length ?? 0),
-      ),
-      contentStart: offsets[paragraphStart] ?? start,
-    });
-    index += 1;
-  }
-  return blocks;
-}
-
-function parseInline(source: string, sourceStart: number): SourcePart[] {
-  const parts: SourcePart[] = [];
-  let cursor = 0;
-  const push = (text: string, start: number, end: number): void => {
-    if (text !== '') parts.push({ text, start: sourceStart + start, end: sourceStart + end });
-  };
-  while (cursor < source.length) {
-    const link = source.slice(cursor).match(/^!?\[([^\]]+)\]\([^)]*\)/);
-    const emphasis = source.slice(cursor).match(/^(\*\*|__|\*|_|`)(.+?)\1/);
-    if (link !== null) {
-      const label = link[1] ?? '';
-      const full = link[0] ?? '';
-      const labelOffset = full.indexOf(label);
-      push(label, cursor + labelOffset, cursor + labelOffset + label.length);
-      cursor += full.length;
-    } else if (emphasis !== null) {
-      const inner = emphasis[2] ?? '';
-      const full = emphasis[0] ?? '';
-      const innerOffset = full.indexOf(inner);
-      push(inner, cursor + innerOffset, cursor + innerOffset + inner.length);
-      cursor += full.length;
-    } else {
-      const next = source.slice(cursor + 1).search(/[\[\]`*_]/);
-      const end = next === -1 ? source.length : cursor + 1 + next;
-      push(source.slice(cursor, end), cursor, end);
-      cursor = end;
-    }
-  }
-  return parts;
 }

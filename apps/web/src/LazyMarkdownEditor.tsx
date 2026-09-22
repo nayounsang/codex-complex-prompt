@@ -8,10 +8,14 @@ const MarkdownEditor = lazy(async function loadMarkdownEditor() {
   return { default: module.MarkdownEditor };
 });
 
-export const LazyMarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
+export interface LazyMarkdownEditorProps extends MarkdownEditorProps {
+  readonly loadImmediately?: boolean;
+}
+
+export const LazyMarkdownEditor = forwardRef<MarkdownEditorHandle, LazyMarkdownEditorProps>(
   function LazyMarkdownEditor(props, forwardedRef): React.JSX.Element {
     const [isEditorRequested, setIsEditorRequested] = useState(
-      () => (props.defaultMarkdown ?? '').trim().length > 0,
+      () => props.loadImmediately === true || (props.defaultMarkdown ?? '').trim().length > 0,
     );
     const requestEditor = useCallback(function requestEditor(): void {
       setIsEditorRequested(true);

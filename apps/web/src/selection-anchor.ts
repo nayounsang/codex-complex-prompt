@@ -1,4 +1,9 @@
 import type { SelectionAnchor, SelectionRect } from './feedback-types.js';
+import {
+  getMappedSourceOffset,
+  getMarkdownTableRanges,
+  locateMappedText,
+} from './markdown-source-map.js';
 
 export function getSelectionAnchor(root: HTMLElement): SelectionAnchor | null {
   const selection = window.getSelection();
@@ -24,6 +29,51 @@ export function getSelectionAnchor(root: HTMLElement): SelectionAnchor | null {
   return { quote: selection.toString(), start, end, rect: toSelectionRect(rect) };
 }
 
+export function getTableSelectionAnchor(
+  root: HTMLElement,
+  markdown: string,
+): SelectionAnchor | null {
+  const selectedCell = root.querySelector<HTMLElement>('.milkdown-table-block .selectedCell');
+  const tableBlock = selectedCell?.closest<HTMLElement>('.milkdown-table-block');
+  if (tableBlock === null || tableBlock === undefined) return null;
+
+  const tableBlocks = Array.from(root.querySelectorAll('.milkdown-table-block'));
+  const tableIndex = tableBlocks.indexOf(tableBlock);
+  const tableRange = getMarkdownTableRanges(markdown)[tableIndex];
+  if (tableRange === undefined) return null;
+
+  return {
+    quote: markdown.slice(tableRange.start, tableRange.end),
+    start: tableRange.start,
+    end: tableRange.end,
+    rect: toSelectionRect(tableBlock.getBoundingClientRect()),
+  };
+}
+
+export function getCodeBlockSelectionAnchor(
+  root: HTMLElement,
+  markdown: string,
+): SelectionAnchor | null {
+  const selection = window.getSelection();
+  if (selection === null || selection.rangeCount === 0 || selection.isCollapsed) return null;
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+
+  const startBlock = closestCodeBlock(range.startContainer);
+  const endBlock = closestCodeBlock(range.endContainer);
+  if (startBlock === null || startBlock !== endBlock) return null;
+
+  const start = Number(startBlock.dataset['codeSourceStart']);
+  const end = Number(startBlock.dataset['codeSourceEnd']);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return null;
+  return {
+    quote: markdown.slice(start, end),
+    start,
+    end,
+    rect: toSelectionRect(startBlock.getBoundingClientRect()),
+  };
+}
+
 function toSelectionRect(rect: DOMRect): SelectionRect {
   return {
     x: rect.x,
@@ -38,6 +88,10 @@ function toSelectionRect(rect: DOMRect): SelectionRect {
 }
 
 function textOffset(root: HTMLElement, container: Node, offset: number): number {
+  const codeOffset = codeBlockTextOffset(container, offset);
+  if (codeOffset !== null) return codeOffset;
+  const mappedOffset = getMappedSourceOffset(root, container, offset);
+  if (mappedOffset !== null) return mappedOffset;
   if (container.nodeType === Node.TEXT_NODE) {
     const mapped = (container.parentElement?.closest('[data-source-start]') ?? null)?.getAttribute(
       'data-source-start',
@@ -57,6 +111,33 @@ function textOffset(root: HTMLElement, container: Node, offset: number): number 
     current = walker.nextNode();
   }
   return total;
+}
+
+function codeBlockTextOffset(container: Node, offset: number): number | null {
+  const element =
+    container.nodeType === Node.ELEMENT_NODE ? (container as Element) : container.parentElement;
+  const codeBlock = element?.closest<HTMLElement>('.milkdown-code-block[data-code-source-start]');
+  const codeContent = codeBlock?.querySelector<HTMLElement>('.cm-content');
+  if (
+    codeBlock === null ||
+    codeBlock === undefined ||
+    codeContent === null ||
+    codeContent === undefined
+  ) {
+    return null;
+  }
+  if (!codeContent.contains(container)) return null;
+  const sourceStart = Number(codeBlock.dataset['codeSourceStart']);
+  const range = document.createRange();
+  range.selectNodeContents(codeContent);
+  range.setEnd(container, offset);
+  return sourceStart + range.toString().length;
+}
+
+function closestCodeBlock(container: Node): HTMLElement | null {
+  const element =
+    container.nodeType === Node.ELEMENT_NODE ? (container as Element) : container.parentElement;
+  return element?.closest<HTMLElement>('.milkdown-code-block[data-code-source-start]') ?? null;
 }
 
 function elementSourceOffset(element: Element, offset: number): number | null {
@@ -84,7 +165,7 @@ export function restoreSelectionAnchor(root: HTMLElement, anchor: SelectionAncho
   if (start === null || end === null) return false;
   range.setStart(start.node, start.offset);
   range.setEnd(end.node, end.offset);
-  if (range.toString() !== anchor.quote) return false;
+  if (range.collapsed) return false;
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
@@ -92,6 +173,8 @@ export function restoreSelectionAnchor(root: HTMLElement, anchor: SelectionAncho
 }
 
 function locateText(root: HTMLElement, target: number): { node: Text; offset: number } | null {
+  const mapped = locateMappedText(root, target);
+  if (mapped !== null) return mapped;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let total = 0;
   let current = walker.nextNode();

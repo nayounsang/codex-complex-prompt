@@ -3,6 +3,140 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode } from 'react';
 
 const crepeTestState = vi.hoisted(() => {
+  function renderMockMarkdown(root: HTMLElement, markdown: string): void {
+    root.replaceChildren();
+    const lines = markdown.split('\n');
+    let index = 0;
+    while (index < lines.length) {
+      const line = lines[index] ?? '';
+      if (line.trim() === '') {
+        index += 1;
+        continue;
+      }
+      if (/^\s*```/.test(line)) {
+        const pre = document.createElement('pre');
+        pre.className = 'milkdown-code-block';
+        const code = document.createElement('code');
+        code.className = 'cm-content';
+        const end = lines.findIndex(
+          (candidate, candidateIndex) => candidateIndex > index && /^\s*```/.test(candidate),
+        );
+        code.textContent = lines.slice(index + 1, end === -1 ? lines.length : end).join('\n');
+        pre.append(code);
+        root.append(pre);
+        index = end === -1 ? lines.length : end + 1;
+        continue;
+      }
+      const heading = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
+      if (heading !== null) {
+        const headingElement = document.createElement(`h${heading[1]?.length ?? 1}`);
+        appendMockInline(headingElement, heading[2] ?? '');
+        root.append(headingElement);
+        index += 1;
+        continue;
+      }
+      if (line.includes('|') && /^\s*\|?(?:\s*:?-+:?\s*\|)+\s*$/.test(lines[index + 1] ?? '')) {
+        const tableBlock = document.createElement('div');
+        tableBlock.className = 'milkdown-table-block';
+        const table = document.createElement('table');
+        const head = document.createElement('thead');
+        const body = document.createElement('tbody');
+        appendMockTableRow(head, line, 'th');
+        index += 2;
+        while (index < lines.length && (lines[index] ?? '').includes('|')) {
+          appendMockTableRow(body, lines[index] ?? '', 'td');
+          index += 1;
+        }
+        table.append(head, body);
+        tableBlock.append(table);
+        root.append(tableBlock);
+        continue;
+      }
+      const task = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+(.+)$/);
+      if (task !== null) {
+        const list = document.createElement('ul');
+        list.className = 'task-list';
+        const item = document.createElement('li');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = (task[1] ?? '').toLowerCase() === 'x';
+        checkbox.disabled = true;
+        item.append(checkbox);
+        appendMockInline(item, task[2] ?? '');
+        list.append(item);
+        root.append(list);
+        index += 1;
+        continue;
+      }
+      const listItem = line.match(/^\s*([-*+]|\d+[.])\s+(.+)$/);
+      if (listItem !== null) {
+        const list = document.createElement(/^\d/.test(listItem[1] ?? '') ? 'ol' : 'ul');
+        const item = document.createElement('li');
+        appendMockInline(item, listItem[2] ?? '');
+        list.append(item);
+        root.append(list);
+        index += 1;
+        continue;
+      }
+      const paragraph = document.createElement('p');
+      appendMockInline(paragraph, line);
+      root.append(paragraph);
+      index += 1;
+    }
+  }
+
+  function appendMockTableRow(root: HTMLElement, line: string, cellTag: 'th' | 'td'): void {
+    const row = document.createElement('tr');
+    const cells = line
+      .replace(/^\s*\|/, '')
+      .replace(/\|\s*$/, '')
+      .split('|');
+    for (const cellText of cells) {
+      const cell = document.createElement(cellTag);
+      appendMockInline(cell, cellText.trim());
+      row.append(cell);
+    }
+    root.append(row);
+  }
+
+  function appendMockInline(root: HTMLElement, markdown: string): void {
+    let cursor = 0;
+    while (cursor < markdown.length) {
+      const link = markdown.slice(cursor).match(/^\[([^\]]+)\]\(([^)]+)\)/);
+      if (link !== null) {
+        const anchor = document.createElement('a');
+        anchor.href = link[2] ?? '';
+        anchor.textContent = link[1] ?? '';
+        root.append(anchor);
+        cursor += link[0].length;
+        continue;
+      }
+      const inlineCode = markdown.slice(cursor).match(/^`([^`]+)`/);
+      if (inlineCode !== null) {
+        const code = document.createElement('code');
+        code.textContent = inlineCode[1] ?? '';
+        root.append(code);
+        cursor += inlineCode[0].length;
+        continue;
+      }
+      const marker = markdown[cursor];
+      if (marker === '*' || marker === '_') {
+        const closing = markdown.indexOf(marker, cursor + 1);
+        if (closing > cursor + 1) {
+          const emphasis = document.createElement('em');
+          emphasis.textContent = markdown.slice(cursor + 1, closing);
+          root.append(emphasis);
+          cursor = closing + 1;
+          continue;
+        }
+      }
+      const nextToken = markdown.slice(cursor).search(/[\[\]`*_]/);
+      const end = nextToken === -1 ? markdown.length : cursor + Math.max(1, nextToken);
+      root.append(document.createTextNode(markdown.slice(cursor, end)));
+      cursor = end;
+    }
+  }
+
   const state: { instance: MockCrepe | undefined; createError: Error | undefined } = {
     instance: undefined,
     createError: undefined,
@@ -17,6 +151,7 @@ const crepeTestState = vi.hoisted(() => {
     public readonly options: Record<string, unknown>;
     public readonly destroy = vi.fn(async () => undefined);
     private markdown: string;
+    private readOnly = false;
     private markdownUpdated:
       ((ctx: unknown, markdown: string, previousMarkdown: string) => void) | undefined;
     private editorElement: HTMLElement | undefined;
@@ -28,6 +163,7 @@ const crepeTestState = vi.hoisted(() => {
     }
 
     public setReadonly(readOnly: boolean): this {
+      this.readOnly = readOnly;
       this.editorElement?.setAttribute('contenteditable', String(!readOnly));
       return this;
     }
@@ -53,10 +189,10 @@ const crepeTestState = vi.hoisted(() => {
       if (!(root instanceof HTMLElement)) throw new Error('Crepe root was not provided.');
       const editor = document.createElement('div');
       editor.className = 'ProseMirror';
-      editor.setAttribute('contenteditable', 'true');
+      editor.setAttribute('contenteditable', String(!this.readOnly));
       editor.setAttribute('role', 'textbox');
       editor.setAttribute('aria-label', 'Command');
-      editor.textContent = this.markdown;
+      renderMockMarkdown(editor, this.markdown);
       editor.addEventListener('input', () => {
         this.markdown = editor.textContent ?? '';
         this.markdownUpdated?.({}, this.markdown, '');
@@ -77,6 +213,8 @@ const crepeTestState = vi.hoisted(() => {
 vi.mock('@milkdown/crepe', () => ({ Crepe: crepeTestState.MockCrepe }));
 
 import { App } from './App.js';
+import { hasRenderedSourceMap } from './markdown-source-map.js';
+import { restoreSelectionAnchor } from './selection-anchor.js';
 
 class MockWebSocket {
   public static readonly OPEN = 1;
@@ -149,33 +287,33 @@ function renderWithSession(bridge = 'http://127.0.0.1:4321'): MockWebSocket {
 }
 
 function selectSourceRange(root: HTMLElement, start: number, end: number): void {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let current = walker.nextNode();
-  let startPoint: { node: Text; offset: number } | null = null;
-  let endPoint: { node: Text; offset: number } | null = null;
-  while (current !== null) {
-    const textNode = current as Text;
-    const sourceStart = Number(
-      textNode.parentElement?.closest('[data-source-start]')?.getAttribute('data-source-start'),
-    );
-    const sourceEnd = Number(
-      textNode.parentElement?.closest('[data-source-end]')?.getAttribute('data-source-end'),
-    );
-    if (startPoint === null && start >= sourceStart && start <= sourceEnd) {
-      startPoint = { node: textNode, offset: start - sourceStart };
-    }
-    if (endPoint === null && end >= sourceStart && end <= sourceEnd) {
-      endPoint = { node: textNode, offset: end - sourceStart };
-    }
-    current = walker.nextNode();
+  setSourceRange(root, start, end);
+  fireEvent.mouseDown(root);
+  fireEvent.mouseUp(root);
+}
+
+function setSourceRange(root: HTMLElement, start: number, end: number): void {
+  const quote = root.textContent?.slice(start, end) ?? '';
+  if (!restoreSelectionAnchor(root, { quote, start, end, rect: new DOMRect() })) {
+    throw new Error('Source range was not rendered.');
   }
-  if (startPoint === null || endPoint === null) throw new Error('Source range was not rendered.');
+}
+
+function selectCodeSourceRange(root: HTMLElement, start: number, end: number): void {
+  const codeBlock = root.querySelector<HTMLElement>('.milkdown-code-block');
+  const codeContent = codeBlock?.querySelector<HTMLElement>('.cm-content');
+  const textNode = codeContent?.firstChild;
+  const sourceStart = Number(codeBlock?.dataset['codeSourceStart']);
+  if (!(textNode instanceof Text) || !Number.isFinite(sourceStart)) {
+    throw new Error('Code source range was not rendered.');
+  }
   const range = document.createRange();
-  range.setStart(startPoint.node, startPoint.offset);
-  range.setEnd(endPoint.node, endPoint.offset);
+  range.setStart(textNode, start - sourceStart);
+  range.setEnd(textNode, end - sourceStart);
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
+  fireEvent.mouseDown(root);
   fireEvent.mouseUp(root);
 }
 
@@ -490,10 +628,98 @@ describe('명령 편집기', () => {
       'aria-selected',
       'true',
     );
-    expect(screen.getByRole('heading', { name: 'Review this' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Review this' })).toBeInTheDocument(),
+    );
     expect(screen.getByTestId('annotated-markdown')).not.toHaveTextContent('# Review this');
     expect(screen.getByTestId('annotated-markdown')).toHaveClass('markdown-content');
+    expect(
+      screen
+        .getByRole('button', { name: 'Add global feedback' })
+        .querySelector('.global-feedback-icon'),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('feedback-markdown-editor').querySelector('.ProseMirror'),
+      ).toHaveAttribute('aria-label', 'Markdown feedback document'),
+    );
     expect(screen.queryByRole('textbox', { name: 'Command' })).not.toBeInTheDocument();
+  });
+
+  it('AI Feedback Mode에서 task list 항목을 비활성 checkbox로 표시한다', async () => {
+    renderWithSession();
+    await editMarkdown('- [x] Run the tests');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const feedbackEditor = await waitFor(() => {
+      const editor = screen.getByTestId('feedback-markdown-editor');
+      expect(editor.querySelector('input[type="checkbox"]')).not.toBeNull();
+      return editor;
+    });
+
+    expect(feedbackEditor.querySelector('input[type="checkbox"]')).toBeDisabled();
+    expect(feedbackEditor).toHaveTextContent('Run the tests');
+  });
+
+  it('AI Feedback Mode에서 Markdown link를 anchor로 표시한다', async () => {
+    renderWithSession();
+    await editMarkdown('[Milkdown](https://milkdown.dev)');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const link = await screen.findByRole('link', { name: 'Milkdown' });
+
+    expect(link).toHaveAttribute('href', 'https://milkdown.dev');
+  });
+
+  it('AI Feedback Mode에서 fenced code block을 pre 요소로 표시한다', async () => {
+    renderWithSession();
+    await editMarkdown('```ts\nconst answer = 42;\n```');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const codeBlock = await waitFor(() => {
+      const block = screen.getByTestId('feedback-markdown-editor').querySelector('pre');
+      expect(block).not.toBeNull();
+      return block as HTMLElement;
+    });
+
+    expect(codeBlock).toHaveTextContent('const answer = 42;');
+  });
+
+  it('AI Feedback Mode에서 table header와 cell을 표 구조로 표시한다', async () => {
+    renderWithSession();
+    await editMarkdown('| Name | Value |\n| --- | --- |\n| mode | feedback |');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const table = await waitFor(() => {
+      const renderedTable = screen.getByTestId('feedback-markdown-editor').querySelector('table');
+      expect(renderedTable).not.toBeNull();
+      return renderedTable as HTMLTableElement;
+    });
+
+    expect(table.querySelectorAll('th')).toHaveLength(2);
+    expect(table.querySelectorAll('td')).toHaveLength(2);
+    expect(table).toHaveTextContent('feedback');
+  });
+
+  it('Feedback Mode에서 여러 table cell을 선택하면 표 전체 feedback composer를 표시한다', async () => {
+    renderWithSession();
+    const markdown = '| Name | Value |\n| --- | --- |\n| mode | feedback |';
+    await editMarkdown(markdown);
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    const table = await waitFor(() => {
+      const renderedTable = article.querySelector('.milkdown-table-block');
+      expect(renderedTable).not.toBeNull();
+      return renderedTable as HTMLElement;
+    });
+    table.querySelectorAll('td').forEach((cell) => cell.classList.add('selectedCell'));
+    fireEvent.mouseDown(article);
+    fireEvent.mouseUp(article);
+
+    const composer = await screen.findByRole('textbox', { name: 'Feedback on selection' });
+
+    expect(composer.closest('form')?.querySelector('q')?.textContent).toBe(markdown);
   });
 
   it('global feedback을 추가하면 feedback 목록과 전송 버튼의 개수를 갱신한다', async () => {
@@ -544,25 +770,29 @@ describe('명령 편집기', () => {
     );
   });
 
-  it('문서에서 텍스트를 선택하면 선택 영역 위에 feedback tooltip을 표시한다', async () => {
+  it('Feedback Mode에서 텍스트를 드래그하면 선택 영역 위에 feedback tooltip을 표시한다', async () => {
     renderWithSession();
     await editMarkdown('# Review this\n\nSecond paragraph');
     fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
 
     const article = screen.getByTestId('annotated-markdown');
-    const textNode = article.querySelector('h1 span')?.firstChild;
+    await waitFor(() => expect(article.querySelector('h1')?.textContent).toBe('Review this'));
+    const textNode = article.querySelector('h1')?.firstChild;
     if (!(textNode instanceof Text)) throw new Error('Rendered heading text was not found.');
     const range = document.createRange();
     range.selectNodeContents(textNode);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
+    fireEvent.mouseDown(article);
     fireEvent.mouseUp(article);
 
     expect(
       await screen.findByRole('textbox', { name: 'Feedback on selection' }),
     ).toBeInTheDocument();
-    expect(within(article).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(
+      within(article).queryByRole('textbox', { name: 'Feedback on selection' }),
+    ).not.toBeInTheDocument();
     expect(within(article).getByText('Review this')).toBeInTheDocument();
   });
 
@@ -572,7 +802,8 @@ describe('명령 편집기', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
 
     const article = screen.getByTestId('annotated-markdown');
-    const textNode = article.querySelector('p span')?.firstChild;
+    await waitFor(() => expect(article.querySelector('p')?.textContent).toBe('Keyboard selection'));
+    const textNode = article.querySelector('p')?.firstChild;
     if (!(textNode instanceof Text)) throw new Error('Rendered paragraph text was not found.');
     const range = document.createRange();
     range.selectNodeContents(textNode);
@@ -592,11 +823,13 @@ describe('명령 편집기', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
 
     const article = screen.getByTestId('annotated-markdown');
+    await waitFor(() => expect(hasRenderedSourceMap(article)).toBe(true));
     selectSourceRange(article, 0, 5);
     fireEvent.change(await screen.findByRole('textbox', { name: 'Feedback on selection' }), {
       target: { value: 'Keep this context.' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add feedback' }));
+    expect(article.querySelector('.markdown-source-span')).toBeNull();
 
     selectSourceRange(screen.getByTestId('annotated-markdown'), 3, 8);
     const composer = await screen.findByRole('textbox', { name: 'Feedback on selection' });
@@ -610,6 +843,175 @@ describe('명령 편집기', () => {
       'Use the expanded context.',
     );
     expect(screen.getByRole('button', { name: 'Send Feedback (1)' })).toBeInTheDocument();
+  });
+
+  it('Feedback Mode에서 list 항목을 선택해 저장하면 Selected text 상태를 표시한다', async () => {
+    renderWithSession();
+    const markdown = '- Bullet item';
+    await editMarkdown(markdown);
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    await waitFor(() => expect(hasRenderedSourceMap(article)).toBe(true));
+    const start = markdown.indexOf('Bullet item');
+    selectSourceRange(article, start, start + 'Bullet item'.length);
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Feedback on selection' }), {
+      target: { value: 'Review the list item.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+
+    const panel = screen.getByRole('complementary', { name: 'Feedback list' });
+    expect(panel).toHaveTextContent('Selected text');
+    expect(panel).not.toHaveTextContent('Invalid selection');
+  });
+
+  it('Feedback Mode에서 ordered list 항목을 선택해 저장하면 Selected text 상태를 표시한다', async () => {
+    renderWithSession();
+    const markdown = '1. Number item';
+    await editMarkdown(markdown);
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    await waitFor(() => expect(hasRenderedSourceMap(article)).toBe(true));
+    const start = markdown.indexOf('Number item');
+    selectSourceRange(article, start, start + 'Number item'.length);
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Feedback on selection' }), {
+      target: { value: 'Review the numbered item.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+
+    const panel = screen.getByRole('complementary', { name: 'Feedback list' });
+    expect(panel).toHaveTextContent('Selected text');
+    expect(panel).not.toHaveTextContent('Invalid selection');
+  });
+
+  it('Feedback Mode에서 task list 항목을 선택해 저장하면 Selected text 상태를 표시한다', async () => {
+    renderWithSession();
+    const markdown = '- [x] Check item';
+    await editMarkdown(markdown);
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    await waitFor(() => expect(hasRenderedSourceMap(article)).toBe(true));
+    const start = markdown.indexOf('Check item');
+    selectSourceRange(article, start, start + 'Check item'.length);
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Feedback on selection' }), {
+      target: { value: 'Review the checklist item.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+
+    const panel = screen.getByRole('complementary', { name: 'Feedback list' });
+    expect(panel).toHaveTextContent('Selected text');
+    expect(panel).not.toHaveTextContent('Invalid selection');
+  });
+
+  it('Feedback Mode에서 code block을 선택해 저장하면 Selected text 상태를 표시한다', async () => {
+    renderWithSession();
+    const markdown = '```ts\nconst answer = 42;\n```';
+    await editMarkdown(markdown);
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    const start = markdown.indexOf('answer');
+    await waitFor(() => expect(article.querySelector('[data-code-source-start]')).not.toBeNull());
+    selectCodeSourceRange(article, start, start + 'answer'.length);
+    expect(within(await screen.findByRole('dialog')).getByText('const answer = 42;')).toBeVisible();
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Feedback on selection' }), {
+      target: { value: 'Review the implementation.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+
+    const panel = screen.getByRole('complementary', { name: 'Feedback list' });
+    expect(panel).toHaveTextContent('Selected text');
+    expect(panel).not.toHaveTextContent('Invalid selection');
+    await waitFor(() => expect(article.querySelector('.feedback-code-highlight')).not.toBeNull());
+  });
+
+  it('Feedback Mode에서 code block feedback을 제출하면 선택 composer를 닫는다', async () => {
+    renderWithSession();
+    const markdown = '```ts\nconst answer = 42;\n```';
+    await editMarkdown(markdown);
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    const start = markdown.indexOf('const answer');
+    await waitFor(() => expect(article.querySelector('[data-code-source-start]')).not.toBeNull());
+    selectCodeSourceRange(article, start, start + 'const answer = 42;'.length);
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Feedback on selection' }), {
+      target: { value: 'Keep this code.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('textbox', { name: 'Feedback on selection' }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it('Feedback Mode에서 list feedback을 제출한 뒤 다른 텍스트를 선택하면 새 composer를 표시한다', async () => {
+    renderWithSession();
+    const markdown = '- First item\n\nSecond paragraph';
+    await editMarkdown(markdown);
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    await waitFor(() => expect(hasRenderedSourceMap(article)).toBe(true));
+    const firstStart = markdown.indexOf('First item');
+    selectSourceRange(article, firstStart, firstStart + 'First item'.length);
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Feedback on selection' }), {
+      target: { value: 'Review the first item.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('textbox', { name: 'Feedback on selection' }),
+      ).not.toBeInTheDocument(),
+    );
+
+    const secondStart = markdown.indexOf('Second paragraph');
+    selectSourceRange(article, secondStart, secondStart + 'Second paragraph'.length);
+
+    expect(
+      await screen.findByRole('textbox', { name: 'Feedback on selection' }),
+    ).toBeInTheDocument();
+  });
+
+  it('드래그 종료가 문서 바깥에서 발생해도 취소 후 다른 영역을 다시 선택할 수 있다', async () => {
+    renderWithSession();
+    const markdown = 'First feedback area\n\nSecond feedback area';
+    await editMarkdown(markdown);
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    await waitFor(() => expect(hasRenderedSourceMap(article)).toBe(true));
+    const firstStart = markdown.indexOf('First feedback');
+    selectSourceRange(article, firstStart, firstStart + 'First feedback'.length);
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Feedback on selection' }), {
+      target: { value: 'Review the first area.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('textbox', { name: 'Feedback on selection' }),
+      ).not.toBeInTheDocument(),
+    );
+
+    const secondStart = markdown.indexOf('Second feedback');
+    setSourceRange(article, secondStart, secondStart + 'Second feedback'.length);
+    fireEvent.mouseDown(article);
+    fireEvent.mouseUp(document.body);
+    expect(
+      await screen.findByRole('textbox', { name: 'Feedback on selection' }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    setSourceRange(article, firstStart, firstStart + 'First feedback'.length);
+    fireEvent.mouseDown(article);
+    fireEvent.mouseUp(document.body);
+    expect(
+      await screen.findByRole('textbox', { name: 'Feedback on selection' }),
+    ).toBeInTheDocument();
   });
 
   it('feedback을 전송하면 최신 Markdown으로 Edit Mode를 다시 연다', async () => {
@@ -649,7 +1051,7 @@ describe('명령 편집기', () => {
         'true',
       );
       expect(screen.getByRole('textbox', { name: 'Command' })).toHaveTextContent(
-        '# Updated by Codex',
+        'Updated by Codex',
       );
     });
     expect(screen.queryByText('Make the title more specific.')).not.toBeInTheDocument();

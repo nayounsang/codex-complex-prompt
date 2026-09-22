@@ -6,6 +6,8 @@ import { AnnotatedMarkdownView } from './AnnotatedMarkdownView.js';
 import { FeedbackComposer } from './FeedbackComposer.js';
 import { FeedbackPanel } from './FeedbackPanel.js';
 
+const feedbackPopoverCollisionPadding = { top: 132, right: 12, bottom: 12, left: 12 };
+
 interface FeedbackModeViewProps {
   readonly markdown: string;
   readonly annotations: readonly FeedbackAnnotation[];
@@ -20,6 +22,10 @@ interface FeedbackModeViewProps {
 }
 
 export function FeedbackModeView(props: FeedbackModeViewProps): React.JSX.Element {
+  const closeSelection = (): void => {
+    window.getSelection()?.removeAllRanges();
+    props.onCancel();
+  };
   const pendingAnnotation =
     props.pendingSelection?.annotationId === undefined
       ? undefined
@@ -41,12 +47,13 @@ export function FeedbackModeView(props: FeedbackModeViewProps): React.JSX.Elemen
             <AnnotatedMarkdownView
               markdown={props.markdown}
               annotations={props.annotations}
+              selectionPopoverOpen={props.pendingSelection !== null}
               onSelection={props.onSelection}
             />
             <Popover.Root
               open={props.pendingSelection !== null}
               onOpenChange={(open) => {
-                if (!open) props.onCancel();
+                if (!open) closeSelection();
               }}
             >
               <Popover.Trigger
@@ -61,7 +68,7 @@ export function FeedbackModeView(props: FeedbackModeViewProps): React.JSX.Elemen
                   side="top"
                   sideOffset={8}
                   align="start"
-                  collisionPadding={12}
+                  collisionPadding={feedbackPopoverCollisionPadding}
                 >
                   <Popover.Popup className="feedback-popover" initialFocus={true}>
                     {props.pendingSelection !== null && (
@@ -69,8 +76,11 @@ export function FeedbackModeView(props: FeedbackModeViewProps): React.JSX.Elemen
                         key={`${props.pendingSelection.annotationId ?? 'new'}-${props.pendingSelection.start}-${props.pendingSelection.end}`}
                         selection={props.pendingSelection}
                         initialFeedback={pendingAnnotation?.feedback ?? ''}
-                        onSubmit={props.onAdd}
-                        onCancel={props.onCancel}
+                        onSubmit={(feedback) => {
+                          closeSelection();
+                          props.onAdd(feedback);
+                        }}
+                        onCancel={closeSelection}
                       />
                     )}
                   </Popover.Popup>
