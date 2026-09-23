@@ -380,11 +380,7 @@ function send(webSocket: WebSocket, message: ServerMessage): void {
 }
 
 function templateStoreErrorMessage(error: unknown, fallback: string): string {
-  if (
-    error instanceof Error &&
-    'code' in error &&
-    error.code === 'ERR_TEMPLATE_SYMLINK'
-  ) {
+  if (error instanceof Error && 'code' in error && error.code === 'ERR_TEMPLATE_SYMLINK') {
     return 'Project template storage does not allow symbolic links. Replace them with regular files and directories.';
   }
   return fallback;

@@ -105,9 +105,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                     <Select.ItemText className="template-item-content">
                       <span className="template-item-copy">
                         <span className="template-item-name">{template.name}</span>
-                        <span className="template-item-description">
-                          {template.description}
-                        </span>
+                        <span className="template-item-description">{template.description}</span>
                       </span>
                     </Select.ItemText>
                     <span className="template-item-actions">
