@@ -1,12 +1,22 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { parseCodexUserPromptHookInput, runCodexUserPromptHook } from './codex-user-prompt-hook.js';
+import { createFeedbackLoopStateStore } from './feedback-loop-state.js';
 
 const sockets: WebSocket[] = [];
+const temporaryDirectories: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   for (const socket of sockets.splice(0)) socket.close();
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
 });
 
 describe('Codex UserPromptSubmit 훅 어댑터', () => {
@@ -64,6 +74,7 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
     await waitFor(() => browserUrl !== undefined);
     if (browserUrl === undefined) throw new Error('Browser URL was not captured.');
     const url = new URL(browserUrl);
+    expect(url.searchParams.has('markdown')).toBe(false);
     const bridgeUrl = new URL(url.searchParams.get('bridge') ?? '');
     const socket = new WebSocket(
       `${bridgeUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${bridgeUrl.host}/ws`,
@@ -74,7 +85,9 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
     socket.send(
       JSON.stringify({ type: 'session.handshake', token: url.searchParams.get('token') }),
     );
-    await readyMessage;
+    await expect(readyMessage).resolves.toMatchObject([
+      expect.objectContaining({ type: 'session.ready', initialMarkdown: '요청' }),
+    ]);
     socket.send(
       JSON.stringify({
         type: 'prompt.submit',
@@ -87,6 +100,64 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
       continue: true,
       hookSpecificOutput: { hookEventName: 'UserPromptSubmit' },
     });
+  });
+
+  it('로컬 Markdown 파일 경로를 받으면 파일 내용을 브라우저 초기값으로 전달한다', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'codex-complex-prompt-hook-'));
+    temporaryDirectories.push(directory);
+    const filePath = join(directory, 'prompt input.md');
+    const markdown = '# 파일 입력\n\n한글과 특수문자: &?#';
+    await writeFile(filePath, markdown, 'utf8');
+
+    let browserUrl: string | undefined;
+    const resultPromise = runCodexUserPromptHook(
+      JSON.stringify({ prompt: `$complex-prompt ${filePath}` }),
+      {
+        timeoutMs: 2_000,
+        bridgeOptions: {
+          openBrowser: (url) => {
+            browserUrl = url;
+            return Promise.resolve();
+          },
+        },
+      },
+    );
+
+    await waitFor(() => browserUrl !== undefined);
+    if (browserUrl === undefined) throw new Error('Browser URL was not captured.');
+    const url = new URL(browserUrl);
+    expect(url.searchParams.has('markdown')).toBe(false);
+
+    const bridgeUrl = new URL(url.searchParams.get('bridge') ?? '');
+    const socket = new WebSocket(
+      `${bridgeUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${bridgeUrl.host}/ws`,
+    );
+    sockets.push(socket);
+    await onceOpen(socket);
+    const readyMessage = collectMessages(socket, 1);
+    socket.send(
+      JSON.stringify({ type: 'session.handshake', token: url.searchParams.get('token') }),
+    );
+    await expect(readyMessage).resolves.toMatchObject([
+      expect.objectContaining({ type: 'session.ready', initialMarkdown: markdown }),
+    ]);
+    socket.send(
+      JSON.stringify({
+        type: 'prompt.submit',
+        submissionId: '00000000-0000-4000-8000-000000000012',
+        prompt: '파일을 바탕으로 작업해줘',
+      }),
+    );
+
+    await expect(resultPromise).resolves.toEqual({
+      continue: true,
+      hookSpecificOutput: {
+        hookEventName: 'UserPromptSubmit',
+        additionalContext:
+          'Execute the following command supplied by the user through the Codex Complex Prompt editor:\n\n파일을 바탕으로 작업해줘',
+      },
+    });
+    await expect(readFile(filePath, 'utf8')).resolves.toBe(markdown);
   });
 
   it('복합 명령을 브라우저에서 입력하면 additionalContext로 반환한다', async () => {
@@ -142,6 +213,63 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
         status: 'accepted',
       },
     ]);
+  });
+
+  it('AI Feedback 제출에 편집본을 포함하고 후속 브라우저 검토를 예약한다', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'codex-feedback-loop-'));
+    temporaryDirectories.push(directory);
+    const feedbackLoopStateStore = createFeedbackLoopStateStore(directory);
+    const sessionId = 'feedback-loop-session';
+    let browserUrl: string | undefined;
+    const resultPromise = runCodexUserPromptHook(
+      JSON.stringify({
+        hook_event_name: 'UserPromptSubmit',
+        session_id: sessionId,
+        prompt: '$complex-prompt # 초안',
+      }),
+      {
+        timeoutMs: 2_000,
+        feedbackLoopStateStore,
+        bridgeOptions: {
+          openBrowser: (url) => {
+            browserUrl = url;
+            return Promise.resolve();
+          },
+        },
+      },
+    );
+
+    await waitFor(() => browserUrl !== undefined);
+    if (browserUrl === undefined) throw new Error('Browser URL was not captured.');
+    const url = new URL(browserUrl);
+    const bridgeUrl = new URL(url.searchParams.get('bridge') ?? '');
+    const socket = new WebSocket(
+      `${bridgeUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${bridgeUrl.host}/ws`,
+    );
+    sockets.push(socket);
+    await onceOpen(socket);
+    const readyMessage = collectMessages(socket, 1);
+    socket.send(
+      JSON.stringify({ type: 'session.handshake', token: url.searchParams.get('token') }),
+    );
+    await readyMessage;
+    socket.send(
+      JSON.stringify({
+        type: 'prompt.submit',
+        submissionId: '00000000-0000-4000-8000-000000000013',
+        prompt:
+          '## AI Feedback\n\n### Global feedback\n\nMake the language professional.\n\n### Current Markdown\n\n# Edited draft',
+        mode: 'feedback',
+      }),
+    );
+
+    const result = await resultPromise;
+
+    expect(result.hookSpecificOutput?.additionalContext).toContain('# Edited draft');
+    expect(result.hookSpecificOutput?.additionalContext).toContain(
+      'Return the complete updated Markdown only',
+    );
+    expect(await feedbackLoopStateStore.isActive(sessionId)).toBe(true);
   });
 
   it('브라우저를 열 수 없으면 systemMessage와 함께 계속 진행한다', async () => {

@@ -12,6 +12,7 @@ import {
   ClientMessageSchema,
   encodeServerMessage,
   type PromptSubmit,
+  type PromptSubmitMode,
   type ServerMessage,
 } from '@codex-complex-prompt/protocol';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
@@ -24,7 +25,7 @@ export type { SessionRecord, SessionStoreOptions } from './session-store.js';
 export interface PromptContext {
   readonly sessionId: string;
   readonly submissionId: string;
-  readonly mode: 'edit' | 'feedback';
+  readonly mode: PromptSubmitMode;
 }
 
 export type PromptAdapterResult = string | void;
@@ -36,6 +37,8 @@ export interface LocalBridgeServerOptions extends SessionStoreOptions {
   readonly promptTimeoutMs?: number;
   readonly maxConnections?: number;
   readonly handshakeTimeoutMs?: number;
+  readonly initialMarkdown?: string;
+  readonly feedbackLoop?: boolean;
   readonly onPrompt: (prompt: string, context: PromptContext) => Promise<PromptAdapterResult>;
 }
 
@@ -102,7 +105,15 @@ export async function startLocalBridgeServer(
     };
     webSocket.once('close', releaseConnection);
     webSocket.once('error', releaseConnection);
-    attachConnection(webSocket, store, options.onPrompt, promptTimeoutMs, handshakeTimeoutMs);
+    attachConnection(
+      webSocket,
+      store,
+      options.onPrompt,
+      promptTimeoutMs,
+      handshakeTimeoutMs,
+      options.initialMarkdown,
+      options.feedbackLoop ?? false,
+    );
   });
 
   await listen(httpServer, host, port);
@@ -142,6 +153,8 @@ function attachConnection(
   onPrompt: LocalBridgeServerOptions['onPrompt'],
   promptTimeoutMs: number,
   handshakeTimeoutMs: number,
+  initialMarkdown: string | undefined,
+  feedbackLoop: boolean,
 ): void {
   let sessionId: string | undefined;
   const submissions = new Set<string>();
@@ -211,6 +224,8 @@ function attachConnection(
         type: 'session.ready',
         sessionId: session.id,
         expiresAt: session.expiresAt.toISOString(),
+        ...(initialMarkdown === undefined ? {} : { initialMarkdown }),
+        ...(feedbackLoop ? { feedbackLoop } : {}),
       });
       return;
     }
@@ -255,14 +270,6 @@ function attachConnection(
         status: 'accepted',
         ...(latestMarkdown === undefined ? {} : { prompt: latestMarkdown }),
       };
-      if (submission.mode === 'feedback') {
-        const nextSession = store.create();
-        result.nextSession = {
-          token: nextSession.token,
-          sessionId: nextSession.id,
-          expiresAt: nextSession.expiresAt.toISOString(),
-        };
-      }
       send(webSocket, result);
     } catch {
       send(webSocket, {

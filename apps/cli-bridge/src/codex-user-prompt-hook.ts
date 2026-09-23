@@ -1,8 +1,15 @@
 import {
   CodexUserPromptSubmitInputSchema,
   type CodexUserPromptSubmitInput,
+  type PromptSubmitMode,
 } from '@codex-complex-prompt/protocol';
 
+import { resolveInitialMarkdown } from './codex-prompt-input.js';
+import { DEFAULT_BROWSER_WAIT_TIMEOUT_MS } from './codex-hook-timeouts.js';
+import {
+  createFeedbackLoopStateStore,
+  type FeedbackLoopStateStore,
+} from './feedback-loop-state.js';
 import { startCliBridge, type CliBridgeOptions } from './index.js';
 
 export interface CodexUserPromptHookOutput {
@@ -15,9 +22,10 @@ export interface CodexUserPromptHookOutput {
 }
 
 export interface RunCodexUserPromptHookOptions {
-  readonly bridgeOptions?: Omit<CliBridgeOptions, 'inputAdapter'>;
+  readonly bridgeOptions?: Omit<CliBridgeOptions, 'initialMarkdown' | 'inputAdapter'>;
   readonly timeoutMs?: number;
   readonly signal?: AbortSignal;
+  readonly feedbackLoopStateStore?: FeedbackLoopStateStore;
 }
 
 const COMPLEX_PROMPT_INVOCATION = /^\s*(?:\$|\/)complex-prompt(?:\s|$)/;
@@ -50,19 +58,32 @@ export async function runCodexUserPromptHook(
 
   if (!COMPLEX_PROMPT_INVOCATION.test(input.prompt)) return { continue: true };
 
-  let resolveCommand: ((command: string) => void) | undefined;
+  const invocation = input.prompt.match(COMPLEX_PROMPT_INVOCATION);
+  const initialMarkdown = await resolveInitialMarkdown(
+    input.prompt.slice(invocation?.[0].length ?? 0),
+  );
+  let resolveCommand:
+    ((submission: { command: string; mode: PromptSubmitMode }) => void) | undefined;
   let resolveSubmission: (() => void) | undefined;
-  const commandResult = new Promise<string>((resolve) => {
+  const commandResult = new Promise<{ command: string; mode: PromptSubmitMode }>((resolve) => {
     resolveCommand = resolve;
   });
   const submissionResult = new Promise<void>((resolve) => {
     resolveSubmission = resolve;
   });
+  const feedbackLoopState = options.feedbackLoopStateStore ?? createFeedbackLoopStateStore();
   const bridge = await startCliBridge({
     ...options.bridgeOptions,
+    initialMarkdown,
     inputAdapter: {
-      submit: (command: string) => {
-        resolveCommand?.(command);
+      submit: async (command: string, context) => {
+        const mode = context?.mode ?? 'edit';
+        if (mode === 'feedback' && command.trim() !== '') {
+          await feedbackLoopState.activate(input.session_id);
+        } else {
+          await feedbackLoopState.clear(input.session_id);
+        }
+        resolveCommand?.({ command, mode });
         return submissionResult;
       },
     },
@@ -74,9 +95,12 @@ export async function runCodexUserPromptHook(
   }
 
   try {
-    const command = (
-      await waitForCommand(commandResult, options.timeoutMs ?? 120_000, options.signal)
-    ).trim();
+    const submission = await waitForCommand(
+      commandResult,
+      options.timeoutMs ?? DEFAULT_BROWSER_WAIT_TIMEOUT_MS,
+      options.signal,
+    );
+    const command = submission.command.trim();
     if (command === '') {
       return continueWithMessage('The browser command editor returned an empty command.');
     }
@@ -85,8 +109,11 @@ export async function runCodexUserPromptHook(
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
         additionalContext:
-          'Execute the following command supplied by the user through the Codex Complex Prompt editor:\n\n' +
-          command,
+          submission.mode === 'feedback'
+            ? 'Apply the AI feedback to the complete Current Markdown document included below. Preserve all unaffected content. Return the complete updated Markdown only, without an introduction, summary, or code fence.\n\n' +
+              command
+            : 'Execute the following command supplied by the user through the Codex Complex Prompt editor:\n\n' +
+              command,
       },
     };
     resolveSubmission?.();
@@ -110,10 +137,10 @@ function continueWithMessage(systemMessage: string): CodexUserPromptHookOutput {
 }
 
 async function waitForCommand(
-  command: Promise<string>,
+  command: Promise<{ command: string; mode: PromptSubmitMode }>,
   timeoutMs: number,
   signal: AbortSignal | undefined,
-): Promise<string> {
+): Promise<{ command: string; mode: PromptSubmitMode }> {
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
     throw new Error('Browser command editor timeout must be a positive integer.');
   }

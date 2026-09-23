@@ -22,6 +22,37 @@ describe('CLI 브리지 동작', () => {
     await bridge.stop();
   });
 
+  it('초기 Markdown을 URL 대신 인증된 WebSocket 준비 메시지로 전달한다', async () => {
+    const bridge = await startCliBridge({
+      initialMarkdown: '한글\n\n특수문자: &?#',
+      feedbackLoop: true,
+      openBrowser: () => Promise.resolve(),
+    });
+    const browserUrl = new URL(bridge.browserUrl);
+    const socket = new WebSocket(`${bridge.server.url}/ws`);
+    const readyMessage = new Promise<string>((resolve) =>
+      socket.once('message', (data) => resolve(messageText(data))),
+    );
+
+    try {
+      await new Promise<void>((resolve) => socket.once('open', resolve));
+      socket.send(
+        JSON.stringify({ type: 'session.handshake', token: browserUrl.searchParams.get('token') }),
+      );
+
+      expect(JSON.parse(await readyMessage)).toMatchObject({
+        type: 'session.ready',
+        initialMarkdown: '한글\n\n특수문자: &?#',
+        feedbackLoop: true,
+      });
+      expect(browserUrl.searchParams.has('markdown')).toBe(false);
+      expect(browserUrl.searchParams.has('feedbackLoop')).toBe(false);
+    } finally {
+      socket.close();
+      await bridge.stop();
+    }
+  });
+
   it('브라우저 연동 실패를 브리지 실패로 처리하지 않는다', async () => {
     const bridge = await startCliBridge({
       openBrowser: async () => {

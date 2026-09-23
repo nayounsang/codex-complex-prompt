@@ -2,13 +2,17 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
+import { CODEX_HOOK_TIMEOUT_SECONDS } from './codex-hook-timeouts.js';
+
 export const CODEX_COMPLEX_PROMPT_HOOK_MARKER = 'Codex Complex Prompt command editor';
+export const CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER = 'Codex Complex Prompt feedback editor';
 export const CODEX_COMPLEX_PROMPT_LEGACY_STOP_HOOK_MARKER = 'Codex Complex Prompt browser review';
 const LEGACY_STOP_HOOK_COMMAND_SUFFIX = ' hook stop';
 
 export interface CodexHookConfigOptions {
   readonly configPath?: string;
   readonly command?: string;
+  readonly stopCommand?: string;
   readonly dryRun?: boolean;
 }
 
@@ -24,8 +28,10 @@ export async function installCodexUserPromptHook(
 ): Promise<CodexHookConfigResult> {
   const configPath = options.configPath ?? defaultHooksPath();
   const command = options.command ?? 'complex-prompt hook prompt';
+  const stopCommand = options.stopCommand ?? 'complex-prompt hook stop';
   const config = await readHooksConfig(configPath);
   const hooks = getHooks(config);
+  removeLegacyStopHooks(hooks);
   const userPromptHooks = Array.isArray(hooks['UserPromptSubmit'])
     ? [...hooks['UserPromptSubmit']]
     : [];
@@ -37,13 +43,27 @@ export async function installCodexUserPromptHook(
       {
         type: 'command',
         command,
-        timeout: 120,
+        timeout: CODEX_HOOK_TIMEOUT_SECONDS,
         statusMessage: CODEX_COMPLEX_PROMPT_HOOK_MARKER,
       },
     ],
   });
   hooks['UserPromptSubmit'] = nextUserPromptHooks;
-  removeLegacyStopHooks(hooks);
+  const stopHooks = Array.isArray(hooks['Stop']) ? [...hooks['Stop']] : [];
+  const nextStopHooks = stopHooks.filter(
+    (group) => !containsOwnCommand(group, stopCommand, CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER),
+  );
+  nextStopHooks.push({
+    hooks: [
+      {
+        type: 'command',
+        command: stopCommand,
+        timeout: CODEX_HOOK_TIMEOUT_SECONDS,
+        statusMessage: CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
+      },
+    ],
+  });
+  hooks['Stop'] = nextStopHooks;
   const nextConfig = { ...config, hooks };
   const changed = JSON.stringify(config) !== JSON.stringify(nextConfig);
   if (changed && options.dryRun !== true) await writeHooksConfig(configPath, nextConfig);
@@ -55,6 +75,7 @@ export async function removeCodexUserPromptHook(
 ): Promise<CodexHookConfigResult> {
   const configPath = options.configPath ?? defaultHooksPath();
   const command = options.command ?? 'complex-prompt hook prompt';
+  const stopCommand = options.stopCommand ?? 'complex-prompt hook stop';
   const config = await readHooksConfig(configPath);
   const hooks = getHooks(config);
   const userPromptHooks = Array.isArray(hooks['UserPromptSubmit'])
@@ -64,6 +85,10 @@ export async function removeCodexUserPromptHook(
     .map((group) => removeOwnCommands(group, command))
     .filter((group) => group !== undefined);
   hooks['UserPromptSubmit'] = nextUserPromptHooks;
+  const stopHooks = Array.isArray(hooks['Stop']) ? [...hooks['Stop']] : [];
+  hooks['Stop'] = stopHooks
+    .map((group) => removeOwnCommands(group, stopCommand, CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER))
+    .filter((group) => group !== undefined);
   removeLegacyStopHooks(hooks);
   const nextConfig = { ...config, hooks };
   const changed = JSON.stringify(config) !== JSON.stringify(nextConfig);
@@ -115,7 +140,11 @@ function getHooks(config: Record<string, unknown>): Record<string, unknown[]> {
   return { ...(value as Record<string, unknown[]>) };
 }
 
-function containsOwnCommand(group: unknown, command: string): boolean {
+function containsOwnCommand(
+  group: unknown,
+  command: string,
+  marker = CODEX_COMPLEX_PROMPT_HOOK_MARKER,
+): boolean {
   if (group === null || typeof group !== 'object' || Array.isArray(group)) return false;
   const handlers = (group as Record<string, unknown>)['hooks'];
   if (!Array.isArray(handlers)) return false;
@@ -125,11 +154,15 @@ function containsOwnCommand(group: unknown, command: string): boolean {
       typeof handler === 'object' &&
       (handler as Record<string, unknown>)['type'] === 'command' &&
       ((handler as Record<string, unknown>)['command'] === command ||
-        isOwnStatusMessage((handler as Record<string, unknown>)['statusMessage'])),
+        (handler as Record<string, unknown>)['statusMessage'] === marker),
   );
 }
 
-function removeOwnCommands(group: unknown, command: string): Record<string, unknown> | undefined {
+function removeOwnCommands(
+  group: unknown,
+  command: string,
+  marker = CODEX_COMPLEX_PROMPT_HOOK_MARKER,
+): Record<string, unknown> | undefined {
   if (group === null || typeof group !== 'object' || Array.isArray(group))
     return group as undefined;
   const record = group as Record<string, unknown>;
@@ -142,7 +175,7 @@ function removeOwnCommands(group: unknown, command: string): Record<string, unkn
         typeof handler === 'object' &&
         (handler as Record<string, unknown>)['type'] === 'command' &&
         ((handler as Record<string, unknown>)['command'] === command ||
-          isOwnStatusMessage((handler as Record<string, unknown>)['statusMessage']))
+          (handler as Record<string, unknown>)['statusMessage'] === marker)
       ),
   );
   return remaining.length === 0 ? undefined : { ...record, hooks: remaining };
@@ -180,10 +213,6 @@ function isLegacyStopHook(handler: unknown): boolean {
     command.includes('complex-prompt') &&
     command.endsWith(LEGACY_STOP_HOOK_COMMAND_SUFFIX)
   );
-}
-
-function isOwnStatusMessage(value: unknown): boolean {
-  return value === CODEX_COMPLEX_PROMPT_HOOK_MARKER;
 }
 
 function isMissingFile(error: unknown): boolean {

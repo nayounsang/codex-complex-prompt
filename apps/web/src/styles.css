@@ -779,25 +779,10 @@ button:focus-visible,
   font-weight: 700;
 }
 
-.panel-empty,
-.reopen-notice {
+.panel-empty {
   color: #787774;
   font-size: 13px;
   line-height: 1.5;
-}
-
-.reopen-notice-global {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  z-index: 4;
-  max-width: min(360px, calc(100vw - 32px));
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid #e6e5e2;
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 8px 24px rgb(55 53 47 / 12%);
 }
 
 .feedback-list {

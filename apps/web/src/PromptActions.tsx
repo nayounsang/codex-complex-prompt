@@ -10,6 +10,7 @@ interface PromptActionsProps {
   readonly isConnected: boolean;
   readonly isSubmitting: boolean;
   readonly isEmpty: boolean;
+  readonly allowEmptySubmit: boolean;
   readonly feedbackCount: number;
   readonly globalFeedback: FeedbackAnnotation | undefined;
   readonly onSubmit: () => void;
@@ -22,6 +23,7 @@ export function PromptActions({
   isConnected,
   isSubmitting,
   isEmpty,
+  allowEmptySubmit,
   feedbackCount,
   globalFeedback,
   onSubmit,
@@ -78,7 +80,7 @@ export function PromptActions({
         type="button"
         className="button-secondary"
         aria-label={mode === 'edit' && !isSubmitting ? 'Send to Codex' : undefined}
-        disabled={!isConnected || isSubmitting || isEmpty}
+        disabled={!isConnected || isSubmitting || (isEmpty && !allowEmptySubmit)}
         onClick={onSubmit}
       >
         {isSubmitting && mode === 'edit' ? 'Sending…' : 'Submit'}

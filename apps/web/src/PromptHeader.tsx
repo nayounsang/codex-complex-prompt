@@ -7,6 +7,7 @@ interface PromptHeaderProps {
   readonly isConnected: boolean;
   readonly isSubmitting: boolean;
   readonly isEmpty: boolean;
+  readonly allowEmptySubmit: boolean;
   readonly feedbackCount: number;
   readonly globalFeedback: FeedbackAnnotation | undefined;
   readonly onModeChange: (mode: 'edit' | 'feedback') => void;
@@ -25,6 +26,7 @@ export function PromptHeader(props: PromptHeaderProps): React.JSX.Element {
           isConnected={props.isConnected}
           isSubmitting={props.isSubmitting}
           isEmpty={props.isEmpty}
+          allowEmptySubmit={props.allowEmptySubmit}
           feedbackCount={props.feedbackCount}
           globalFeedback={props.globalFeedback}
           onSubmit={props.onSubmit}
