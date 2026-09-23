@@ -64,8 +64,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
     const result = await props.onDelete(templateToDelete.id);
     if (result.status === 'accepted') {
       if (selected?.id === templateToDelete.id) setSelected(null);
-      setTemplateToDelete(null);
-      setConfirmDelete(false);
+      closeDeleteConfirmation();
     } else setError(result.error ?? 'The template could not be deleted.');
   }
 
@@ -88,6 +87,11 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
       setTemplateToDelete(template);
       setConfirmDelete(true);
     }, 0);
+  }
+
+  function closeDeleteConfirmation(): void {
+    setConfirmDelete(false);
+    setTemplateToDelete(null);
   }
 
   const disabledReason = props.templatesError;
@@ -301,13 +305,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
         </AlertDialog.Portal>
       </AlertDialog.Root>
 
-      <AlertDialog.Root
-        open={confirmDelete}
-        onOpenChange={(open) => {
-          setConfirmDelete(open);
-          if (!open) setTemplateToDelete(null);
-        }}
-      >
+      <AlertDialog.Root open={confirmDelete}>
         <AlertDialog.Portal>
           <AlertDialog.Backdrop className="dialog-backdrop" />
           <AlertDialog.Viewport className="dialog-viewport">
@@ -317,7 +315,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                 “{templateToDelete?.name}” will be removed from this project.
               </AlertDialog.Description>
               <div className="dialog-actions">
-                <Button className="button-quiet" onClick={() => setConfirmDelete(false)}>
+                <Button className="button-quiet" onClick={closeDeleteConfirmation}>
                   Cancel
                 </Button>
                 <Button className="button-primary" onClick={() => void deleteTemplate()}>
