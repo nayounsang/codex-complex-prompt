@@ -33,8 +33,10 @@ interface DraftTemplate {
 
 export function TemplateManager(props: TemplateManagerProps): React.JSX.Element {
   const [editing, setEditing] = useState<DraftTemplate | null>(null);
+  const [selectOpen, setSelectOpen] = useState(false);
   const [selected, setSelected] = useState<PromptTemplate | null>(null);
   const [confirmApply, setConfirmApply] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState<PromptTemplate | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -72,10 +74,25 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
     else props.onApply(selected.body);
   }
 
+  function openEditor(template: PromptTemplate): void {
+    setSelectOpen(false);
+    setEditing(template);
+    setError(null);
+  }
+
+  function openDeleteConfirmation(template: PromptTemplate): void {
+    setSelectOpen(false);
+    setTemplateToDelete(template);
+    setConfirmDelete(true);
+    setError(null);
+  }
+
   const disabledReason = props.templatesError;
   return (
     <div className="template-manager" aria-label="Project templates">
       <Select.Root
+        open={selectOpen}
+        onOpenChange={setSelectOpen}
         value={selected?.id ?? null}
         onValueChange={(value) => {
           if (value === '__create__')
@@ -117,11 +134,11 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                         onPointerDown={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
+                          openEditor(template);
                         }}
                         onClick={(event) => {
                           event.stopPropagation();
-                          setEditing(template);
-                          setError(null);
+                          openEditor(template);
                         }}
                       >
                         <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -136,11 +153,11 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                         onPointerDown={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
+                          openDeleteConfirmation(template);
                         }}
                         onClick={(event) => {
                           event.stopPropagation();
-                          setTemplateToDelete(template);
-                          setError(null);
+                          openDeleteConfirmation(template);
                         }}
                       >
                         <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -290,8 +307,11 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
       </AlertDialog.Root>
 
       <AlertDialog.Root
-        open={templateToDelete !== null}
-        onOpenChange={(open) => !open && setTemplateToDelete(null)}
+        open={confirmDelete}
+        onOpenChange={(open) => {
+          setConfirmDelete(open);
+          if (!open) setTemplateToDelete(null);
+        }}
       >
         <AlertDialog.Portal>
           <AlertDialog.Backdrop className="dialog-backdrop" />
@@ -302,7 +322,9 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                 “{templateToDelete?.name}” will be removed from this project.
               </AlertDialog.Description>
               <div className="dialog-actions">
-                <AlertDialog.Close className="button-quiet">Cancel</AlertDialog.Close>
+                <Button className="button-quiet" onClick={() => setConfirmDelete(false)}>
+                  Cancel
+                </Button>
                 <Button className="button-primary" onClick={() => void deleteTemplate()}>
                   Delete template
                 </Button>
