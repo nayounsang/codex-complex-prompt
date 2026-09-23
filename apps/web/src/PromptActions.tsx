@@ -2,8 +2,8 @@ import { Button } from '@base-ui/react/button';
 import { Popover } from '@base-ui/react/popover';
 import { useState } from 'react';
 
-import type { FeedbackAnnotation } from './feedback-types.js';
-import { FeedbackComposer } from './FeedbackComposer.js';
+import type { FeedbackAnnotation } from './features/feedback/feedback-types.js';
+import { FeedbackComposer } from './features/feedback/FeedbackComposer.js';
 
 interface PromptActionsProps {
   readonly mode: 'edit' | 'feedback';

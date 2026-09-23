@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { countPromptCharacters, MAX_PROMPT_LENGTH } from '@codex-complex-prompt/protocol';
 
-import type { PromptResult } from './bridge-session.js';
+import type { PromptResult } from '../../bridge-session.js';
 import { serializeFeedback } from './feedback-serializer.js';
 import type { FeedbackAnnotation } from './feedback-types.js';
 

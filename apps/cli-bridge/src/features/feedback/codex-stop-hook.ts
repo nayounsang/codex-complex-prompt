@@ -4,8 +4,8 @@ import {
   createFeedbackLoopStateStore,
   type FeedbackLoopStateStore,
 } from './feedback-loop-state.js';
-import { DEFAULT_BROWSER_WAIT_TIMEOUT_MS } from './codex-hook-timeouts.js';
-import { startCliBridge, type CliBridgeOptions } from './index.js';
+import { DEFAULT_BROWSER_WAIT_TIMEOUT_MS } from '../../codex-hook-timeouts.js';
+import { startCliBridge, type CliBridgeOptions } from '../../index.js';
 
 export type CodexStopHookOutput =
   | { readonly continue: true; readonly systemMessage?: string }

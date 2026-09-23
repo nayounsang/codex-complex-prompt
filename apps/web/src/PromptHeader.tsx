@@ -1,4 +1,4 @@
-import type { FeedbackAnnotation } from './feedback-types.js';
+import type { FeedbackAnnotation } from './features/feedback/feedback-types.js';
 import { ModeTabs } from './ModeTabs.js';
 import { PromptActions } from './PromptActions.js';
 

@@ -5,12 +5,12 @@ import {
 } from '@codex-complex-prompt/protocol';
 
 import { resolveInitialMarkdown } from './codex-prompt-input.js';
-import { DEFAULT_BROWSER_WAIT_TIMEOUT_MS } from './codex-hook-timeouts.js';
+import { DEFAULT_BROWSER_WAIT_TIMEOUT_MS } from '../../codex-hook-timeouts.js';
 import {
   createFeedbackLoopStateStore,
   type FeedbackLoopStateStore,
-} from './feedback-loop-state.js';
-import { startCliBridge, type CliBridgeOptions } from './index.js';
+} from '../feedback/feedback-loop-state.js';
+import { startCliBridge, type CliBridgeOptions } from '../../index.js';
 
 export interface CodexUserPromptHookOutput {
   readonly continue: true;

@@ -1,4 +1,4 @@
-import type { SelectionAnchor, SelectionRect } from './feedback-types.js';
+import type { SelectionAnchor, SelectionRect } from './features/feedback/feedback-types.js';
 import {
   getMappedSourceOffset,
   getMarkdownTableRanges,

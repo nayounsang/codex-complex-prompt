@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { LazyMarkdownEditor } from './LazyMarkdownEditor.js';
-import { makeMarkdownImagesInert } from './markdown-rendering.js';
-import { decorateMarkdownRoot, type SourceFeedbackRange } from './markdown-source-map.js';
+import { LazyMarkdownEditor } from '../input/LazyMarkdownEditor.js';
+import { makeMarkdownImagesInert } from '../../markdown-rendering.js';
+import { decorateMarkdownRoot, type SourceFeedbackRange } from '../../markdown-source-map.js';
 import {
   getCodeBlockSelectionAnchor,
   getSelectionAnchor,
   getTableSelectionAnchor,
-} from './selection-anchor.js';
+} from '../../selection-anchor.js';
 import type { FeedbackAnnotation, SelectionAnchor } from './feedback-types.js';
 
 interface AnnotatedMarkdownViewProps {

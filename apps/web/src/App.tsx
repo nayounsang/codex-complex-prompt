@@ -4,11 +4,11 @@ import { Dialog } from '@base-ui/react/dialog';
 import { countPromptCharacters, MAX_PROMPT_LENGTH } from '@codex-complex-prompt/protocol';
 
 import { useBridgeSession } from './bridge-session.js';
-import type { MarkdownEditorHandle } from './MarkdownEditor.js';
+import type { MarkdownEditorHandle } from './features/input/MarkdownEditor.js';
 import { PromptSessionShell } from './PromptSessionShell.js';
 import { SubmitFeedbackDialog } from './SubmitFeedbackDialog.js';
-import { useFeedbackAnnotations } from './useFeedbackAnnotations.js';
-import { useFeedbackSubmission } from './useFeedbackSubmission.js';
+import { useFeedbackAnnotations } from './features/feedback/useFeedbackAnnotations.js';
+import { useFeedbackSubmission } from './features/feedback/useFeedbackSubmission.js';
 import './styles.css';
 
 export function App(): React.JSX.Element {

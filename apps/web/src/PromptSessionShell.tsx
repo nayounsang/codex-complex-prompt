@@ -1,8 +1,8 @@
-import type { FeedbackAnnotation, SelectionAnchor } from './feedback-types.js';
-import { FeedbackModeView } from './FeedbackModeView.js';
-import { EditModeView } from './EditModeView.js';
+import type { FeedbackAnnotation, SelectionAnchor } from './features/feedback/feedback-types.js';
+import { FeedbackModeView } from './features/feedback/FeedbackModeView.js';
+import { EditModeView } from './features/input/EditModeView.js';
 import { PromptHeader } from './PromptHeader.js';
-import type { MarkdownEditorHandle } from './MarkdownEditor.js';
+import type { MarkdownEditorHandle } from './features/input/MarkdownEditor.js';
 
 interface PromptSessionShellProps {
   readonly mode: 'edit' | 'feedback';
