@@ -12,26 +12,28 @@ import { useFeedbackSubmission } from './useFeedbackSubmission.js';
 import './styles.css';
 
 export function App(): React.JSX.Element {
-  const [markdown, setMarkdown] = useState(() => {
-    if (typeof window === 'undefined') return '';
-    return new URLSearchParams(window.location.search).get('markdown') ?? '';
-  });
+  const [markdownOverride, setMarkdownOverride] = useState<string | null>(null);
   const [mode, setMode] = useState<'edit' | 'feedback'>('edit');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
-  const [feedbackLoop] = useState(
-    () =>
-      typeof window !== 'undefined' &&
-      new URLSearchParams(window.location.search).get('feedbackLoop') === '1',
-  );
+  const [showEmptyFinishDialog, setShowEmptyFinishDialog] = useState(false);
   const editorRef = useRef<MarkdownEditorHandle>(null);
-  const { state, error, closeInSeconds, submit } = useBridgeSession();
+  const {
+    state,
+    error,
+    closeInSeconds,
+    initialMarkdown,
+    feedbackLoop: sessionFeedbackLoop,
+    submit,
+  } = useBridgeSession();
+  const markdown = markdownOverride ?? initialMarkdown ?? '';
+  const feedbackLoop = sessionFeedbackLoop;
   const feedback = useFeedbackAnnotations();
   const feedbackSubmission = useFeedbackSubmission({
     markdown,
     annotations: feedback.annotations,
     submit,
-    onMarkdownChange: setMarkdown,
+    onMarkdownChange: setMarkdownOverride,
     onComplete: () => {
       feedback.clearFeedback();
       setMode('edit');
@@ -41,7 +43,7 @@ export function App(): React.JSX.Element {
   const isSubmitting = state === 'submitting' || feedbackSubmission.isSubmitting;
 
   const handleMarkdownChange = useCallback((nextMarkdown: string): void => {
-    setMarkdown(nextMarkdown);
+    setMarkdownOverride(nextMarkdown);
     setValidationError(null);
   }, []);
 
@@ -60,6 +62,17 @@ export function App(): React.JSX.Element {
   const handlePromptSubmit = useCallback((): void => {
     if (feedbackLoop) {
       const prompt = editorRef.current?.getMarkdown() ?? markdown;
+      if (countPromptCharacters(prompt.trim()) > MAX_PROMPT_LENGTH) {
+        setValidationError(
+          `Markdown commands must be ${MAX_PROMPT_LENGTH.toLocaleString()} characters or fewer.`,
+        );
+        return;
+      }
+      setValidationError(null);
+      if (prompt.trim() === '') {
+        setShowEmptyFinishDialog(true);
+        return;
+      }
       void submit(prompt, 'finish');
       return;
     }
@@ -99,6 +112,7 @@ export function App(): React.JSX.Element {
       <PromptSessionShell
         mode={mode}
         markdown={markdown}
+        editorInitialMarkdown={initialMarkdown ?? markdown}
         editorRef={editorRef}
         isConnected={isConnected}
         isSubmitting={isSubmitting}
@@ -107,6 +121,8 @@ export function App(): React.JSX.Element {
         pendingSelection={feedback.pendingSelection}
         validationError={validationError}
         feedbackError={feedbackSubmission.error}
+        allowEmptySubmit={feedbackLoop}
+        editorInitializationKey={initialMarkdown === null ? 'pending' : 'ready'}
         onModeChange={setMode}
         onMarkdownChange={handleMarkdownChange}
         onSubmit={handlePromptSubmit}
@@ -140,6 +156,41 @@ export function App(): React.JSX.Element {
           }}
           onApproveAnyway={handleApproveAnyway}
         />
+      )}
+      {showEmptyFinishDialog && (
+        <Dialog.Root open onOpenChange={(open) => !open && setShowEmptyFinishDialog(false)}>
+          <Dialog.Portal>
+            <Dialog.Backdrop className="dialog-backdrop" />
+            <Dialog.Viewport className="dialog-viewport">
+              <Dialog.Popup className="submit-dialog" role="alertdialog">
+                <Dialog.Title>Submit an empty document?</Dialog.Title>
+                <Dialog.Description>
+                  The review has no Markdown to continue from. Codex will end the review without a
+                  document to act on.
+                </Dialog.Description>
+                <div className="dialog-actions">
+                  <Button
+                    type="button"
+                    className="button-quiet"
+                    onClick={() => setShowEmptyFinishDialog(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    className="button-primary"
+                    onClick={() => {
+                      setShowEmptyFinishDialog(false);
+                      void submit('', 'finish');
+                    }}
+                  >
+                    Submit empty document
+                  </Button>
+                </div>
+              </Dialog.Popup>
+            </Dialog.Viewport>
+          </Dialog.Portal>
+        </Dialog.Root>
       )}
       {closeInSeconds !== null && (
         <Dialog.Root open modal disablePointerDismissal>

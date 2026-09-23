@@ -74,7 +74,7 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
     await waitFor(() => browserUrl !== undefined);
     if (browserUrl === undefined) throw new Error('Browser URL was not captured.');
     const url = new URL(browserUrl);
-    expect(url.searchParams.get('markdown')).toBe('요청');
+    expect(url.searchParams.has('markdown')).toBe(false);
     const bridgeUrl = new URL(url.searchParams.get('bridge') ?? '');
     const socket = new WebSocket(
       `${bridgeUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${bridgeUrl.host}/ws`,
@@ -85,7 +85,9 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
     socket.send(
       JSON.stringify({ type: 'session.handshake', token: url.searchParams.get('token') }),
     );
-    await readyMessage;
+    await expect(readyMessage).resolves.toMatchObject([
+      expect.objectContaining({ type: 'session.ready', initialMarkdown: '요청' }),
+    ]);
     socket.send(
       JSON.stringify({
         type: 'prompt.submit',
@@ -124,7 +126,7 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
     await waitFor(() => browserUrl !== undefined);
     if (browserUrl === undefined) throw new Error('Browser URL was not captured.');
     const url = new URL(browserUrl);
-    expect(url.searchParams.get('markdown')).toBe(markdown);
+    expect(url.searchParams.has('markdown')).toBe(false);
 
     const bridgeUrl = new URL(url.searchParams.get('bridge') ?? '');
     const socket = new WebSocket(
@@ -136,7 +138,9 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
     socket.send(
       JSON.stringify({ type: 'session.handshake', token: url.searchParams.get('token') }),
     );
-    await readyMessage;
+    await expect(readyMessage).resolves.toMatchObject([
+      expect.objectContaining({ type: 'session.ready', initialMarkdown: markdown }),
+    ]);
     socket.send(
       JSON.stringify({
         type: 'prompt.submit',

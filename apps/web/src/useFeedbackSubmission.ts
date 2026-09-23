@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { countPromptCharacters, MAX_PROMPT_LENGTH } from '@codex-complex-prompt/protocol';
 
 import type { PromptResult } from './bridge-session.js';
 import { serializeFeedback } from './feedback-serializer.js';
@@ -27,6 +28,11 @@ export function useFeedbackSubmission(options: FeedbackSubmissionOptions): Feedb
     setIsSubmitting(true);
     setError(null);
     const prompt = serializeFeedback(options.markdown, options.annotations);
+    if (countPromptCharacters(prompt.trim()) > MAX_PROMPT_LENGTH) {
+      setError(`Feedback must be ${MAX_PROMPT_LENGTH.toLocaleString()} characters or fewer.`);
+      setIsSubmitting(false);
+      return;
+    }
     try {
       const result = await options.submit(prompt, 'feedback');
       if (result.status === 'failed') {

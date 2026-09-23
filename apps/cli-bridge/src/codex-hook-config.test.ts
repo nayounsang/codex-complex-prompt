@@ -13,6 +13,7 @@ import {
   installCodexUserPromptHook,
   removeCodexUserPromptHook,
 } from './codex-hook-config.js';
+import { CODEX_HOOK_TIMEOUT_SECONDS } from './codex-hook-timeouts.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -62,7 +63,7 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
           {
             type: 'command',
             command: 'complex-prompt hook stop',
-            timeout: 120,
+            timeout: CODEX_HOOK_TIMEOUT_SECONDS,
             statusMessage: CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
           },
         ],
@@ -74,7 +75,7 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
           {
             type: 'command',
             command: 'complex-prompt hook prompt',
-            timeout: 120,
+            timeout: CODEX_HOOK_TIMEOUT_SECONDS,
             statusMessage: CODEX_COMPLEX_PROMPT_HOOK_MARKER,
           },
         ],
@@ -117,7 +118,7 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
               {
                 type: 'command',
                 command: 'complex-prompt hook stop',
-                timeout: 120,
+                timeout: CODEX_HOOK_TIMEOUT_SECONDS,
                 statusMessage: CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
               },
             ],
@@ -129,7 +130,7 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
               {
                 type: 'command',
                 command: 'complex-prompt hook prompt',
-                timeout: 120,
+                timeout: CODEX_HOOK_TIMEOUT_SECONDS,
                 statusMessage: CODEX_COMPLEX_PROMPT_HOOK_MARKER,
               },
             ],

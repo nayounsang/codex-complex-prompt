@@ -56,16 +56,12 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
     ...(options.port === undefined ? {} : { port: options.port }),
     ...(options.sessionTtlMs === undefined ? {} : { ttlMs: options.sessionTtlMs }),
     ...(options.promptTimeoutMs === undefined ? {} : { promptTimeoutMs: options.promptTimeoutMs }),
+    ...(options.initialMarkdown === undefined ? {} : { initialMarkdown: options.initialMarkdown }),
+    ...(options.feedbackLoop === undefined ? {} : { feedbackLoop: options.feedbackLoop }),
   };
   const server = await startLocalBridgeServer(serverOptions);
   const session = server.createSession();
-  const browserUrl = addToken(
-    webUrl ?? server.url,
-    session.token,
-    server.url,
-    options.initialMarkdown,
-    options.feedbackLoop ?? false,
-  );
+  const browserUrl = addToken(webUrl ?? server.url, session.token, server.url);
   const openBrowser =
     options.openBrowser ??
     (async (url: string) => {
@@ -87,18 +83,10 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
   };
 }
 
-function addToken(
-  baseUrl: string,
-  token: string,
-  bridgeUrl: string,
-  initialMarkdown: string | undefined,
-  feedbackLoop: boolean,
-): string {
+function addToken(baseUrl: string, token: string, bridgeUrl: string): string {
   const url = new URL(baseUrl);
   url.searchParams.set('token', token);
   url.searchParams.set('bridge', bridgeUrl);
-  if (initialMarkdown !== undefined) url.searchParams.set('markdown', initialMarkdown);
-  if (feedbackLoop) url.searchParams.set('feedbackLoop', '1');
   return url.toString();
 }
 

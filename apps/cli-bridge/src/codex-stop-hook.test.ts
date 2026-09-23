@@ -227,8 +227,8 @@ describe('Codex Stop hook feedback editor', () => {
 
     await waitFor(() => browserUrl !== undefined);
     if (browserUrl === undefined) throw new Error('Browser URL was not captured.');
-    expect(new URL(browserUrl).searchParams.get('markdown')).toBe(markdown);
-    expect(new URL(browserUrl).searchParams.get('feedbackLoop')).toBe('1');
+    expect(new URL(browserUrl).searchParams.has('markdown')).toBe(false);
+    expect(new URL(browserUrl).searchParams.has('feedbackLoop')).toBe(false);
     const socket = await connectToEditor(browserUrl);
     socket.send(
       JSON.stringify({
@@ -333,6 +333,49 @@ describe('Codex Stop hook feedback editor', () => {
     await expect(resultPromise).resolves.toEqual({
       decision: 'block',
       reason: expect.stringContaining(finalMarkdown),
+    });
+    expect(await stateStore.isActive(sessionId)).toBe(false);
+  });
+
+  it('사용자가 확인 후 빈 최종 문서를 제출하면 Codex를 계속 진행하지 않는다', async () => {
+    const directory = await createDirectory();
+    const stateStore = createFeedbackLoopStateStore(directory);
+    const sessionId = 'empty-finish-session';
+    await stateStore.activate(sessionId);
+    let browserUrl: string | undefined;
+    const resultPromise = runCodexStopHook(
+      JSON.stringify({
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        last_assistant_message: '# Previously drafted document',
+      }),
+      {
+        timeoutMs: 2_000,
+        feedbackLoopStateStore: stateStore,
+        bridgeOptions: {
+          openBrowser: (url) => {
+            browserUrl = url;
+            return Promise.resolve();
+          },
+        },
+      },
+    );
+
+    await waitFor(() => browserUrl !== undefined);
+    if (browserUrl === undefined) throw new Error('Browser URL was not captured.');
+    const socket = await connectToEditor(browserUrl);
+    socket.send(
+      JSON.stringify({
+        type: 'prompt.submit',
+        submissionId: '00000000-0000-4000-8000-000000000025',
+        prompt: '',
+        mode: 'finish',
+      }),
+    );
+
+    await expect(resultPromise).resolves.toEqual({
+      continue: true,
+      systemMessage: 'The feedback review ended without a final document.',
     });
     expect(await stateStore.isActive(sessionId)).toBe(false);
   });

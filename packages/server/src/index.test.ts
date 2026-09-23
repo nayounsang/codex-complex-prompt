@@ -124,6 +124,27 @@ function getHttp(url: string): Promise<{ statusCode: number | undefined; body: s
 }
 
 describe('로컬 브리지 서버', () => {
+  it('인증된 세션 준비 메시지에 초기 Markdown과 feedback 상태를 포함한다', async () => {
+    const server = await startLocalBridgeServer({
+      initialMarkdown: '# 초기 문서',
+      feedbackLoop: true,
+      onPrompt: async () => undefined,
+    });
+    const session = server.createSession();
+
+    try {
+      const { ready } = await authenticate(server, session.token);
+
+      expect(ready).toMatchObject({
+        type: 'session.ready',
+        initialMarkdown: '# 초기 문서',
+        feedbackLoop: true,
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it('유효한 세션 토큰으로 연결하면 준비 메시지를 보낸다', async () => {
     const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
     const session = server.createSession();

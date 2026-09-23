@@ -66,6 +66,8 @@ export const SessionReadySchema = z.object({
   type: z.literal('session.ready'),
   sessionId: z.string().uuid(),
   expiresAt: z.string().datetime(),
+  initialMarkdown: z.string().optional(),
+  feedbackLoop: z.boolean().optional(),
 });
 
 export const PromptResultSchema = z.object({

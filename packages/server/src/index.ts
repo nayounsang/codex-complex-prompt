@@ -37,6 +37,8 @@ export interface LocalBridgeServerOptions extends SessionStoreOptions {
   readonly promptTimeoutMs?: number;
   readonly maxConnections?: number;
   readonly handshakeTimeoutMs?: number;
+  readonly initialMarkdown?: string;
+  readonly feedbackLoop?: boolean;
   readonly onPrompt: (prompt: string, context: PromptContext) => Promise<PromptAdapterResult>;
 }
 
@@ -103,7 +105,15 @@ export async function startLocalBridgeServer(
     };
     webSocket.once('close', releaseConnection);
     webSocket.once('error', releaseConnection);
-    attachConnection(webSocket, store, options.onPrompt, promptTimeoutMs, handshakeTimeoutMs);
+    attachConnection(
+      webSocket,
+      store,
+      options.onPrompt,
+      promptTimeoutMs,
+      handshakeTimeoutMs,
+      options.initialMarkdown,
+      options.feedbackLoop ?? false,
+    );
   });
 
   await listen(httpServer, host, port);
@@ -143,6 +153,8 @@ function attachConnection(
   onPrompt: LocalBridgeServerOptions['onPrompt'],
   promptTimeoutMs: number,
   handshakeTimeoutMs: number,
+  initialMarkdown: string | undefined,
+  feedbackLoop: boolean,
 ): void {
   let sessionId: string | undefined;
   const submissions = new Set<string>();
@@ -212,6 +224,8 @@ function attachConnection(
         type: 'session.ready',
         sessionId: session.id,
         expiresAt: session.expiresAt.toISOString(),
+        ...(initialMarkdown === undefined ? {} : { initialMarkdown }),
+        ...(feedbackLoop ? { feedbackLoop } : {}),
       });
       return;
     }

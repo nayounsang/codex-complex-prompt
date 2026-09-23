@@ -5,6 +5,7 @@ import {
 } from '@codex-complex-prompt/protocol';
 
 import { resolveInitialMarkdown } from './codex-prompt-input.js';
+import { DEFAULT_BROWSER_WAIT_TIMEOUT_MS } from './codex-hook-timeouts.js';
 import {
   createFeedbackLoopStateStore,
   type FeedbackLoopStateStore,
@@ -77,7 +78,11 @@ export async function runCodexUserPromptHook(
     inputAdapter: {
       submit: async (command: string, context) => {
         const mode = context?.mode ?? 'edit';
-        if (mode === 'feedback') await feedbackLoopState.activate(input.session_id);
+        if (mode === 'feedback' && command.trim() !== '') {
+          await feedbackLoopState.activate(input.session_id);
+        } else {
+          await feedbackLoopState.clear(input.session_id);
+        }
         resolveCommand?.({ command, mode });
         return submissionResult;
       },
@@ -92,7 +97,7 @@ export async function runCodexUserPromptHook(
   try {
     const submission = await waitForCommand(
       commandResult,
-      options.timeoutMs ?? 120_000,
+      options.timeoutMs ?? DEFAULT_BROWSER_WAIT_TIMEOUT_MS,
       options.signal,
     );
     const command = submission.command.trim();

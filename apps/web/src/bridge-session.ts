@@ -13,6 +13,8 @@ interface BridgeSession {
   readonly error: string | null;
   readonly closeInSeconds: number | null;
   readonly bridgeUrl: string | null;
+  readonly initialMarkdown: string | null;
+  readonly feedbackLoop: boolean;
   readonly submit: (prompt: string, mode?: PromptSubmitMode) => Promise<PromptResult>;
 }
 
@@ -61,6 +63,8 @@ export function useBridgeSession(): BridgeSession {
   const [state, setState] = useState<ConnectionState>(() => getInitialConnection().state);
   const [error, setError] = useState<string | null>(() => getInitialConnection().error);
   const [closeInSeconds, setCloseInSeconds] = useState<number | null>(null);
+  const [initialMarkdown, setInitialMarkdown] = useState<string | null>(null);
+  const [feedbackLoop, setFeedbackLoop] = useState(false);
   const [bridgeUrl, setBridgeUrl] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     return new URLSearchParams(window.location.search).get('bridge') ?? window.location.origin;
@@ -137,6 +141,8 @@ export function useBridgeSession(): BridgeSession {
         if (message.data.type === 'session.ready') {
           setState('connected');
           setError(null);
+          setInitialMarkdown(message.data.initialMarkdown ?? '');
+          setFeedbackLoop(message.data.feedbackLoop ?? false);
         } else if (message.data.type === 'prompt.result') {
           const result: PromptResult = {
             status: message.data.status,
@@ -250,5 +256,5 @@ export function useBridgeSession(): BridgeSession {
     [],
   );
 
-  return { state, error, closeInSeconds, bridgeUrl, submit };
+  return { state, error, closeInSeconds, bridgeUrl, initialMarkdown, feedbackLoop, submit };
 }

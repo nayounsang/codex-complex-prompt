@@ -123,6 +123,18 @@ describe('프로토콜 스키마', () => {
     ).toBe(true);
   });
 
+  it('인증된 서버 준비 메시지의 초기 Markdown과 feedback 상태를 검증한다', () => {
+    expect(
+      ServerMessageSchema.safeParse({
+        type: 'session.ready',
+        sessionId: '00000000-0000-4000-8000-000000000002',
+        expiresAt: '2026-09-20T00:00:00.000Z',
+        initialMarkdown: '# Initial document',
+        feedbackLoop: true,
+      }).success,
+    ).toBe(true);
+  });
+
   it('feedback 결과의 최신 Markdown을 검증한다', () => {
     const result = ServerMessageSchema.safeParse({
       type: 'prompt.result',

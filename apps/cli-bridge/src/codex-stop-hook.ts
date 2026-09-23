@@ -4,6 +4,7 @@ import {
   createFeedbackLoopStateStore,
   type FeedbackLoopStateStore,
 } from './feedback-loop-state.js';
+import { DEFAULT_BROWSER_WAIT_TIMEOUT_MS } from './codex-hook-timeouts.js';
 import { startCliBridge, type CliBridgeOptions } from './index.js';
 
 export type CodexStopHookOutput =
@@ -80,11 +81,17 @@ export async function runCodexStopHook(
   }
 
   try {
-    const submission = await waitForSubmission(browserSubmission, options.timeoutMs ?? 120_000);
+    const submission = await waitForSubmission(
+      browserSubmission,
+      options.timeoutMs ?? DEFAULT_BROWSER_WAIT_TIMEOUT_MS,
+    );
     resolveBridgeSubmission?.();
     await flushBridgeSubmission();
     if (submission.mode === 'finish') {
       await stateStore.clear(input.session_id);
+      if (submission.prompt.trim() === '') {
+        return continueWithMessage('The feedback review ended without a final document.');
+      }
       return {
         decision: 'block',
         reason:

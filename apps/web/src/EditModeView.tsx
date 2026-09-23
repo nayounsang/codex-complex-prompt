@@ -4,7 +4,7 @@ import { LazyMarkdownEditor } from './LazyMarkdownEditor.js';
 import type { MarkdownEditorHandle } from './MarkdownEditor.js';
 
 interface EditModeViewProps {
-  readonly markdown: string;
+  readonly initialMarkdown: string;
   readonly isSubmitting: boolean;
   readonly onMarkdownChange: (markdown: string) => void;
   readonly validationError: string | null;
@@ -12,13 +12,13 @@ interface EditModeViewProps {
 }
 
 export function EditModeView({
-  markdown,
+  initialMarkdown: editorInitialMarkdown,
   isSubmitting,
   onMarkdownChange,
   validationError,
   editorRef,
 }: EditModeViewProps): React.JSX.Element {
-  const [initialMarkdown] = useState(markdown);
+  const [initialMarkdown] = useState(editorInitialMarkdown);
   return (
     <section className="editor-scroll-region" aria-label="Prompt editor">
       <div className="editor-page">

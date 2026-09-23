@@ -2,6 +2,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
+import { CODEX_HOOK_TIMEOUT_SECONDS } from './codex-hook-timeouts.js';
+
 export const CODEX_COMPLEX_PROMPT_HOOK_MARKER = 'Codex Complex Prompt command editor';
 export const CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER = 'Codex Complex Prompt feedback editor';
 export const CODEX_COMPLEX_PROMPT_LEGACY_STOP_HOOK_MARKER = 'Codex Complex Prompt browser review';
@@ -41,7 +43,7 @@ export async function installCodexUserPromptHook(
       {
         type: 'command',
         command,
-        timeout: 120,
+        timeout: CODEX_HOOK_TIMEOUT_SECONDS,
         statusMessage: CODEX_COMPLEX_PROMPT_HOOK_MARKER,
       },
     ],
@@ -56,7 +58,7 @@ export async function installCodexUserPromptHook(
       {
         type: 'command',
         command: stopCommand,
-        timeout: 120,
+        timeout: CODEX_HOOK_TIMEOUT_SECONDS,
         statusMessage: CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
       },
     ],

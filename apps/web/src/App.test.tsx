@@ -272,8 +272,6 @@ function renderWithSession(
   feedbackLoop = false,
 ): MockWebSocket {
   const params = new URLSearchParams({ token: 'test-token', bridge });
-  if (initialMarkdown !== undefined) params.set('markdown', initialMarkdown);
-  if (feedbackLoop) params.set('feedbackLoop', '1');
   window.history.replaceState({}, '', `/?${params.toString()}`);
   vi.stubGlobal('WebSocket', MockWebSocket);
   vi.stubGlobal('crypto', { randomUUID: () => '00000000-0000-4000-8000-000000000004' });
@@ -281,14 +279,18 @@ function renderWithSession(
   render(<App />);
   const socket = MockWebSocket.instance;
   if (socket === undefined) throw new Error('Mock WebSocket was not created.');
-  socket.emit(
-    'message',
-    JSON.stringify({
-      type: 'session.ready',
-      sessionId: '00000000-0000-4000-8000-000000000005',
-      expiresAt: '2026-09-20T00:00:00.000Z',
-    }),
-  );
+  act(() => {
+    socket.emit(
+      'message',
+      JSON.stringify({
+        type: 'session.ready',
+        sessionId: '00000000-0000-4000-8000-000000000005',
+        expiresAt: '2026-09-20T00:00:00.000Z',
+        ...(initialMarkdown === undefined ? {} : { initialMarkdown }),
+        ...(feedbackLoop ? { feedbackLoop } : {}),
+      }),
+    );
+  });
   const editorPlaceholder = screen.queryByRole('button', { name: 'Markdown command editor' });
   if (editorPlaceholder !== null) fireEvent.pointerEnter(editorPlaceholder);
   return socket;
@@ -422,7 +424,15 @@ describe('명령 편집기', () => {
     expect(screen.queryByRole('textbox', { name: /textarea/i })).not.toBeInTheDocument();
   });
 
-  it('URL의 markdown query parameter를 편집기 초기값으로 전송한다', async () => {
+  it('AI Feedback Mode에서 피드백이 없으면 Send Feedback을 비활성화한다', () => {
+    renderWithSession();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    expect(screen.getByRole('button', { name: 'Send Feedback' })).toBeDisabled();
+  });
+
+  it('인증된 세션 준비 메시지의 Markdown을 편집기 초기값으로 전송한다', async () => {
     const socket = renderWithSession('http://127.0.0.1:4321', '한글\n\n특수문자: &?#');
 
     await waitFor(() =>
@@ -437,6 +447,7 @@ describe('명령 편집기', () => {
         prompt: '한글\n\n특수문자: &?#',
       }),
     );
+    expect(window.location.search).toBe('');
   });
 
   it('Markdown 이미지 URL을 포함한 문서를 앞뒤 공백 없이 전송한다', async () => {
@@ -1147,6 +1158,53 @@ describe('명령 편집기', () => {
         mode: 'finish',
       }),
     );
+  });
+
+  it('빈 문서를 feedback loop에서 제출하면 확인을 요청한 뒤 빈 최종본을 보낸다', async () => {
+    const socket = renderWithSession('http://127.0.0.1:4321', '', true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
+
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Submit an empty document?');
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('"mode":"finish"'));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit empty document' }));
+
+    expect(socket.send).toHaveBeenLastCalledWith(
+      JSON.stringify({
+        type: 'prompt.submit',
+        submissionId: '00000000-0000-4000-8000-000000000004',
+        prompt: '',
+        mode: 'finish',
+      }),
+    );
+  });
+
+  it('12,000자를 넘는 최종 문서는 전송하지 않고 길이 오류를 표시한다', async () => {
+    const socket = renderWithSession('http://127.0.0.1:4321', '# Revised draft', true);
+    await editMarkdown('x'.repeat(12_001));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('12,000 characters or fewer');
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('"mode":"finish"'));
+  });
+
+  it('직렬화된 feedback이 12,000자를 넘으면 전송하지 않고 길이 오류를 표시한다', async () => {
+    const socket = renderWithSession();
+    await editMarkdown('x'.repeat(11_990));
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add global feedback' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Global feedback' }), {
+      target: { value: 'Clarify this document.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send Feedback (1)' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Feedback must be 12,000 characters or fewer',
+    );
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('"mode":"feedback"'));
   });
 
   it('제출 전에 미전송 feedback 경고에서 Approve anyway를 선택하면 일반 제출을 보낸다', async () => {

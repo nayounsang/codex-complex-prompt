@@ -7,6 +7,7 @@ import type { MarkdownEditorHandle } from './MarkdownEditor.js';
 interface PromptSessionShellProps {
   readonly mode: 'edit' | 'feedback';
   readonly markdown: string;
+  readonly editorInitialMarkdown: string;
   readonly editorRef: React.RefObject<MarkdownEditorHandle | null>;
   readonly isConnected: boolean;
   readonly isSubmitting: boolean;
@@ -15,6 +16,8 @@ interface PromptSessionShellProps {
   readonly pendingSelection: SelectionAnchor | null;
   readonly validationError: string | null;
   readonly feedbackError: string | null;
+  readonly allowEmptySubmit: boolean;
+  readonly editorInitializationKey: string;
   readonly onModeChange: (mode: 'edit' | 'feedback') => void;
   readonly onMarkdownChange: (markdown: string) => void;
   readonly onSubmit: () => void;
@@ -35,6 +38,7 @@ export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.El
         isConnected={props.isConnected}
         isSubmitting={props.isSubmitting}
         isEmpty={props.markdown.trim() === ''}
+        allowEmptySubmit={props.allowEmptySubmit}
         feedbackCount={props.feedback.length}
         globalFeedback={props.globalFeedback}
         onModeChange={props.onModeChange}
@@ -44,7 +48,8 @@ export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.El
       />
       {props.mode === 'edit' ? (
         <EditModeView
-          markdown={props.markdown}
+          key={props.editorInitializationKey}
+          initialMarkdown={props.editorInitialMarkdown}
           isSubmitting={props.isSubmitting}
           onMarkdownChange={props.onMarkdownChange}
           validationError={props.validationError}
