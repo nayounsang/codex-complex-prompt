@@ -553,6 +553,13 @@ button:focus-visible,
   cursor: pointer;
   outline: none;
 }
+.template-item-row {
+  display: flex;
+  align-items: stretch;
+}
+.template-item-row > .template-select-item {
+  flex: 1;
+}
 .template-select-item[data-highlighted] {
   background: #f2f2f0;
 }

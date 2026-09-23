@@ -121,17 +121,20 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
             <Select.Popup className="template-select-popup">
               <Select.List>
                 {props.templates.map((template) => (
-                  <Select.Item
+                  <div
                     key={template.id}
-                    value={template.id}
-                    className="template-select-item"
+                    className="template-item-row"
+                    role="group"
+                    aria-label={template.name}
                   >
-                    <Select.ItemText className="template-item-content">
-                      <span className="template-item-copy">
-                        <span className="template-item-name">{template.name}</span>
-                        <span className="template-item-description">{template.description}</span>
-                      </span>
-                    </Select.ItemText>
+                    <Select.Item value={template.id} className="template-select-item">
+                      <Select.ItemText className="template-item-content">
+                        <span className="template-item-copy">
+                          <span className="template-item-name">{template.name}</span>
+                          <span className="template-item-description">{template.description}</span>
+                        </span>
+                      </Select.ItemText>
+                    </Select.Item>
                     <span className="template-item-actions">
                       <button
                         type="button"
@@ -164,7 +167,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                         </svg>
                       </button>
                     </span>
-                  </Select.Item>
+                  </div>
                 ))}
                 <Select.Item
                   value="__create__"
