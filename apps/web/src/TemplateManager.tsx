@@ -129,16 +129,12 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                       </span>
                     </Select.ItemText>
                     <span className="template-item-actions">
-                      <Button
+                      <button
+                        type="button"
                         className="template-item-action"
                         aria-label={`Edit ${template.name}`}
                         title="Edit template"
                         disabled={props.isDisabled}
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          openEditor(template);
-                        }}
                         onClick={(event) => {
                           event.stopPropagation();
                           openEditor(template);
@@ -147,26 +143,22 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                         <svg viewBox="0 0 16 16" aria-hidden="true">
                           <path d="m10.7 2.3 3 3M2.5 13.5l2.8-.6 7.9-7.9a1.4 1.4 0 0 0-2-2l-7.9 7.9-.8 2.6Z" />
                         </svg>
-                      </Button>
-                      <Button
+                      </button>
+                      <button
+                        type="button"
                         className="template-item-action template-item-delete"
                         aria-label={`Delete ${template.name}`}
                         title="Delete template"
                         disabled={props.isDisabled}
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          openDeleteConfirmation(template);
-                        }}
                         onClick={(event) => {
                           event.stopPropagation();
-                          if (event.detail === 0) openDeleteConfirmation(template);
+                          openDeleteConfirmation(template);
                         }}
                       >
                         <svg viewBox="0 0 16 16" aria-hidden="true">
                           <path d="M2.5 4.5h11m-9.5 0 .6 9h5.8l.6-9M6 4.5V2.8h4v1.7m-3.5 2v4.5m3-4.5v4.5" />
                         </svg>
-                      </Button>
+                      </button>
                     </span>
                   </Select.Item>
                 ))}
