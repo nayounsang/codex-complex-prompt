@@ -1,0 +1,14 @@
+{
+  "name": "@codex-complex-prompt/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^22.13.4",
+    "typescript": "^5.8.2"
+  }
+}

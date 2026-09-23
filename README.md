@@ -105,6 +105,32 @@ pnpm package:smoke
 pnpm dev
 ```
 
+### CLI and browser end-to-end checks
+
+CI builds the web UI and CLI bridge, then runs the two browser flows through the CLI hook process
+with Playwright and a fake Codex process. The fake process supplies Codex-shaped hook JSON and reads
+the hook response; it does not run a model.
+
+Run the checks locally after installing Chromium once:
+
+```bash
+pnpm build
+pnpm --filter @codex-complex-prompt/e2e exec playwright install chromium
+pnpm test:e2e
+```
+
+To check compatibility with the Codex CLI installed on your machine, use an isolated Codex home so
+the hook setup does not change your normal Codex configuration:
+
+```bash
+export CODEX_HOME="$(mktemp -d)"
+node "$(pwd)/apps/cli-bridge/dist/index.js" hook install
+codex
+```
+
+In that Codex session, invoke `$complex-prompt` with a Markdown document, submit a feedback request,
+and confirm Codex reopens the improved document. Remove the temporary directory when finished.
+
 ### Workspace
 
 - `apps/cli-bridge`: npm executable, loopback bridge, Codex UserPromptSubmit/Stop hook과 설정 관리

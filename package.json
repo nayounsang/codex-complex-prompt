@@ -17,7 +17,8 @@
     "changeset": "changeset",
     "changeset:status": "changeset status",
     "format:check": "prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:e2e": "pnpm --filter @codex-complex-prompt/e2e test:e2e"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.7",

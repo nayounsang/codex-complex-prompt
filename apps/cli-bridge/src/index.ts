@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, realpathSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import open from 'open';
@@ -23,8 +24,8 @@ import {
   removeCodexSkill,
   removeCodexPrompt,
 } from './codex-prompt-config.js';
-import { runCodexUserPromptHook } from './codex-user-prompt-hook.js';
-import { runCodexStopHook } from './codex-stop-hook.js';
+import { runCodexUserPromptHook } from './features/input/codex-user-prompt-hook.js';
+import { runCodexStopHook } from './features/feedback/codex-stop-hook.js';
 
 export interface CliBridgeOptions {
   readonly inputAdapter?: CodexSessionInput;
@@ -65,6 +66,11 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
   const openBrowser =
     options.openBrowser ??
     (async (url: string) => {
+      const browserUrlFile = process.env['COMPLEX_PROMPT_BROWSER_URL_FILE'];
+      if (browserUrlFile !== undefined) {
+        await writeFile(browserUrlFile, url, 'utf8');
+        return;
+      }
       await open(url);
     });
 
@@ -279,7 +285,7 @@ export {
   type CodexHookConfigOptions,
   type CodexHookConfigResult,
 } from './codex-hook-config.js';
-export { runCodexStopHook } from './codex-stop-hook.js';
+export { runCodexStopHook } from './features/feedback/codex-stop-hook.js';
 export {
   CODEX_COMPLEX_PROMPT_CONTENT,
   CODEX_COMPLEX_PROMPT_FILE_MARKER,
@@ -302,4 +308,4 @@ export {
   runCodexUserPromptHook,
   type CodexUserPromptHookOutput,
   type RunCodexUserPromptHookOptions,
-} from './codex-user-prompt-hook.js';
+} from './features/input/codex-user-prompt-hook.js';

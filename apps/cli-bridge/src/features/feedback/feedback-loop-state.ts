@@ -1,7 +1,7 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { defaultCodexHome } from './codex-hook-config.js';
+import { defaultCodexHome } from '../../codex-hook-config.js';
 
 export interface FeedbackLoopStateStore {
   activate: (sessionId: string | undefined) => Promise<boolean>;

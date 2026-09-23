@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { parseCodexUserPromptHookInput, runCodexUserPromptHook } from './codex-user-prompt-hook.js';
-import { createFeedbackLoopStateStore } from './feedback-loop-state.js';
+import { createFeedbackLoopStateStore } from '../feedback/feedback-loop-state.js';
 
 const sockets: WebSocket[] = [];
 const temporaryDirectories: string[] = [];
