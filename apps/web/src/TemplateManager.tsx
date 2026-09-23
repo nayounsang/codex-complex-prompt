@@ -65,6 +65,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
     if (result.status === 'accepted') {
       if (selected?.id === templateToDelete.id) setSelected(null);
       setTemplateToDelete(null);
+      setConfirmDelete(false);
     } else setError(result.error ?? 'The template could not be deleted.');
   }
 
@@ -82,9 +83,11 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
 
   function openDeleteConfirmation(template: PromptTemplate): void {
     setSelectOpen(false);
-    setTemplateToDelete(template);
-    setConfirmDelete(true);
     setError(null);
+    window.setTimeout(() => {
+      setTemplateToDelete(template);
+      setConfirmDelete(true);
+    }, 0);
   }
 
   const disabledReason = props.templatesError;
@@ -157,7 +160,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                         }}
                         onClick={(event) => {
                           event.stopPropagation();
-                          openDeleteConfirmation(template);
+                          if (event.detail === 0) openDeleteConfirmation(template);
                         }}
                       >
                         <svg viewBox="0 0 16 16" aria-hidden="true">
