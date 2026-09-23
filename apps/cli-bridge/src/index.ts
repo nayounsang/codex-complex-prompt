@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, realpathSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { rename, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import open from 'open';
@@ -68,7 +68,9 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
     (async (url: string) => {
       const browserUrlFile = process.env['COMPLEX_PROMPT_BROWSER_URL_FILE'];
       if (browserUrlFile !== undefined) {
-        await writeFile(browserUrlFile, url, 'utf8');
+        const temporaryUrlFile = `${browserUrlFile}.tmp`;
+        await writeFile(temporaryUrlFile, url, 'utf8');
+        await rename(temporaryUrlFile, browserUrlFile);
         return;
       }
       await open(url);
