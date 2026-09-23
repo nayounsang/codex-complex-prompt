@@ -7,8 +7,17 @@ import {
   ServerMessageSchema,
   encodeServerMessage,
   parseClientMessage,
+  truncatePromptCharacters,
   type ServerMessage,
 } from './index.js';
+
+describe('프롬프트 길이 유틸리티', () => {
+  it('지정한 Unicode code point 길이까지만 문자열을 반환한다', () => {
+    const result = truncatePromptCharacters('😀a한', 2);
+
+    expect(result).toBe('😀a');
+  });
+});
 
 describe('프로토콜 스키마', () => {
   it('유효한 프롬프트 제출 메시지를 수락한다', () => {

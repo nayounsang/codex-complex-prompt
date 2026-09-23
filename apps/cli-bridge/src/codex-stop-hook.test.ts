@@ -20,6 +20,185 @@ afterEach(async () => {
 });
 
 describe('Codex Stop hook feedback editor', () => {
+  it('빈 stdin을 받으면 Codex를 계속 진행하고 진단 메시지를 반환한다', async () => {
+    const result = await runCodexStopHook('');
+
+    expect(result).toMatchObject({ continue: true });
+    if (!('systemMessage' in result)) throw new Error('Expected a diagnostic message.');
+    expect(result.systemMessage).toContain('empty');
+  });
+
+  it('잘못된 JSON을 받으면 Codex를 계속 진행하고 진단 메시지를 반환한다', async () => {
+    const result = await runCodexStopHook('{invalid');
+
+    expect(result).toMatchObject({ continue: true });
+    if (!('systemMessage' in result)) throw new Error('Expected a diagnostic message.');
+    expect(result.systemMessage).toContain('valid JSON');
+  });
+
+  it('Stop 이벤트 계약에 맞지 않는 JSON을 받으면 편집기를 열지 않는다', async () => {
+    let browserOpened = false;
+    const result = await runCodexStopHook('{}', {
+      bridgeOptions: {
+        openBrowser: () => {
+          browserOpened = true;
+          return Promise.resolve();
+        },
+      },
+    });
+
+    expect(result).toMatchObject({ continue: true });
+    expect(browserOpened).toBe(false);
+  });
+
+  it('feedback loop 상태가 없으면 브라우저를 열지 않고 Codex를 계속 진행한다', async () => {
+    const directory = await createDirectory();
+    const stateStore = createFeedbackLoopStateStore(directory);
+    let browserOpened = false;
+    const result = await runCodexStopHook(
+      JSON.stringify({
+        hook_event_name: 'Stop',
+        session_id: 'inactive-session',
+        last_assistant_message: '# Response',
+      }),
+      {
+        feedbackLoopStateStore: stateStore,
+        bridgeOptions: {
+          openBrowser: () => {
+            browserOpened = true;
+            return Promise.resolve();
+          },
+        },
+      },
+    );
+
+    expect(result).toEqual({ continue: true });
+    expect(browserOpened).toBe(false);
+  });
+
+  it('세션 ID가 없으면 기본 상태 저장소에서 비활성으로 처리한다', async () => {
+    const result = await runCodexStopHook(
+      JSON.stringify({ hook_event_name: 'Stop', last_assistant_message: '# Response' }),
+    );
+
+    expect(result).toEqual({ continue: true });
+  });
+
+  it('마지막 응답이 비어 있으면 feedback loop 상태를 지우고 편집기를 건너뛴다', async () => {
+    const directory = await createDirectory();
+    const stateStore = createFeedbackLoopStateStore(directory);
+    const sessionId = 'empty-response-session';
+    await stateStore.activate(sessionId);
+
+    const result = await runCodexStopHook(
+      JSON.stringify({
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        last_assistant_message: '  ',
+      }),
+      { feedbackLoopStateStore: stateStore },
+    );
+
+    expect(result).toMatchObject({
+      continue: true,
+      systemMessage: expect.stringContaining('empty'),
+    });
+    expect(await stateStore.isActive(sessionId)).toBe(false);
+  });
+
+  it('브라우저를 열 수 없으면 feedback loop 상태를 지우고 진단 메시지를 반환한다', async () => {
+    const directory = await createDirectory();
+    const stateStore = createFeedbackLoopStateStore(directory);
+    const sessionId = 'browser-error-session';
+    await stateStore.activate(sessionId);
+
+    const result = await runCodexStopHook(
+      JSON.stringify({
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        last_assistant_message: '# Response',
+      }),
+      {
+        feedbackLoopStateStore: stateStore,
+        bridgeOptions: { openBrowser: () => Promise.reject(new Error('Browser unavailable')) },
+      },
+    );
+
+    expect(result).toMatchObject({
+      continue: true,
+      systemMessage: 'The feedback editor could not be reopened.',
+    });
+    expect(await stateStore.isActive(sessionId)).toBe(false);
+  });
+
+  it('사용자가 다시 feedback을 보내면 feedback continuation을 반환한다', async () => {
+    const directory = await createDirectory();
+    const stateStore = createFeedbackLoopStateStore(directory);
+    const sessionId = 'feedback-continuation-session';
+    await stateStore.activate(sessionId);
+    let browserUrl: string | undefined;
+    const resultPromise = runCodexStopHook(
+      JSON.stringify({
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        last_assistant_message: '# Current Markdown',
+      }),
+      {
+        timeoutMs: 2_000,
+        feedbackLoopStateStore: stateStore,
+        bridgeOptions: {
+          openBrowser: (url) => {
+            browserUrl = url;
+            return Promise.resolve();
+          },
+        },
+      },
+    );
+
+    await waitFor(() => browserUrl !== undefined);
+    if (browserUrl === undefined) throw new Error('Browser URL was not captured.');
+    const socket = await connectToEditor(browserUrl);
+    socket.send(
+      JSON.stringify({
+        type: 'prompt.submit',
+        submissionId: '00000000-0000-4000-8000-000000000024',
+        prompt: 'Clarify the introduction.',
+        mode: 'feedback',
+      }),
+    );
+
+    await expect(resultPromise).resolves.toMatchObject({
+      decision: 'block',
+      reason: expect.stringContaining("Apply the user's browser feedback"),
+    });
+  });
+
+  it('브라우저 제출이 timeout을 넘으면 상태를 지우고 Codex를 계속 진행한다', async () => {
+    const directory = await createDirectory();
+    const stateStore = createFeedbackLoopStateStore(directory);
+    const sessionId = 'timeout-session';
+    await stateStore.activate(sessionId);
+
+    const result = await runCodexStopHook(
+      JSON.stringify({
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        last_assistant_message: '# Response',
+      }),
+      {
+        timeoutMs: 1,
+        feedbackLoopStateStore: stateStore,
+        bridgeOptions: { openBrowser: () => Promise.resolve() },
+      },
+    );
+
+    expect(result).toMatchObject({
+      continue: true,
+      systemMessage: 'Browser feedback editor timed out.',
+    });
+    expect(await stateStore.isActive(sessionId)).toBe(false);
+  });
+
   it('마지막 Markdown을 새 편집기에 열고 브라우저 수정을 Codex continuation으로 전달한다', async () => {
     const directory = await createDirectory();
     const stateStore = createFeedbackLoopStateStore(directory);
