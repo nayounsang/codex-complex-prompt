@@ -30,6 +30,7 @@ export const CodexUserPromptSubmitInputSchema = z
   .object({
     hook_event_name: z.literal('UserPromptSubmit').optional(),
     session_id: z.string().optional(),
+    cwd: z.string().optional(),
     prompt: z.string(),
   })
   .passthrough();
@@ -48,6 +49,27 @@ export const SessionHandshakeSchema = z.object({
   token: z.string().min(32).max(256),
 });
 
+export const PromptTemplateSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(120),
+  description: z.string().max(500),
+  body: z.string(),
+});
+
+export const TemplateRequestSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('template.list'), requestId: z.string().uuid() }),
+  z.object({
+    type: z.literal('template.save'),
+    requestId: z.string().uuid(),
+    template: PromptTemplateSchema,
+  }),
+  z.object({
+    type: z.literal('template.delete'),
+    requestId: z.string().uuid(),
+    id: z.string().uuid(),
+  }),
+]);
+
 export const PromptSubmitSchema = z
   .object({
     type: z.literal('prompt.submit'),
@@ -60,7 +82,11 @@ export const PromptSubmitSchema = z
     path: ['prompt'],
   });
 
-export const ClientMessageSchema = z.union([SessionHandshakeSchema, PromptSubmitSchema]);
+export const ClientMessageSchema = z.union([
+  SessionHandshakeSchema,
+  PromptSubmitSchema,
+  TemplateRequestSchema,
+]);
 
 export const SessionReadySchema = z.object({
   type: z.literal('session.ready'),
@@ -68,6 +94,16 @@ export const SessionReadySchema = z.object({
   expiresAt: z.string().datetime(),
   initialMarkdown: z.string().optional(),
   feedbackLoop: z.boolean().optional(),
+  templates: z.array(PromptTemplateSchema).optional(),
+  templatesError: z.string().optional(),
+});
+
+export const TemplateResultSchema = z.object({
+  type: z.literal('template.result'),
+  requestId: z.string().uuid(),
+  status: z.enum(['accepted', 'failed']),
+  templates: z.array(PromptTemplateSchema).optional(),
+  error: z.string().optional(),
 });
 
 export const PromptResultSchema = z.object({
@@ -93,6 +129,7 @@ export const ProtocolErrorSchema = z.object({
 export const ServerMessageSchema = z.discriminatedUnion('type', [
   SessionReadySchema,
   PromptResultSchema,
+  TemplateResultSchema,
   ProtocolErrorSchema,
 ]);
 
@@ -101,6 +138,8 @@ export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 export type CodexUserPromptSubmitInput = z.infer<typeof CodexUserPromptSubmitInputSchema>;
 export type CodexStopHookInput = z.infer<typeof CodexStopHookInputSchema>;
 export type PromptSubmit = z.infer<typeof PromptSubmitSchema>;
+export type PromptTemplate = z.infer<typeof PromptTemplateSchema>;
+export type TemplateRequest = z.infer<typeof TemplateRequestSchema>;
 export type PromptSubmitMode = NonNullable<PromptSubmit['mode']>;
 
 export function parseClientMessage(input: unknown): ClientMessage {

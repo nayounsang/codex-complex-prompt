@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   CodexSessionInputAdapter,
@@ -50,6 +53,52 @@ describe('CLI 브리지 동작', () => {
     } finally {
       socket.close();
       await bridge.stop();
+    }
+  });
+
+  it('인증된 템플릿 저장 요청을 프로젝트 Markdown 파일에 기록한다', async () => {
+    const projectDirectory = await mkdtemp(join(tmpdir(), 'complex-prompt-bridge-templates-'));
+    const bridge = await startCliBridge({ projectDirectory, openBrowser: () => Promise.resolve() });
+    const socket = new WebSocket(`${bridge.server.url}/ws`);
+    const nextMessage = (): Promise<Record<string, unknown>> =>
+      new Promise((resolve) =>
+        socket.once('message', (data) =>
+          resolve(JSON.parse(messageText(data)) as Record<string, unknown>),
+        ),
+      );
+
+    try {
+      await new Promise<void>((resolve) => socket.once('open', resolve));
+      const token = new URL(bridge.browserUrl).searchParams.get('token');
+      if (token === null) throw new Error('Session token was not generated.');
+      socket.send(JSON.stringify({ type: 'session.handshake', token }));
+      expect(await nextMessage()).toMatchObject({ type: 'session.ready' });
+      const template = {
+        id: '00000000-0000-4000-8000-000000000042',
+        name: '브리지 저장 확인',
+        description: '저장 요청',
+        body: '# 파일로 저장',
+      };
+      socket.send(
+        JSON.stringify({
+          type: 'template.save',
+          requestId: '00000000-0000-4000-8000-000000000043',
+          template,
+        }),
+      );
+
+      expect(await nextMessage()).toMatchObject({
+        type: 'template.result',
+        status: 'accepted',
+        templates: expect.arrayContaining([template]),
+      });
+      await expect(
+        readdir(join(projectDirectory, 'complex-prompt', 'templates')),
+      ).resolves.toContain(`${template.id}.md`);
+    } finally {
+      socket.close();
+      await bridge.stop();
+      await rm(projectDirectory, { recursive: true, force: true });
     }
   });
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ServerMessageSchema } from '@codex-complex-prompt/protocol';
-import type { PromptSubmitMode } from '@codex-complex-prompt/protocol';
+import type { PromptSubmitMode, PromptTemplate } from '@codex-complex-prompt/protocol';
 
 const COMMAND_WINDOW_CLOSE_DELAY_MS = 3_000;
 
@@ -15,6 +15,10 @@ interface BridgeSession {
   readonly bridgeUrl: string | null;
   readonly initialMarkdown: string | null;
   readonly feedbackLoop: boolean;
+  readonly templates: readonly PromptTemplate[];
+  readonly templatesError: string | null;
+  readonly saveTemplate: (template: PromptTemplate) => Promise<TemplateResult>;
+  readonly deleteTemplate: (id: string) => Promise<TemplateResult>;
   readonly submit: (prompt: string, mode?: PromptSubmitMode) => Promise<PromptResult>;
 }
 
@@ -22,6 +26,12 @@ export interface PromptResult {
   readonly status: 'accepted' | 'failed';
   readonly error?: string;
   readonly prompt?: string;
+}
+
+export interface TemplateResult {
+  readonly status: 'accepted' | 'failed';
+  readonly templates?: readonly PromptTemplate[];
+  readonly error?: string;
 }
 
 interface BridgeUrlResult {
@@ -65,6 +75,8 @@ export function useBridgeSession(): BridgeSession {
   const [closeInSeconds, setCloseInSeconds] = useState<number | null>(null);
   const [initialMarkdown, setInitialMarkdown] = useState<string | null>(null);
   const [feedbackLoop, setFeedbackLoop] = useState(false);
+  const [templates, setTemplates] = useState<readonly PromptTemplate[]>([]);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [bridgeUrl, setBridgeUrl] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     return new URLSearchParams(window.location.search).get('bridge') ?? window.location.origin;
@@ -75,6 +87,7 @@ export function useBridgeSession(): BridgeSession {
   const closeTimer = useRef<number | undefined>(undefined);
   const countdownTimer = useRef<number | undefined>(undefined);
   const pendingResults = useRef(new Map<string, (result: PromptResult) => void>());
+  const pendingTemplateResults = useRef(new Map<string, (result: TemplateResult) => void>());
 
   const clearCloseTimers = useCallback((): void => {
     if (closeTimer.current !== undefined) {
@@ -113,6 +126,11 @@ export function useBridgeSession(): BridgeSession {
         const pending = pendingResults.current;
         pendingResults.current = new Map();
         for (const resolve of pending.values()) resolve({ status: 'failed', error: message });
+
+        const pendingTemplates = pendingTemplateResults.current;
+        pendingTemplateResults.current = new Map();
+        for (const resolve of pendingTemplates.values())
+          resolve({ status: 'failed', error: message });
       }
 
       function handleOpen(): void {
@@ -143,6 +161,20 @@ export function useBridgeSession(): BridgeSession {
           setError(null);
           setInitialMarkdown(message.data.initialMarkdown ?? '');
           setFeedbackLoop(message.data.feedbackLoop ?? false);
+          setTemplates(message.data.templates ?? []);
+          setTemplatesError(message.data.templatesError ?? null);
+        } else if (message.data.type === 'template.result') {
+          const result: TemplateResult = {
+            status: message.data.status,
+            ...(message.data.templates === undefined ? {} : { templates: message.data.templates }),
+            ...(message.data.error === undefined ? {} : { error: message.data.error }),
+          };
+          if (result.status === 'accepted' && result.templates !== undefined) {
+            setTemplates(result.templates);
+            setTemplatesError(null);
+          }
+          pendingTemplateResults.current.get(message.data.requestId)?.(result);
+          pendingTemplateResults.current.delete(message.data.requestId);
         } else if (message.data.type === 'prompt.result') {
           const result: PromptResult = {
             status: message.data.status,
@@ -256,5 +288,51 @@ export function useBridgeSession(): BridgeSession {
     [],
   );
 
-  return { state, error, closeInSeconds, bridgeUrl, initialMarkdown, feedbackLoop, submit };
+  const requestTemplateChange = useCallback(
+    (
+      request:
+        | { type: 'template.save'; template: PromptTemplate }
+        | { type: 'template.delete'; id: string },
+    ): Promise<TemplateResult> => {
+      const socket = socketRef.current;
+      if (socket === null || socket.readyState !== WebSocket.OPEN) {
+        return Promise.resolve({ status: 'failed', error: 'The bridge is not connected.' });
+      }
+      const requestId = crypto.randomUUID();
+      const result = new Promise<TemplateResult>((resolve) =>
+        pendingTemplateResults.current.set(requestId, resolve),
+      );
+      try {
+        socket.send(JSON.stringify({ ...request, requestId }));
+      } catch {
+        pendingTemplateResults.current.delete(requestId);
+        return Promise.resolve({ status: 'failed', error: 'The bridge connection closed.' });
+      }
+      return result;
+    },
+    [],
+  );
+
+  const saveTemplate = useCallback(
+    (template: PromptTemplate) => requestTemplateChange({ type: 'template.save', template }),
+    [requestTemplateChange],
+  );
+  const deleteTemplate = useCallback(
+    (id: string) => requestTemplateChange({ type: 'template.delete', id }),
+    [requestTemplateChange],
+  );
+
+  return {
+    state,
+    error,
+    closeInSeconds,
+    bridgeUrl,
+    initialMarkdown,
+    feedbackLoop,
+    templates,
+    templatesError,
+    saveTemplate,
+    deleteTemplate,
+    submit,
+  };
 }

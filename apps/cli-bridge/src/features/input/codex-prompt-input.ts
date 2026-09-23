@@ -8,13 +8,16 @@ import {
   truncatePromptCharacters,
 } from '@codex-complex-prompt/protocol';
 
-export async function resolveInitialMarkdown(input: string): Promise<string> {
+export async function resolveInitialMarkdown(
+  input: string,
+  workingDirectory = process.cwd(),
+): Promise<string> {
   const trimmedInput = input.trim();
   let markdown = trimmedInput;
 
   if (isLocalMarkdownPath(trimmedInput)) {
     markdown =
-      (await readInitialMarkdownFile(resolve(process.cwd(), trimmedInput))) ?? trimmedInput;
+      (await readInitialMarkdownFile(resolve(workingDirectory, trimmedInput))) ?? trimmedInput;
   }
 
   return truncatePromptCharacters(markdown);

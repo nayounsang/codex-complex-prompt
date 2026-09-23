@@ -1,6 +1,8 @@
 import type { FeedbackAnnotation } from './features/feedback/feedback-types.js';
 import { ModeTabs } from './ModeTabs.js';
 import { PromptActions } from './PromptActions.js';
+import { TemplateManager } from './TemplateManager.js';
+import type { PromptTemplate } from '@codex-complex-prompt/protocol';
 
 interface PromptHeaderProps {
   readonly mode: 'edit' | 'feedback';
@@ -14,6 +16,20 @@ interface PromptHeaderProps {
   readonly onSubmit: () => void;
   readonly onSendFeedback: () => void;
   readonly onAddGlobalFeedback: (feedback: string) => void;
+  readonly templates: readonly PromptTemplate[];
+  readonly templatesError: string | null;
+  readonly markdown: string;
+  readonly onApplyTemplate: (body: string) => void;
+  readonly onSaveTemplate: (template: PromptTemplate) => Promise<{
+    status: 'accepted' | 'failed';
+    templates?: readonly PromptTemplate[];
+    error?: string;
+  }>;
+  readonly onDeleteTemplate: (id: string) => Promise<{
+    status: 'accepted' | 'failed';
+    templates?: readonly PromptTemplate[];
+    error?: string;
+  }>;
 }
 
 export function PromptHeader(props: PromptHeaderProps): React.JSX.Element {
@@ -21,6 +37,17 @@ export function PromptHeader(props: PromptHeaderProps): React.JSX.Element {
     <section className="app-action-bar" aria-label="Prompt actions">
       <div className="action-inner">
         <ModeTabs mode={props.mode} onChange={props.onModeChange} />
+        {props.mode === 'edit' && (
+          <TemplateManager
+            templates={props.templates}
+            templatesError={props.templatesError}
+            markdown={props.markdown}
+            isDisabled={!props.isConnected || props.isSubmitting}
+            onApply={props.onApplyTemplate}
+            onSave={props.onSaveTemplate}
+            onDelete={props.onDeleteTemplate}
+          />
+        )}
         <PromptActions
           mode={props.mode}
           isConnected={props.isConnected}
