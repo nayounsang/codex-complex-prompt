@@ -166,7 +166,7 @@ describe('로컬 브리지 서버', () => {
     }
   });
 
-  it('feedback 제출에 최신 Markdown과 새 세션을 응답한다', async () => {
+  it('feedback 제출에 최신 Markdown을 응답한다', async () => {
     const server = await startLocalBridgeServer({
       onPrompt: async (_prompt, context) => {
         expect(context.mode).toBe('feedback');
@@ -186,13 +186,11 @@ describe('로컬 브리지 서버', () => {
         }),
       );
 
-      const result = (await nextMessage(socket)) as {
-        type: string;
-        prompt?: string;
-        nextSession?: { token: string };
-      };
-      expect(result).toMatchObject({ type: 'prompt.result', prompt: '# Updated Markdown' });
-      expect(result.nextSession?.token).toHaveLength(43);
+      expect(await nextMessage(socket)).toMatchObject({
+        type: 'prompt.result',
+        status: 'accepted',
+        prompt: '# Updated Markdown',
+      });
     } finally {
       await server.close();
     }

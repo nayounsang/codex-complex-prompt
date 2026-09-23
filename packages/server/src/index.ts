@@ -12,6 +12,7 @@ import {
   ClientMessageSchema,
   encodeServerMessage,
   type PromptSubmit,
+  type PromptSubmitMode,
   type ServerMessage,
 } from '@codex-complex-prompt/protocol';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
@@ -24,7 +25,7 @@ export type { SessionRecord, SessionStoreOptions } from './session-store.js';
 export interface PromptContext {
   readonly sessionId: string;
   readonly submissionId: string;
-  readonly mode: 'edit' | 'feedback';
+  readonly mode: PromptSubmitMode;
 }
 
 export type PromptAdapterResult = string | void;
@@ -255,14 +256,6 @@ function attachConnection(
         status: 'accepted',
         ...(latestMarkdown === undefined ? {} : { prompt: latestMarkdown }),
       };
-      if (submission.mode === 'feedback') {
-        const nextSession = store.create();
-        result.nextSession = {
-          token: nextSession.token,
-          sessionId: nextSession.id,
-          expiresAt: nextSession.expiresAt.toISOString(),
-        };
-      }
       send(webSocket, result);
     } catch {
       send(webSocket, {

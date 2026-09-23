@@ -14,8 +14,12 @@ argument-hint: "[PROMPT=<text>]"
 
 ${CODEX_COMPLEX_PROMPT_FILE_MARKER}
 This is a browser-only command entrypoint. Do not analyze or answer this request before the
-UserPromptSubmit hook returns. The hook opens one browser command editor; do not invoke the CLI or
-open another browser. After the hook returns, execute only the command in its additionalContext.
+UserPromptSubmit hook returns. Execute the command in its additionalContext. If it contains an AI
+Feedback request, apply it to the complete Current Markdown included with that request and return
+the complete revised Markdown only, without a summary or code fence. The Stop hook will reopen the
+browser editor with your response. Continue the feedback loop when the user chooses Send Feedback;
+when the user chooses Submit, treat the accepted Markdown as the final request and execute its
+command without reopening the browser.
 `;
 
 export const CODEX_COMPLEX_SKILL_CONTENT = `---
@@ -24,9 +28,13 @@ description: Open the browser command editor for complex requests and send one c
 ---
 
 ${CODEX_COMPLEX_SKILL_FILE_MARKER}
-This is a browser-only command entrypoint. Do not analyze or answer the request. The installed
-UserPromptSubmit hook opens one browser command editor for this invocation; do not invoke the CLI or
-open another browser. After the hook returns, execute only the command in its additionalContext.
+This is a browser-only command entrypoint. Do not analyze or answer the request before the installed
+UserPromptSubmit hook returns. Execute the command in its additionalContext. If it contains an AI
+Feedback request, apply it to the complete Current Markdown included with that request and return
+the complete revised Markdown only, without a summary or code fence. The Stop hook will reopen the
+browser editor with your response. Continue the feedback loop when the user chooses Send Feedback;
+when the user chooses Submit, treat the accepted Markdown as the final request and execute its
+command without reopening the browser.
 `;
 
 export interface CodexPromptConfigOptions {

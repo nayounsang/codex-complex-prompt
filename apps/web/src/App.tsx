@@ -1,6 +1,7 @@
 import { type SyntheticEvent, useCallback, useRef, useState } from 'react';
 import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
+import { countPromptCharacters, MAX_PROMPT_LENGTH } from '@codex-complex-prompt/protocol';
 
 import { useBridgeSession } from './bridge-session.js';
 import type { MarkdownEditorHandle } from './MarkdownEditor.js';
@@ -10,8 +11,6 @@ import { useFeedbackAnnotations } from './useFeedbackAnnotations.js';
 import { useFeedbackSubmission } from './useFeedbackSubmission.js';
 import './styles.css';
 
-const MAX_PROMPT_LENGTH = 12_000;
-
 export function App(): React.JSX.Element {
   const [markdown, setMarkdown] = useState(() => {
     if (typeof window === 'undefined') return '';
@@ -20,13 +19,17 @@ export function App(): React.JSX.Element {
   const [mode, setMode] = useState<'edit' | 'feedback'>('edit');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
+  const [feedbackLoop] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('feedbackLoop') === '1',
+  );
   const editorRef = useRef<MarkdownEditorHandle>(null);
-  const { state, error, closeInSeconds, bridgeUrl, submit } = useBridgeSession();
+  const { state, error, closeInSeconds, submit } = useBridgeSession();
   const feedback = useFeedbackAnnotations();
   const feedbackSubmission = useFeedbackSubmission({
     markdown,
     annotations: feedback.annotations,
-    bridgeUrl,
     submit,
     onMarkdownChange: setMarkdown,
     onComplete: () => {
@@ -44,8 +47,10 @@ export function App(): React.JSX.Element {
 
   const submitMarkdown = useCallback((): void => {
     const prompt = editorRef.current?.getMarkdown() ?? markdown;
-    if (prompt.trim().length > MAX_PROMPT_LENGTH) {
-      setValidationError('Markdown commands must be 12,000 characters or fewer.');
+    if (countPromptCharacters(prompt.trim()) > MAX_PROMPT_LENGTH) {
+      setValidationError(
+        `Markdown commands must be ${MAX_PROMPT_LENGTH.toLocaleString()} characters or fewer.`,
+      );
       return;
     }
     setValidationError(null);
@@ -53,12 +58,17 @@ export function App(): React.JSX.Element {
   }, [markdown, submit]);
 
   const handlePromptSubmit = useCallback((): void => {
+    if (feedbackLoop) {
+      const prompt = editorRef.current?.getMarkdown() ?? markdown;
+      void submit(prompt, 'finish');
+      return;
+    }
     if (feedback.annotations.length > 0) {
       setShowSubmitDialog(true);
       return;
     }
     submitMarkdown();
-  }, [feedback.annotations.length, submitMarkdown]);
+  }, [feedback.annotations.length, feedbackLoop, markdown, submit, submitMarkdown]);
 
   const handleApproveAnyway = useCallback((): void => {
     setShowSubmitDialog(false);
@@ -97,7 +107,6 @@ export function App(): React.JSX.Element {
         pendingSelection={feedback.pendingSelection}
         validationError={validationError}
         feedbackError={feedbackSubmission.error}
-        reopenError={feedbackSubmission.reopenError}
         onModeChange={setMode}
         onMarkdownChange={handleMarkdownChange}
         onSubmit={handlePromptSubmit}
@@ -111,18 +120,6 @@ export function App(): React.JSX.Element {
         onUpdateFeedback={feedback.updateFeedback}
         onDeleteFeedback={feedback.removeFeedback}
       />
-      {feedbackSubmission.reopenError !== null && mode === 'edit' && (
-        <div className="reopen-notice reopen-notice-global" role="status">
-          <p>{feedbackSubmission.reopenError}</p>
-          <Button
-            type="button"
-            className="button-secondary"
-            onClick={feedbackSubmission.retryReopen}
-          >
-            Retry opening session
-          </Button>
-        </div>
-      )}
       <form
         id="prompt-form"
         onSubmit={(event: SyntheticEvent<HTMLFormElement>) => {

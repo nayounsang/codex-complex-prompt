@@ -1,8 +1,8 @@
 # Codex Complex Prompt
 
-Codex CLI에서 `$complex-prompt`를 호출하면 브라우저에 명령 편집기를 열고, 입력한 명령을 Codex의 현재 turn에 전달합니다.
+Codex CLI에서 `$complex-prompt`를 호출하면 브라우저에 Markdown 편집기를 열고, 입력한 명령을 Codex의 현재 turn에 전달합니다. AI Feedback을 제출하면 편집한 전체 Markdown을 바탕으로 Codex가 수정하고, Stop hook이 최신 응답을 새 브라우저 편집기에 다시 엽니다. Send Feedback으로 피드백을 반복하거나 Submit으로 검토를 끝내 최종 문서의 명령을 실행할 수 있습니다.
 
-Codex에서 여러 맥락과 절차가 필요한 작업을 지시할 때 사용합니다. 프롬프트를 작성하므로 문서를 관리할 필요가 없습니다.
+Codex에서 여러 맥락과 절차가 필요한 작업을 지시할 때 사용합니다. 피드백 검토 중에는 Send Feedback으로 수정을 반복하고, Submit으로 검토를 끝내 최종 문서의 명령을 실행합니다.
 
 ## Getting Started
 
@@ -43,14 +43,14 @@ CODEX_HOME="$PWD/.codex" codex
 # 실제 파일을 바꾸지 않고 hooks.json과 설치 파일의 변경 내용을 확인합니다.
 npx @codex-complex-prompt/cli-bridge hook install --dry-run
 
-# UserPromptSubmit hook, skill, 호환용 prompt를 설치합니다.
+# UserPromptSubmit/Stop hook, skill, 호환용 prompt를 설치합니다.
 npx @codex-complex-prompt/cli-bridge hook install
 
 # package가 marker로 소유권을 기록한 항목만 제거합니다.
 npx @codex-complex-prompt/cli-bridge hook remove
 ```
 
-- `hook install`: `CODEX_HOME/hooks.json`에 `UserPromptSubmit` command를 등록하고 `CODEX_HOME/skills/complex-prompt/SKILL.md`, `CODEX_HOME/prompts/complex-prompt.md`를 설치합니다. 기존 hooks와 사용자 파일은 보존합니다.
+- `hook install`: `CODEX_HOME/hooks.json`에 `UserPromptSubmit`과 AI Feedback용 `Stop` command를 등록하고 `CODEX_HOME/skills/complex-prompt/SKILL.md`, `CODEX_HOME/prompts/complex-prompt.md`를 설치합니다. 기존 hooks(Plannotator 포함)와 사용자 파일은 보존합니다.
 - `hook install --dry-run`: 파일을 쓰지 않고 변경될 JSON과 파일 내용을 출력합니다. 비대화형 환경에서 먼저 확인할 때 사용합니다.
 - `hook remove`: 이 package의 marker가 있는 command, skill, prompt만 제거합니다. 다른 hook과 설정은 제거하지 않습니다.
 
@@ -107,8 +107,8 @@ pnpm dev
 
 ### Workspace
 
-- `apps/cli-bridge`: npm executable, loopback bridge, Codex UserPromptSubmit hook과 설정 관리
-- `apps/web`: AI 응답을 표시하지 않는 단일 명령 편집기
+- `apps/cli-bridge`: npm executable, loopback bridge, Codex UserPromptSubmit/Stop hook과 설정 관리
+- `apps/web`: Markdown 편집기와 AI Feedback 검토 UI
 - `packages/protocol`: CLI↔브라우저와 Codex hook JSON의 Zod schema
 - `packages/server`: loopback HTTP/WebSocket 서버와 세션 정책
 - `packages/core`: transport와 무관한 draft, 제출 이력, 실행 상태 모델

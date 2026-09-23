@@ -15,7 +15,6 @@ interface PromptSessionShellProps {
   readonly pendingSelection: SelectionAnchor | null;
   readonly validationError: string | null;
   readonly feedbackError: string | null;
-  readonly reopenError: string | null;
   readonly onModeChange: (mode: 'edit' | 'feedback') => void;
   readonly onMarkdownChange: (markdown: string) => void;
   readonly onSubmit: () => void;
@@ -62,7 +61,6 @@ export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.El
           onUpdate={props.onUpdateFeedback}
           onDelete={props.onDeleteFeedback}
           error={props.feedbackError}
-          reopenError={props.reopenError}
         />
       )}
     </>

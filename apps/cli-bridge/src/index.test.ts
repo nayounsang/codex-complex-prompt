@@ -22,6 +22,16 @@ describe('CLI 브리지 동작', () => {
     await bridge.stop();
   });
 
+  it('초기 Markdown을 브라우저 URL query parameter로 전달한다', async () => {
+    const bridge = await startCliBridge({
+      initialMarkdown: '한글\n\n특수문자: &?#',
+      openBrowser: () => Promise.resolve(),
+    });
+
+    expect(new URL(bridge.browserUrl).searchParams.get('markdown')).toBe('한글\n\n특수문자: &?#');
+    await bridge.stop();
+  });
+
   it('브라우저 연동 실패를 브리지 실패로 처리하지 않는다', async () => {
     const bridge = await startCliBridge({
       openBrowser: async () => {

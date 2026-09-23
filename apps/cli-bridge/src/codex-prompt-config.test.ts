@@ -30,7 +30,8 @@ afterEach(async () => {
 describe('Codex 호환 prompt 설정', () => {
   it('호환 prompt가 분석 대신 hook이 반환한 명령만 실행하도록 안내한다', () => {
     expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('Do not analyze or answer');
-    expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('do not invoke the CLI or');
+    expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('Stop hook will reopen the');
+    expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('complete revised Markdown only');
     expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('additionalContext');
   });
 
@@ -111,10 +112,14 @@ describe('Codex 호환 prompt 설정', () => {
 });
 
 describe('Codex skill 설정', () => {
-  it('skill이 중복 bridge를 열지 않고 hook의 명령만 실행하도록 안내한다', () => {
+  it('skill이 feedback loop에서 전체 Markdown을 반환하도록 안내한다', () => {
     expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('Do not analyze or answer');
-    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('do not invoke the CLI or');
+    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('Stop hook will reopen the');
+    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('complete revised Markdown only');
     expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('additionalContext');
+    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('user chooses Send Feedback');
+    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('user chooses Submit');
+    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('execute its');
   });
 
   it('없는 skill 파일에 package 소유 skill을 생성한다', async () => {

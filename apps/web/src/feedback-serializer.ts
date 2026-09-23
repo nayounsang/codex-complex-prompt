@@ -32,6 +32,8 @@ export function serializeFeedback(
     }
   }
 
+  sections.push('', '### Current Markdown', '', markdown);
+
   return `${sections.join('\n')}\n`;
 }
 

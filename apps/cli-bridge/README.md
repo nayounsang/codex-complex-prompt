@@ -1,6 +1,6 @@
 # @codex-complex-prompt/cli-bridge
 
-Codex의 `UserPromptSubmit` hook과 loopback 서버를 연결하는 npm CLI입니다. `$complex-prompt`를 호출하면 브라우저에 명령 입력창 하나를 열고, 전송된 명령을 Codex에 전달합니다. AI 응답은 브라우저에 표시하지 않습니다.
+Codex의 `UserPromptSubmit`/`Stop` hook과 loopback 서버를 연결하는 npm CLI입니다. `$complex-prompt`를 호출하면 브라우저에 Markdown 편집기를 열고, 전송된 명령을 Codex에 전달합니다. AI Feedback 제출 시 편집한 전체 Markdown이 Codex에 전달되며, Codex가 수정 응답을 마치면 Stop hook이 최신 Markdown으로 브라우저 편집기를 다시 엽니다. Send Feedback으로 피드백을 반복하고, Submit으로 검토를 끝내 최종 Markdown의 명령을 실행할 수 있습니다.
 
 ### Install
 
@@ -28,14 +28,14 @@ codex
 # 파일을 변경하지 않고 설치될 JSON과 관리 파일 내용을 확인합니다.
 npx @codex-complex-prompt/cli-bridge hook install --dry-run
 
-# UserPromptSubmit hook과 skill/prompt 파일을 설치합니다.
+# UserPromptSubmit/Stop hook과 skill/prompt 파일을 설치합니다.
 npx @codex-complex-prompt/cli-bridge hook install
 
 # package가 marker로 관리하는 항목만 제거합니다.
 npx @codex-complex-prompt/cli-bridge hook remove
 ```
 
-`hook install`은 기존 `hooks.json`과 다른 사용자의 hook을 보존하고, package가 추가한 `UserPromptSubmit` command만 marker로 추적합니다. `hook remove`는 그 marker가 있는 command와 package 소유 skill/prompt만 제거합니다. `--dry-run`은 비대화형 환경에서 실제 변경 전에 확인하는 옵션입니다. `/hooks`는 매번 설치하는 명령이 아니라, Codex가 처음 실행하는 hook을 검토하고 trust하는 승인 화면입니다.
+`hook install`은 기존 `hooks.json`과 다른 사용자의 hook(Plannotator의 Stop hook 포함)을 보존하고, package가 추가한 `UserPromptSubmit` 및 `Stop` command를 marker로 추적합니다. `hook remove`는 그 marker가 있는 command와 package 소유 skill/prompt만 제거합니다. `--dry-run`은 비대화형 환경에서 실제 변경 전에 확인하는 옵션입니다. `/hooks`는 매번 설치하는 명령이 아니라, Codex가 처음 실행하는 hook을 검토하고 trust하는 승인 화면입니다.
 
 ### 로컬에서 실행
 
@@ -52,7 +52,7 @@ CLI_BRIDGE="$(pwd)/apps/cli-bridge/dist/index.js"
 # 설치 전 hooks.json과 관리 파일의 변경 내용을 확인합니다.
 node "$CLI_BRIDGE" hook install --dry-run
 
-# 로컬 Codex 설정에 hook과 skill/prompt를 설치합니다.
+# 로컬 Codex 설정에 UserPromptSubmit/Stop hook과 skill/prompt를 설치합니다.
 node "$CLI_BRIDGE" hook install
 
 # UserPromptSubmit hook 입력을 직접 보내 브라우저 편집기를 엽니다.
@@ -62,7 +62,7 @@ printf '%s\n' '{"hook_event_name":"UserPromptSubmit","prompt":"$complex-prompt �
 node "$CLI_BRIDGE" hook remove
 ```
 
-브라우저에서 명령을 전송하면 JSON의 `hookSpecificOutput.additionalContext`로 명령이 반환되고 창이 닫힙니다. 브라우저는 AI 응답을 렌더링하지 않습니다.
+브라우저에서 명령을 전송하면 JSON의 `hookSpecificOutput.additionalContext`로 명령이 반환되고 창은 3초 뒤 닫힙니다. AI Feedback에는 브라우저에서 편집한 전체 Markdown이 포함됩니다. Codex가 응답하면 Stop hook이 해당 세션에서 새 loopback bridge와 브라우저 편집기를 열어 최신 Markdown을 표시합니다. Send Feedback은 피드백을 Codex에 보내고 검토를 이어가며, Submit은 검토를 끝내고 최종 Markdown에 담긴 명령을 실행합니다. URL 입력은 fetch하지 않고 텍스트로 다룹니다.
 
 ### Codex UserPromptSubmit 계약
 
@@ -78,4 +78,4 @@ hook은 stdin JSON의 `prompt`가 `$complex-prompt` 또는 `/complex-prompt` 호
 }
 ```
 
-빈 입력, malformed JSON, 브라우저 실패, timeout, 취소는 turn을 차단하지 않고 `systemMessage`가 포함된 JSON으로 보고합니다. Approve와 feedback은 현재 범위가 아니며 추후 기능입니다.
+빈 입력, malformed JSON, 브라우저 실패, timeout은 turn을 차단하지 않고 `systemMessage`가 포함된 JSON으로 보고합니다. Stop hook은 feedback loop가 활성화된 세션에만 편집기를 엽니다. Send Feedback은 Stop hook의 `decision: "block"` continuation으로 검토를 이어가고, Submit은 최종 Markdown에 담긴 명령을 실행하도록 continuation을 전달한 뒤 loop 상태를 종료합니다.

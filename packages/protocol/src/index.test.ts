@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ClientMessageSchema,
+  countPromptCharacters,
+  MAX_PROMPT_LENGTH,
   ServerMessageSchema,
   encodeServerMessage,
   parseClientMessage,
@@ -25,6 +27,17 @@ describe('프로토콜 스키마', () => {
       submissionId: '00000000-0000-4000-8000-000000000001',
       prompt: '## AI Feedback',
       mode: 'feedback',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('빈 Markdown을 제출해 feedback review를 종료하는 finish 모드를 수락한다', () => {
+    const result = ClientMessageSchema.safeParse({
+      type: 'prompt.submit',
+      submissionId: '00000000-0000-4000-8000-000000000001',
+      prompt: '',
+      mode: 'finish',
     });
 
     expect(result.success).toBe(true);
@@ -60,6 +73,28 @@ describe('프로토콜 스키마', () => {
     expect(result.success).toBe(false);
   });
 
+  it('Codex CLI와 같은 Unicode code point를 기준으로 길이를 계산한다', () => {
+    const prompt = '😀'.repeat(MAX_PROMPT_LENGTH);
+    const result = ClientMessageSchema.safeParse({
+      type: 'prompt.submit',
+      submissionId: '00000000-0000-4000-8000-000000000001',
+      prompt,
+    });
+
+    expect(countPromptCharacters(prompt)).toBe(MAX_PROMPT_LENGTH);
+    expect(result.success).toBe(true);
+  });
+
+  it('Unicode code point가 하나 초과하면 프롬프트를 거부한다', () => {
+    const result = ClientMessageSchema.safeParse({
+      type: 'prompt.submit',
+      submissionId: '00000000-0000-4000-8000-000000000001',
+      prompt: '😀'.repeat(MAX_PROMPT_LENGTH + 1),
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it('유효한 클라이언트 메시지를 파싱해 반환한다', () => {
     const message = parseClientMessage({
       type: 'session.handshake',
@@ -79,17 +114,12 @@ describe('프로토콜 스키마', () => {
     ).toBe(true);
   });
 
-  it('feedback 결과의 최신 Markdown과 새 세션을 검증한다', () => {
+  it('feedback 결과의 최신 Markdown을 검증한다', () => {
     const result = ServerMessageSchema.safeParse({
       type: 'prompt.result',
       submissionId: '00000000-0000-4000-8000-000000000002',
       status: 'accepted',
       prompt: '# Updated',
-      nextSession: {
-        token: 'a'.repeat(32),
-        sessionId: '00000000-0000-4000-8000-000000000003',
-        expiresAt: '2026-09-20T00:00:00.000Z',
-      },
     });
 
     expect(result.success).toBe(true);

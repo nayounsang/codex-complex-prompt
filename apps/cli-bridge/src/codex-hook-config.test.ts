@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   CODEX_COMPLEX_PROMPT_HOOK_MARKER,
   CODEX_COMPLEX_PROMPT_LEGACY_STOP_HOOK_MARKER,
+  CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
   defaultCodexHome,
   defaultHooksPath,
   installCodexUserPromptHook,
@@ -29,7 +30,7 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
       description: 'Existing hooks',
       hooks: {
         Stop: [
-          { hooks: [{ type: 'command', command: 'existing-stop' }] },
+          { hooks: [{ type: 'command', command: 'plannotator hook stop' }] },
           {
             hooks: [
               {
@@ -55,7 +56,17 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
     expect(result.changed).toBe(true);
     expect(written.description).toBe('Existing hooks');
     expect(written.hooks['Stop']).toEqual([
-      { hooks: [{ type: 'command', command: 'existing-stop' }] },
+      { hooks: [{ type: 'command', command: 'plannotator hook stop' }] },
+      {
+        hooks: [
+          {
+            type: 'command',
+            command: 'complex-prompt hook stop',
+            timeout: 120,
+            statusMessage: CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
+          },
+        ],
+      },
     ]);
     expect(written.hooks['UserPromptSubmit']).toEqual([
       {
@@ -100,6 +111,18 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
   it('이미 설치된 명령 편집기 훅은 중복 설치하지 않는다', async () => {
     const configPath = await createConfig({
       hooks: {
+        Stop: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command: 'complex-prompt hook stop',
+                timeout: 120,
+                statusMessage: CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
+              },
+            ],
+          },
+        ],
         UserPromptSubmit: [
           {
             hooks: [

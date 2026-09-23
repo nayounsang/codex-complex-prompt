@@ -18,7 +18,6 @@ interface FeedbackModeViewProps {
   readonly onUpdate: (id: string, feedback: string) => void;
   readonly onDelete: (id: string) => void;
   readonly error: string | null;
-  readonly reopenError: string | null;
 }
 
 export function FeedbackModeView(props: FeedbackModeViewProps): React.JSX.Element {
@@ -90,11 +89,6 @@ export function FeedbackModeView(props: FeedbackModeViewProps): React.JSX.Elemen
             {props.error !== null && (
               <p className="prompt-limit" role="alert">
                 {props.error}
-              </p>
-            )}
-            {props.reopenError !== null && (
-              <p className="reopen-notice" role="status">
-                {props.reopenError}
               </p>
             )}
           </div>

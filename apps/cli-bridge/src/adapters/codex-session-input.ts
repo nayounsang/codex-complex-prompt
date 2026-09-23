@@ -1,5 +1,5 @@
 export interface CodexSessionInputContext {
-  readonly mode: 'edit' | 'feedback';
+  readonly mode: 'edit' | 'feedback' | 'finish';
 }
 
 export interface CodexSessionInput {

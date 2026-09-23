@@ -266,8 +266,15 @@ afterEach(() => {
   window.history.replaceState({}, '', '/');
 });
 
-function renderWithSession(bridge = 'http://127.0.0.1:4321'): MockWebSocket {
-  window.history.replaceState({}, '', `/?token=test-token&bridge=${encodeURIComponent(bridge)}`);
+function renderWithSession(
+  bridge = 'http://127.0.0.1:4321',
+  initialMarkdown?: string,
+  feedbackLoop = false,
+): MockWebSocket {
+  const params = new URLSearchParams({ token: 'test-token', bridge });
+  if (initialMarkdown !== undefined) params.set('markdown', initialMarkdown);
+  if (feedbackLoop) params.set('feedbackLoop', '1');
+  window.history.replaceState({}, '', `/?${params.toString()}`);
   vi.stubGlobal('WebSocket', MockWebSocket);
   vi.stubGlobal('crypto', { randomUUID: () => '00000000-0000-4000-8000-000000000004' });
 
@@ -282,7 +289,8 @@ function renderWithSession(bridge = 'http://127.0.0.1:4321'): MockWebSocket {
       expiresAt: '2026-09-20T00:00:00.000Z',
     }),
   );
-  fireEvent.pointerEnter(screen.getByRole('button', { name: 'Markdown command editor' }));
+  const editorPlaceholder = screen.queryByRole('button', { name: 'Markdown command editor' });
+  if (editorPlaceholder !== null) fireEvent.pointerEnter(editorPlaceholder);
   return socket;
 }
 
@@ -412,6 +420,23 @@ describe('명령 편집기', () => {
     expect(screen.getByRole('region', { name: 'Prompt editor' })).toBeInTheDocument();
     expect(screen.queryByText('New prompt')).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: /textarea/i })).not.toBeInTheDocument();
+  });
+
+  it('URL의 markdown query parameter를 편집기 초기값으로 전송한다', async () => {
+    const socket = renderWithSession('http://127.0.0.1:4321', '한글\n\n특수문자: &?#');
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Send to Codex' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
+
+    expect(socket.send).toHaveBeenLastCalledWith(
+      JSON.stringify({
+        type: 'prompt.submit',
+        submissionId: '00000000-0000-4000-8000-000000000004',
+        prompt: '한글\n\n특수문자: &?#',
+      }),
+    );
   });
 
   it('Markdown 이미지 URL을 포함한 문서를 앞뒤 공백 없이 전송한다', async () => {
@@ -1041,7 +1066,7 @@ describe('명령 편집기', () => {
     ).toBeInTheDocument();
   });
 
-  it('feedback을 전송하면 최신 Markdown으로 Edit Mode를 다시 연다', async () => {
+  it('feedback을 전송하면 3초 뒤 현재 창을 닫는다', async () => {
     const socket = renderWithSession();
     await editMarkdown('# Review this');
     fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
@@ -1050,11 +1075,12 @@ describe('명령 편집기', () => {
       target: { value: 'Use a stronger title.' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    const openSpy = vi.spyOn(window, 'open');
     const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
 
     fireEvent.click(screen.getByRole('button', { name: 'Send Feedback (1)' }));
     expect(socket.send).toHaveBeenLastCalledWith(expect.stringContaining('"mode":"feedback"'));
+    vi.useFakeTimers();
     await act(async () => {
       socket.emit(
         'message',
@@ -1063,76 +1089,64 @@ describe('명령 편집기', () => {
           submissionId: '00000000-0000-4000-8000-000000000004',
           status: 'accepted',
           prompt: '# Updated by Codex',
-          nextSession: {
-            token: 'a'.repeat(43),
-            sessionId: '00000000-0000-4000-8000-000000000006',
-            expiresAt: '2026-09-20T00:00:00.000Z',
-          },
         }),
       );
     });
 
-    await waitFor(() => {
-      expect(screen.getByRole('tab', { name: 'Edit Mode' })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      );
-      expect(screen.getByRole('textbox', { name: 'Command' })).toHaveTextContent(
-        'Updated by Codex',
-      );
+    expect(screen.getByText('Sent')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveTextContent('3초 후 이 창이 닫힙니다.');
+    expect(openSpy).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_999);
     });
-    expect(screen.queryByText('Make the title more specific.')).not.toBeInTheDocument();
-    expect(openSpy).toHaveBeenCalledOnce();
-    expect(new URL(openSpy.mock.calls[0]?.[0] ?? '').searchParams.get('markdown')).toBe(
-      '# Updated by Codex',
-    );
+    expect(closeSpy).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
     expect(closeSpy).toHaveBeenCalledOnce();
   });
 
-  it('새 세션 팝업이 차단되면 저장된 bridge와 Markdown으로 다시 시도한다', async () => {
-    const socket = renderWithSession('http://127.0.0.1:4321');
-    await editMarkdown('# Original');
+  it('feedback loop에서 Send Feedback을 누르면 피드백과 전체 Markdown을 Codex에 보낸다', async () => {
+    const socket = renderWithSession('http://127.0.0.1:4321', '# Revised draft', true);
+    await editMarkdown('# Final draft');
     fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add global feedback' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Global feedback' }), {
-      target: { value: 'Update the heading.' },
+      target: { value: 'Keep the key details.' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
-    const openSpy = vi
-      .spyOn(window, 'open')
-      .mockReturnValueOnce(null)
-      .mockReturnValueOnce({} as Window);
-    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+
     fireEvent.click(screen.getByRole('button', { name: 'Send Feedback (1)' }));
 
-    await act(async () => {
-      socket.emit(
-        'message',
-        JSON.stringify({
-          type: 'prompt.result',
-          submissionId: '00000000-0000-4000-8000-000000000004',
-          status: 'accepted',
-          prompt: '# Updated by Codex',
-          nextSession: {
-            token: 'b'.repeat(43),
-            sessionId: '00000000-0000-4000-8000-000000000007',
-            expiresAt: '2026-09-20T00:00:00.000Z',
-          },
-        }),
-      );
+    expect(socket.send).toHaveBeenLastCalledWith(expect.stringContaining('"mode":"feedback"'));
+    expect(socket.send).toHaveBeenLastCalledWith(expect.stringContaining('Keep the key details.'));
+    expect(socket.send).toHaveBeenLastCalledWith(expect.stringContaining('# Final draft'));
+  });
+
+  it('feedback loop에서 Submit을 누르면 검토를 끝내고 현재 Markdown을 최종 제출한다', async () => {
+    const socket = renderWithSession('http://127.0.0.1:4321', '# Revised draft', true);
+    await editMarkdown('# Final draft');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add global feedback' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Global feedback' }), {
+      target: { value: 'Save this for later.' },
     });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
 
-    const retryButton = await screen.findByRole('button', { name: 'Retry opening session' });
-    expect(new URL(openSpy.mock.calls[0]?.[0] ?? '').searchParams.get('bridge')).toBe(
-      'http://127.0.0.1:4321',
-    );
-    fireEvent.click(retryButton);
+    expect(screen.getByRole('button', { name: 'Send Feedback (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Finish' })).not.toBeInTheDocument();
 
-    expect(openSpy).toHaveBeenCalledTimes(2);
-    expect(new URL(openSpy.mock.calls[1]?.[0] ?? '').searchParams.get('markdown')).toBe(
-      '# Updated by Codex',
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    expect(socket.send).toHaveBeenLastCalledWith(
+      JSON.stringify({
+        type: 'prompt.submit',
+        submissionId: '00000000-0000-4000-8000-000000000004',
+        prompt: '# Final draft',
+        mode: 'finish',
+      }),
     );
-    expect(closeSpy).toHaveBeenCalledOnce();
   });
 
   it('제출 전에 미전송 feedback 경고에서 Approve anyway를 선택하면 일반 제출을 보낸다', async () => {
