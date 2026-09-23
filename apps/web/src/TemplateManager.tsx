@@ -82,11 +82,9 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
 
   function openDeleteConfirmation(template: PromptTemplate): void {
     setSelectOpen(false);
+    setTemplateToDelete(template);
+    setConfirmDelete(true);
     setError(null);
-    window.setTimeout(() => {
-      setTemplateToDelete(template);
-      setConfirmDelete(true);
-    }, 0);
   }
 
   function closeDeleteConfirmation(): void {
