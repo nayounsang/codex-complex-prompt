@@ -70,6 +70,7 @@ export function createProjectTemplateStore(projectDirectory: string) {
       for (const filename of filenames) {
         const templatePath = join(templateDirectory, filename);
         const templateStat = await lstatIfExists(templatePath);
+        /* c8 ignore next 1 -- a file removed between readdir and lstat is a filesystem race. */
         if (templateStat === undefined) continue;
         assertRegularFile(templateStat);
         const content = await readDirectFile(templatePath);
@@ -116,6 +117,7 @@ async function ensureDirectoryWithoutSymlink(directoryPath: string): Promise<voi
     try {
       await mkdir(directoryPath);
     } catch (error) {
+      /* c8 ignore next 1 -- concurrent directory creation cannot be forced deterministically. */
       if (!isErrno(error, 'EEXIST')) throw error;
     }
     directoryStat = await lstat(directoryPath);
@@ -138,6 +140,7 @@ async function ensureDefaultTemplates(templateDirectory: string): Promise<void> 
   try {
     await createFileIfAbsent(markerPath, 'installed\n');
   } catch (error) {
+    /* c8 ignore next 1 -- concurrent marker creation cannot be forced deterministically. */
     if (!isErrno(error, 'EEXIST')) throw error;
     const racedMarkerStat = await lstat(markerPath);
     assertRegularFile(racedMarkerStat);
@@ -166,6 +169,7 @@ async function ensureDefaultTemplate(
   try {
     await createFileIfAbsent(templatePath, serializeTemplate(template));
   } catch (error) {
+    /* c8 ignore next 1 -- concurrent default creation cannot be forced deterministically. */
     if (!isErrno(error, 'EEXIST')) throw error;
     const racedStat = await lstat(templatePath);
     assertRegularFile(racedStat);
@@ -173,6 +177,7 @@ async function ensureDefaultTemplate(
     try {
       parseTemplate(racedContent, template.id);
     } catch {
+      /* c8 ignore next 1 -- malformed data won by a concurrent initializer is nondeterministic. */
       await replaceFile(templatePath, templateDirectory, serializeTemplate(template));
     }
   }
@@ -226,11 +231,14 @@ async function writeTemporaryFile(templateDirectory: string, content: string): P
 async function readDirectFile(filePath: string): Promise<string> {
   let file: Awaited<ReturnType<typeof open>> | undefined;
   try {
+    /* c8 ignore next 1 -- supported platforms define O_NOFOLLOW; fallback is platform-specific. */
     file = await open(filePath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     const fileStat = await file.stat();
+    /* c8 ignore next 1 -- file type changing after lstat requires an external filesystem race. */
     if (!fileStat.isFile()) throw new Error('A project template is not a regular file.');
     return await file.readFile('utf8');
   } catch (error) {
+    /* c8 ignore next 1 -- lstat rejects links first; ELOOP covers a link-swap race before open. */
     if (isErrno(error, 'ELOOP')) throw new TemplateSymlinkError();
     throw error;
   } finally {
@@ -242,6 +250,7 @@ async function lstatIfExists(filePath: string) {
   try {
     return await lstat(filePath);
   } catch (error) {
+    /* c8 ignore next 1 -- ENOENT is the only portable error; other OS errors are environmental. */
     if (isErrno(error, 'ENOENT')) return undefined;
     throw error;
   }
