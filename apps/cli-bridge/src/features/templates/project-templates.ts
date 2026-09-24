@@ -3,7 +3,7 @@ import { lstat, mkdir, open, readdir, realpath, rename, unlink } from 'node:fs/p
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
-import type { PromptTemplate } from '@codex-complex-prompt/protocol';
+import { PromptTemplateSchema, type PromptTemplate } from '@codex-complex-prompt/protocol';
 
 const templateDefinitions = [
   {
@@ -296,5 +296,7 @@ function parseTemplate(content: string, id: string): PromptTemplate {
   const description = fields.get('description');
   if (name === undefined || description === undefined)
     throw new Error('Template metadata is missing.');
-  return { id, name, description, body: match[2] ?? '' };
+  const parsed = PromptTemplateSchema.safeParse({ id, name, description, body: match[2] ?? '' });
+  if (!parsed.success) throw new Error('Template does not match the prompt template schema.');
+  return parsed.data;
 }

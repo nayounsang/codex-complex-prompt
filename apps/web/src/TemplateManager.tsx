@@ -4,7 +4,7 @@ import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
 import { Select } from '@base-ui/react/select';
 
-import type { PromptTemplate } from '@codex-complex-prompt/protocol';
+import { PromptTemplateSchema, type PromptTemplate } from '@codex-complex-prompt/protocol';
 
 interface TemplateManagerProps {
   readonly templates: readonly PromptTemplate[];
@@ -42,14 +42,19 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
   const [saving, setSaving] = useState(false);
 
   async function saveDraft(): Promise<void> {
-    if (editing === null || editing.name.trim() === '') return;
-    setSaving(true);
-    setError(null);
-    const result = await props.onSave({
+    if (editing === null) return;
+    const parsed = PromptTemplateSchema.safeParse({
       ...editing,
       name: editing.name.trim(),
       description: editing.description.trim(),
     });
+    if (!parsed.success) {
+      setError('Name must be 1–120 characters and description must be 500 characters or fewer.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const result = await props.onSave(parsed.data);
     setSaving(false);
     if (result.status === 'accepted') {
       const saved = result.templates?.find((template) => template.id === editing.id);
@@ -229,6 +234,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                 Name
                 <input
                   autoFocus
+                  maxLength={120}
                   value={editing?.name ?? ''}
                   onChange={(event) =>
                     setEditing((current) =>
@@ -240,6 +246,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
               <label className="template-field">
                 Description
                 <input
+                  maxLength={500}
                   value={editing?.description ?? ''}
                   onChange={(event) =>
                     setEditing((current) =>
@@ -308,7 +315,12 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
         </AlertDialog.Portal>
       </AlertDialog.Root>
 
-      <AlertDialog.Root open={confirmDelete}>
+      <AlertDialog.Root
+        open={confirmDelete}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteConfirmation();
+        }}
+      >
         <AlertDialog.Portal>
           <AlertDialog.Backdrop className="dialog-backdrop" />
           <AlertDialog.Viewport className="dialog-viewport">

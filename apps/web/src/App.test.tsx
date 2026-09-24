@@ -424,6 +424,39 @@ describe('명령 편집기', () => {
     );
   });
 
+  it('템플릿 이름이 프로토콜 제한보다 길면 저장 요청을 보내지 않는다', async () => {
+    const socket = renderWithSession();
+    provideTemplateList(socket, []);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('option', { name: /Create your first template/ }));
+    const nameInput = screen.getByRole('textbox', { name: 'Name' });
+    expect(nameInput).toHaveAttribute('maxLength', '120');
+    fireEvent.change(nameInput, { target: { value: '이름'.repeat(61) } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('1–120 characters');
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('template.save'));
+  });
+
+  it('템플릿 설명이 프로토콜 제한보다 길면 저장 요청을 보내지 않는다', async () => {
+    const socket = renderWithSession();
+    provideTemplateList(socket, []);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('option', { name: /Create your first template/ }));
+    const descriptionInput = screen.getByRole('textbox', { name: 'Description' });
+    expect(descriptionInput).toHaveAttribute('maxLength', '500');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), {
+      target: { value: '유효한 이름' },
+    });
+    fireEvent.change(descriptionInput, { target: { value: '설명'.repeat(251) } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('500 characters or fewer');
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('template.save'));
+  });
+
   it('템플릿 항목에서 삭제를 선택하고 확인하면 삭제 요청을 보낸다', async () => {
     const socket = renderWithSession();
     const template = {
@@ -457,6 +490,25 @@ describe('명령 편집기', () => {
     );
 
     expect(screen.getByText('No project templates yet.')).toBeInTheDocument();
+  });
+
+  it('삭제 확인창에서 Escape를 누르면 확인창을 닫는다', async () => {
+    const socket = renderWithSession();
+    provideTemplateList(socket, [
+      {
+        id: '00000000-0000-4000-8000-000000000035',
+        name: '삭제할 템플릿',
+        description: '설명',
+        body: '본문',
+      },
+    ]);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete 삭제할 템플릿' }));
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
   });
 
   it('선택하지 않은 템플릿 항목에서 수정을 누르면 해당 템플릿을 편집한다', async () => {

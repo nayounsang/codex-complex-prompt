@@ -99,6 +99,23 @@ describe('프로젝트 템플릿 저장소', () => {
     expect(templates).toHaveLength(6);
   });
 
+  it('프로토콜 길이 제한을 넘는 템플릿 파일을 목록에서 건너뛴다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const directory = join(projectDirectory, 'complex-prompt', 'templates');
+    await mkdir(directory, { recursive: true });
+    const invalidId = randomUUID();
+    await writeFile(
+      join(directory, `${invalidId}.md`),
+      `---\nname: ${JSON.stringify('이름'.repeat(61))}\ndescription: "설명"\n---\n본문`,
+      'utf8',
+    );
+    const store = createProjectTemplateStore(projectDirectory);
+
+    const templates = await store.list();
+
+    expect(templates.map((template) => template.id)).not.toContain(invalidId);
+  });
+
   it('손상된 기본 템플릿 파일을 기본 내용으로 복구한다', async () => {
     const projectDirectory = await createProjectDirectory();
     const directory = join(projectDirectory, 'complex-prompt', 'templates');
