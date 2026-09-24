@@ -124,6 +124,98 @@ function getHttp(url: string): Promise<{ statusCode: number | undefined; body: s
 }
 
 describe('로컬 브리지 서버', () => {
+  it('첨부 컬렉션 경로에서 그림 저장 요청을 받는다', async () => {
+    const id = '00000000-0000-4000-8000-000000000006';
+    let saved = false;
+    const server = await startLocalBridgeServer({
+      attachmentStore: {
+        save: async () => {
+          saved = true;
+          return id;
+        },
+        read: async () => undefined,
+        hasSceneData: async () => false,
+        delete: async () => false,
+      },
+      onPrompt: async () => undefined,
+    });
+    const session = server.createSession();
+    const { ready } = await authenticate(server, session.token);
+    const attachmentToken = (ready as { attachmentToken: string }).attachmentToken;
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments?token=${encodeURIComponent(attachmentToken)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ png: 'data:image/png;base64,AA==', scene: '{}' }),
+        },
+      );
+
+      expect(response.status).toBe(201);
+      expect(await response.json()).toEqual({ id });
+      expect(saved).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('그림과 편집 데이터가 함께 있으면 존재 확인 요청에 응답한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000007';
+    const server = await startLocalBridgeServer({
+      attachmentStore: {
+        save: async () => id,
+        read: async () => ({ png: Buffer.from('png'), scene: '{"elements":[]}' }),
+        hasSceneData: async () => true,
+        delete: async () => false,
+      },
+      onPrompt: async () => undefined,
+    });
+    const session = server.createSession();
+    const { ready } = await authenticate(server, session.token);
+    const attachmentToken = (ready as { attachmentToken: string }).attachmentToken;
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments/${id}.json?token=${encodeURIComponent(attachmentToken)}`,
+        { method: 'HEAD' },
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe('');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('편집 데이터가 없는 이미지는 존재 확인 요청에서 찾을 수 없다고 응답한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000008';
+    const server = await startLocalBridgeServer({
+      attachmentStore: {
+        save: async () => id,
+        read: async () => undefined,
+        hasSceneData: async () => false,
+        delete: async () => false,
+      },
+      onPrompt: async () => undefined,
+    });
+    const session = server.createSession();
+    const { ready } = await authenticate(server, session.token);
+    const attachmentToken = (ready as { attachmentToken: string }).attachmentToken;
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments/${id}.json?token=${encodeURIComponent(attachmentToken)}`,
+        { method: 'HEAD' },
+      );
+
+      expect(response.status).toBe(404);
+    } finally {
+      await server.close();
+    }
+  });
+
   it('인증된 세션 준비 메시지에 초기 Markdown과 feedback 상태를 포함한다', async () => {
     const server = await startLocalBridgeServer({
       initialMarkdown: '# 초기 문서',

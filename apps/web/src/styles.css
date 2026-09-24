@@ -181,6 +181,10 @@ button:focus-visible,
   border: 0;
 }
 
+.markdown-editor-host {
+  position: relative;
+}
+
 .markdown-editor {
   min-height: calc(100dvh - var(--app-header-height) - var(--action-bar-height) - 32px);
   overflow: visible;
@@ -1082,6 +1086,75 @@ button:focus-visible,
   clip: rect(0 0 0 0);
 }
 
+.drawing-dialog-viewport {
+  padding: 16px;
+}
+.drawing-edit-overlay {
+  position: absolute;
+  z-index: 30;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #d6d6d6;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px #1118272e;
+  color: #37352f;
+  cursor: pointer;
+}
+.drawing-edit-overlay:hover,
+.drawing-edit-overlay:focus-visible {
+  border-color: #9a9996;
+  background: #f7f7f5;
+}
+.drawing-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(1120px, calc(100vw - 32px));
+  height: min(820px, calc(100dvh - 32px));
+  overflow: hidden;
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 20px 70px #11182740;
+}
+.drawing-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.drawing-dialog-header [data-slot='title'] {
+  margin: 0;
+  font-size: 18px;
+}
+.drawing-dialog-header [data-slot='description'] {
+  display: block;
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 12px;
+}
+.drawing-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.drawing-canvas .excalidraw {
+  height: 100%;
+}
+.drawing-dialog .dialog-actions {
+  padding: 12px 20px;
+  border-top: 1px solid #e5e7eb;
+}
+.drawing-error {
+  margin: 8px 20px 0;
+  color: #b42318;
+  font-size: 13px;
+}
+
 .prompt-actions button:hover:not(:disabled) {
   border-color: #0b6bc2;
   background: #0b6bc2;
@@ -1196,4 +1269,9 @@ button:focus-visible,
   .feedback-panel {
     order: -1;
   }
+}
+@font-face {
+  font-family: Excalifont;
+  src: url('/fonts/Excalifont-Regular.woff2') format('woff2');
+  font-display: swap;
 }

@@ -83,7 +83,7 @@ export async function runCodexUserPromptHook(
       submit: async (command: string, context) => {
         const mode = context?.mode ?? 'edit';
         if (mode === 'feedback' && command.trim() !== '') {
-          await feedbackLoopState.activate(input.session_id);
+          await feedbackLoopState.activate(input.session_id, input.cwd);
         } else {
           await feedbackLoopState.clear(input.session_id);
         }
@@ -113,11 +113,14 @@ export async function runCodexUserPromptHook(
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
         additionalContext:
-          submission.mode === 'feedback'
+          (input.cwd === undefined
+            ? ''
+            : `Project working directory for relative attachment paths: ${input.cwd}\nRead the PNG files referenced by Markdown image paths when they are relevant to the task.\n\n`) +
+          (submission.mode === 'feedback'
             ? 'Apply the AI feedback to the complete Current Markdown document included below. Preserve all unaffected content. Return the complete updated Markdown only, without an introduction, summary, or code fence.\n\n' +
               command
             : 'Execute the following command supplied by the user through the Codex Complex Prompt editor:\n\n' +
-              command,
+              command),
       },
     };
     resolveSubmission?.();

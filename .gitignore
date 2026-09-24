@@ -5,6 +5,8 @@ coverage
 *.tsbuildinfo
 e2e/test-results
 e2e/playwright-report
+.complex-prompt/
+complex-prompt/
 .DS_Store
 .env
 .env.*

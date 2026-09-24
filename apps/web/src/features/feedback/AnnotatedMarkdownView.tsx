@@ -15,6 +15,9 @@ interface AnnotatedMarkdownViewProps {
   readonly annotations: readonly FeedbackAnnotation[];
   readonly selectionPopoverOpen: boolean;
   readonly onSelection: (selection: SelectionAnchor | null) => void;
+  readonly attachmentUrl: string | null;
+  readonly attachmentToken: string | null;
+  readonly attachmentRefreshKey: number;
 }
 
 export function AnnotatedMarkdownView({
@@ -22,6 +25,9 @@ export function AnnotatedMarkdownView({
   annotations,
   selectionPopoverOpen,
   onSelection,
+  attachmentUrl,
+  attachmentToken,
+  attachmentRefreshKey,
 }: AnnotatedMarkdownViewProps): React.JSX.Element {
   const rootRef = useRef<HTMLElement>(null);
   const [rendererRoot, setRendererRoot] = useState<HTMLDivElement | null>(null);
@@ -29,7 +35,16 @@ export function AnnotatedMarkdownView({
   const pendingSelectionRef = useRef<SelectionAnchor | null>(null);
   const selectionDismissedRef = useRef(false);
   const selectionWasOpenRef = useRef(false);
-  const renderedMarkdown = useMemo(() => makeMarkdownImagesInert(markdown), [markdown]);
+  const renderedMarkdown = useMemo(
+    () =>
+      makeMarkdownImagesInert(
+        markdown,
+        attachmentUrl === null || attachmentToken === null
+          ? undefined
+          : { baseUrl: attachmentUrl, token: attachmentToken, refreshKey: attachmentRefreshKey },
+      ),
+    [attachmentRefreshKey, attachmentToken, attachmentUrl, markdown],
+  );
   const decorationRangeKey = JSON.stringify(
     annotations.flatMap((annotation) =>
       annotation.scope === 'selection' &&

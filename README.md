@@ -144,3 +144,9 @@ and confirm Codex reopens the improved document. Remove the temporary directory 
 1. 기능 변경이 있을 시 `pnpm changeset`으로 changeset을 추가해주세요. 이 프로젝트는 [semver](https://semver.org/lang/ko/)를 따릅니다.
 2. 작업 PR이 merge되면 changeset을 반영한 version PR이 생성됩니다.
 3. version PR을 merge하면 릴리즈합니다.
+
+# Drawing attachments
+
+In the browser editor, open **Advanced → New drawing** to create a drawing with Excalidraw. Saved drawings are stored under `.complex-prompt/attachments/` in the project working directory as a PNG for Codex and an Excalidraw scene JSON file for later editing. The Markdown keeps a relative image path, so the attachment remains available when the prompt is submitted and when AI Feedback reopens the document.
+
+PNG attachments are limited to 25 MB. The Excalidraw canvas uses Excalifont for drawing text; its font asset is served from the bundled web app, and the editor interface continues to use Pretendard. Excalidraw's MIT license is included in the published package as `THIRD-PARTY-NOTICES.txt`.
