@@ -5,7 +5,7 @@ import {
   createPromptDraft,
   createPromptSession,
   recordSubmission,
-} from './model.js';
+} from '../index.js';
 
 describe('프롬프트 도메인 모델', () => {
   it('초안을 생성할 때 앞뒤 공백을 제거한다', () => {
