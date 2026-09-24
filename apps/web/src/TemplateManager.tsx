@@ -4,7 +4,11 @@ import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
 import { Select } from '@base-ui/react/select';
 
-import { PromptTemplateSchema, type PromptTemplate } from '@codex-complex-prompt/protocol';
+import {
+  MAX_PROMPT_LENGTH,
+  PromptTemplateSchema,
+  type PromptTemplate,
+} from '@codex-complex-prompt/protocol';
 
 interface TemplateManagerProps {
   readonly templates: readonly PromptTemplate[];
@@ -49,7 +53,9 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
       description: editing.description.trim(),
     });
     if (!parsed.success) {
-      setError('Name must be 1–120 characters and description must be 500 characters or fewer.');
+      setError(
+        `Name must be 1–120 characters, description must be 500 characters or fewer, and Markdown body must be ${MAX_PROMPT_LENGTH.toLocaleString()} characters or fewer.`,
+      );
       return;
     }
     setSaving(true);
@@ -259,6 +265,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                 Markdown body
                 <textarea
                   rows={12}
+                  maxLength={MAX_PROMPT_LENGTH}
                   value={editing?.body ?? ''}
                   onChange={(event) =>
                     setEditing((current) =>

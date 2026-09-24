@@ -53,7 +53,7 @@ export const PromptTemplateSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(120),
   description: z.string().max(500),
-  body: z.string(),
+  body: promptStringSchema(),
 });
 
 export const TemplateRequestSchema = z.discriminatedUnion('type', [

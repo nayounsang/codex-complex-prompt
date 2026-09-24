@@ -457,6 +457,24 @@ describe('명령 편집기', () => {
     expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('template.save'));
   });
 
+  it('템플릿 본문이 프롬프트 제한보다 길면 저장 요청을 보내지 않는다', async () => {
+    const socket = renderWithSession();
+    provideTemplateList(socket, []);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('option', { name: /Create your first template/ }));
+    const bodyInput = screen.getByRole('textbox', { name: 'Markdown body' });
+    expect(bodyInput).toHaveAttribute('maxLength', '12000');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), {
+      target: { value: '유효한 이름' },
+    });
+    fireEvent.change(bodyInput, { target: { value: '가'.repeat(12_001) } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Markdown body must be 12,000');
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('template.save'));
+  });
+
   it('템플릿 항목에서 삭제를 선택하고 확인하면 삭제 요청을 보낸다', async () => {
     const socket = renderWithSession();
     const template = {
