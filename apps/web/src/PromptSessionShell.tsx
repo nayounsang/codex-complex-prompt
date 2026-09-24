@@ -3,6 +3,7 @@ import { FeedbackModeView } from './features/feedback/FeedbackModeView.js';
 import { EditModeView } from './features/input/EditModeView.js';
 import { PromptHeader } from './PromptHeader.js';
 import type { MarkdownEditorHandle } from './features/input/MarkdownEditor.js';
+import type { PromptTemplate } from '@codex-complex-prompt/protocol';
 
 interface PromptSessionShellProps {
   readonly mode: 'edit' | 'feedback';
@@ -28,6 +29,19 @@ interface PromptSessionShellProps {
   readonly onCancelSelection: () => void;
   readonly onUpdateFeedback: (id: string, feedback: string) => void;
   readonly onDeleteFeedback: (id: string) => void;
+  readonly templates: readonly PromptTemplate[];
+  readonly templatesError: string | null;
+  readonly onApplyTemplate: (body: string) => void;
+  readonly onSaveTemplate: (template: PromptTemplate) => Promise<{
+    status: 'accepted' | 'failed';
+    templates?: readonly PromptTemplate[];
+    error?: string;
+  }>;
+  readonly onDeleteTemplate: (id: string) => Promise<{
+    status: 'accepted' | 'failed';
+    templates?: readonly PromptTemplate[];
+    error?: string;
+  }>;
 }
 
 export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.Element {
@@ -45,6 +59,12 @@ export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.El
         onSubmit={props.onSubmit}
         onSendFeedback={props.onSendFeedback}
         onAddGlobalFeedback={props.onAddGlobalFeedback}
+        templates={props.templates}
+        templatesError={props.templatesError}
+        markdown={props.markdown}
+        onApplyTemplate={props.onApplyTemplate}
+        onSaveTemplate={props.onSaveTemplate}
+        onDeleteTemplate={props.onDeleteTemplate}
       />
       {props.mode === 'edit' ? (
         <EditModeView

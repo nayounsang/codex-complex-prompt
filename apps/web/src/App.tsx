@@ -17,6 +17,7 @@ export function App(): React.JSX.Element {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [showEmptyFinishDialog, setShowEmptyFinishDialog] = useState(false);
+  const [editorResetVersion, setEditorResetVersion] = useState(0);
   const editorRef = useRef<MarkdownEditorHandle>(null);
   const {
     state,
@@ -24,6 +25,10 @@ export function App(): React.JSX.Element {
     closeInSeconds,
     initialMarkdown,
     feedbackLoop: sessionFeedbackLoop,
+    templates,
+    templatesError,
+    saveTemplate,
+    deleteTemplate,
     submit,
   } = useBridgeSession();
   const markdown = markdownOverride ?? initialMarkdown ?? '';
@@ -45,6 +50,12 @@ export function App(): React.JSX.Element {
   const handleMarkdownChange = useCallback((nextMarkdown: string): void => {
     setMarkdownOverride(nextMarkdown);
     setValidationError(null);
+  }, []);
+
+  const applyTemplate = useCallback((body: string): void => {
+    setMarkdownOverride(body);
+    setValidationError(null);
+    setEditorResetVersion((version) => version + 1);
   }, []);
 
   const submitMarkdown = useCallback((): void => {
@@ -112,7 +123,7 @@ export function App(): React.JSX.Element {
       <PromptSessionShell
         mode={mode}
         markdown={markdown}
-        editorInitialMarkdown={initialMarkdown ?? markdown}
+        editorInitialMarkdown={markdownOverride ?? initialMarkdown ?? ''}
         editorRef={editorRef}
         isConnected={isConnected}
         isSubmitting={isSubmitting}
@@ -122,7 +133,7 @@ export function App(): React.JSX.Element {
         validationError={validationError}
         feedbackError={feedbackSubmission.error}
         allowEmptySubmit={feedbackLoop}
-        editorInitializationKey={initialMarkdown === null ? 'pending' : 'ready'}
+        editorInitializationKey={`${initialMarkdown === null ? 'pending' : 'ready'}-${editorResetVersion}`}
         onModeChange={setMode}
         onMarkdownChange={handleMarkdownChange}
         onSubmit={handlePromptSubmit}
@@ -135,6 +146,11 @@ export function App(): React.JSX.Element {
         onCancelSelection={() => feedback.setPendingSelection(null)}
         onUpdateFeedback={feedback.updateFeedback}
         onDeleteFeedback={feedback.removeFeedback}
+        templates={templates}
+        templatesError={templatesError}
+        onApplyTemplate={applyTemplate}
+        onSaveTemplate={saveTemplate}
+        onDeleteTemplate={deleteTemplate}
       />
       <form
         id="prompt-form"

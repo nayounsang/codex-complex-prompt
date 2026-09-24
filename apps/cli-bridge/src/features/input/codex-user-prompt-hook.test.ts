@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -100,6 +100,55 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
       continue: true,
       hookSpecificOutput: { hookEventName: 'UserPromptSubmit' },
     });
+  });
+
+  it('hook cwd 아래에 프로젝트 템플릿 여섯 개를 저장한다', async () => {
+    const projectDirectory = await mkdtemp(join(tmpdir(), 'codex-template-project-'));
+    temporaryDirectories.push(projectDirectory);
+    let browserUrl: string | undefined;
+    const resultPromise = runCodexUserPromptHook(
+      JSON.stringify({ cwd: projectDirectory, prompt: '$complex-prompt 요청' }),
+      {
+        timeoutMs: 2_000,
+        bridgeOptions: {
+          openBrowser: (url) => {
+            browserUrl = url;
+            return Promise.resolve();
+          },
+        },
+      },
+    );
+    await waitFor(() => browserUrl !== undefined);
+    if (browserUrl === undefined) throw new Error('Browser URL was not captured.');
+    const url = new URL(browserUrl);
+    const socket = new WebSocket(
+      `${new URL(url.searchParams.get('bridge') ?? '').origin.replace('http', 'ws')}/ws`,
+    );
+    sockets.push(socket);
+    await onceOpen(socket);
+    const ready = collectMessages(socket, 1);
+    socket.send(
+      JSON.stringify({ type: 'session.handshake', token: url.searchParams.get('token') }),
+    );
+
+    await expect(ready).resolves.toMatchObject([
+      expect.objectContaining({
+        type: 'session.ready',
+        templates: expect.arrayContaining([
+          expect.objectContaining({ name: 'PRD/기능 요구사항 초안' }),
+        ]),
+      }),
+    ]);
+    socket.send(
+      JSON.stringify({
+        type: 'prompt.submit',
+        submissionId: '00000000-0000-4000-8000-000000000021',
+        prompt: '저장 확인',
+      }),
+    );
+    await expect(resultPromise).resolves.toMatchObject({ continue: true });
+    const templateFiles = await readdir(join(projectDirectory, 'complex-prompt', 'templates'));
+    expect(templateFiles.filter((filename) => filename.endsWith('.md'))).toHaveLength(6);
   });
 
   it('로컬 Markdown 파일 경로를 받으면 파일 내용을 브라우저 초기값으로 전달한다', async () => {

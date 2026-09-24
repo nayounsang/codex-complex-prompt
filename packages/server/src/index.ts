@@ -13,6 +13,8 @@ import {
   encodeServerMessage,
   type PromptSubmit,
   type PromptSubmitMode,
+  type PromptTemplate,
+  type TemplateRequest,
   type ServerMessage,
 } from '@codex-complex-prompt/protocol';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
@@ -30,6 +32,12 @@ export interface PromptContext {
 
 export type PromptAdapterResult = string | void;
 
+export interface TemplateStore {
+  readonly list: () => Promise<readonly PromptTemplate[]>;
+  readonly save: (template: PromptTemplate) => Promise<readonly PromptTemplate[]>;
+  readonly delete: (id: string) => Promise<readonly PromptTemplate[]>;
+}
+
 export interface LocalBridgeServerOptions extends SessionStoreOptions {
   readonly host?: string;
   readonly port?: number;
@@ -39,6 +47,8 @@ export interface LocalBridgeServerOptions extends SessionStoreOptions {
   readonly handshakeTimeoutMs?: number;
   readonly initialMarkdown?: string;
   readonly feedbackLoop?: boolean;
+  readonly templateStore?: TemplateStore;
+  readonly templatesError?: string;
   readonly onPrompt: (prompt: string, context: PromptContext) => Promise<PromptAdapterResult>;
 }
 
@@ -113,6 +123,8 @@ export async function startLocalBridgeServer(
       handshakeTimeoutMs,
       options.initialMarkdown,
       options.feedbackLoop ?? false,
+      options.templateStore,
+      options.templatesError,
     );
   });
 
@@ -155,6 +167,8 @@ function attachConnection(
   handshakeTimeoutMs: number,
   initialMarkdown: string | undefined,
   feedbackLoop: boolean,
+  templateStore: TemplateStore | undefined,
+  templatesError: string | undefined,
 ): void {
   let sessionId: string | undefined;
   const submissions = new Set<string>();
@@ -220,12 +234,26 @@ function attachConnection(
         },
         Math.max(0, session.expiresAt.getTime() - Date.now()),
       );
+      let templates: readonly PromptTemplate[] | undefined;
+      let resolvedTemplatesError = templatesError;
+      if (templateStore !== undefined) {
+        try {
+          templates = await templateStore.list();
+        } catch (error) {
+          resolvedTemplatesError = templateStoreErrorMessage(
+            error,
+            'Project templates could not be loaded from this directory.',
+          );
+        }
+      }
       send(webSocket, {
         type: 'session.ready',
         sessionId: session.id,
         expiresAt: session.expiresAt.toISOString(),
         ...(initialMarkdown === undefined ? {} : { initialMarkdown }),
         ...(feedbackLoop ? { feedbackLoop } : {}),
+        ...(templates === undefined ? {} : { templates: [...templates] }),
+        ...(resolvedTemplatesError === undefined ? {} : { templatesError: resolvedTemplatesError }),
       });
       return;
     }
@@ -233,6 +261,14 @@ function attachConnection(
     /* c8 ignore next 4 -- sessionId is assigned by the successful handshake above. */
     if (sessionId === undefined) {
       sendError(webSocket, 'invalid_message', 'The bridge session is not ready.');
+      return;
+    }
+    if (
+      parsed.data.type === 'template.list' ||
+      parsed.data.type === 'template.save' ||
+      parsed.data.type === 'template.delete'
+    ) {
+      await handleTemplateRequest(parsed.data);
       return;
     }
     if (parsed.data.type !== 'prompt.submit') {
@@ -247,6 +283,38 @@ function attachConnection(
     const queuedSubmission = submissionQueue.then(() => handleSubmission(promptSubmission));
     submissionQueue = queuedSubmission.catch(() => undefined);
     await queuedSubmission;
+  }
+
+  async function handleTemplateRequest(request: TemplateRequest): Promise<void> {
+    if (templateStore === undefined) {
+      send(webSocket, {
+        type: 'template.result',
+        requestId: request.requestId,
+        status: 'failed',
+        error: templatesError ?? 'Project templates are unavailable.',
+      });
+      return;
+    }
+    try {
+      let templates: readonly PromptTemplate[];
+      if (request.type === 'template.list') templates = await templateStore.list();
+      else if (request.type === 'template.save')
+        templates = await templateStore.save(request.template);
+      else templates = await templateStore.delete(request.id);
+      send(webSocket, {
+        type: 'template.result',
+        requestId: request.requestId,
+        status: 'accepted',
+        templates: [...templates],
+      });
+    } catch (error) {
+      send(webSocket, {
+        type: 'template.result',
+        requestId: request.requestId,
+        status: 'failed',
+        error: templateStoreErrorMessage(error, 'Project templates could not be updated.'),
+      });
+    }
   }
 
   async function handleSubmission(submission: PromptSubmit): Promise<void> {
@@ -309,6 +377,13 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 
 function send(webSocket: WebSocket, message: ServerMessage): void {
   if (webSocket.readyState === webSocket.OPEN) webSocket.send(encodeServerMessage(message));
+}
+
+function templateStoreErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && 'code' in error && error.code === 'ERR_TEMPLATE_SYMLINK') {
+    return 'Project template storage does not allow symbolic links. Replace them with regular files and directories.';
+  }
+  return fallback;
 }
 
 function sendError(

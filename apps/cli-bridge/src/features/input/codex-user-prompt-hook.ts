@@ -61,6 +61,7 @@ export async function runCodexUserPromptHook(
   const invocation = input.prompt.match(COMPLEX_PROMPT_INVOCATION);
   const initialMarkdown = await resolveInitialMarkdown(
     input.prompt.slice(invocation?.[0].length ?? 0),
+    input.cwd,
   );
   let resolveCommand:
     ((submission: { command: string; mode: PromptSubmitMode }) => void) | undefined;
@@ -75,6 +76,9 @@ export async function runCodexUserPromptHook(
   const bridge = await startCliBridge({
     ...options.bridgeOptions,
     initialMarkdown,
+    ...(input.cwd === undefined || input.cwd.trim() === ''
+      ? { templatesError: 'The project directory was not provided by the Codex hook.' }
+      : { projectDirectory: input.cwd }),
     inputAdapter: {
       submit: async (command: string, context) => {
         const mode = context?.mode ?? 'edit';

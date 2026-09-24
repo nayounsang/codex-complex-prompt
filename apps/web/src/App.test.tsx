@@ -296,6 +296,27 @@ function renderWithSession(
   return socket;
 }
 
+function provideTemplateList(
+  socket: MockWebSocket,
+  templates: readonly { id: string; name: string; description: string; body: string }[],
+  initialMarkdown = '',
+  templatesError?: string,
+): void {
+  act(() => {
+    socket.emit(
+      'message',
+      JSON.stringify({
+        type: 'session.ready',
+        sessionId: '00000000-0000-4000-8000-000000000005',
+        expiresAt: '2026-09-20T00:00:00.000Z',
+        initialMarkdown,
+        templates,
+        ...(templatesError === undefined ? {} : { templatesError }),
+      }),
+    );
+  });
+}
+
 function selectSourceRange(root: HTMLElement, start: number, end: number): void {
   setSourceRange(root, start, end);
   fireEvent.mouseDown(root);
@@ -334,6 +355,248 @@ async function editMarkdown(markdown: string): Promise<void> {
 }
 
 describe('명령 편집기', () => {
+  it('빈 프로젝트에서 템플릿 만들기를 선택하면 빈 Markdown 편집기를 연다', async () => {
+    const socket = renderWithSession();
+    provideTemplateList(socket, []);
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('option', { name: /Create your first template/ }));
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('Create template');
+    expect(screen.getByRole('textbox', { name: 'Markdown body' })).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  });
+
+  it('프로젝트 경로를 사용할 수 없으면 템플릿 사유를 표시하고 선택을 비활성화한다', () => {
+    const socket = renderWithSession();
+    provideTemplateList(
+      socket,
+      [],
+      '',
+      'The project directory was not provided by the Codex hook.',
+    );
+
+    expect(screen.getByRole('combobox', { name: 'Project template' })).toBeDisabled();
+    expect(
+      screen.getByText('The project directory was not provided by the Codex hook.'),
+    ).toBeVisible();
+  });
+
+  it('새 템플릿을 저장하면 브리지 응답의 목록에 나타난다', async () => {
+    const socket = renderWithSession();
+    provideTemplateList(socket, []);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('option', { name: /Create your first template/ }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), {
+      target: { value: '새 템플릿' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Description' }), {
+      target: { value: '설명' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Markdown body' }), {
+      target: { value: '# 본문' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+
+    const saveRequest = JSON.parse(String(socket.send.mock.calls.at(-1)?.[0])) as {
+      requestId: string;
+      template: { id: string; name: string; description: string; body: string };
+    };
+    expect(saveRequest).toMatchObject({
+      type: 'template.save',
+      template: { name: '새 템플릿', description: '설명', body: '# 본문' },
+    });
+    act(() =>
+      socket.emit(
+        'message',
+        JSON.stringify({
+          type: 'template.result',
+          requestId: saveRequest.requestId,
+          status: 'accepted',
+          templates: [saveRequest.template],
+        }),
+      ),
+    );
+
+    expect(await screen.findByRole('combobox', { name: 'Project template' })).toHaveTextContent(
+      '새 템플릿',
+    );
+  });
+
+  it('템플릿 이름이 프로토콜 제한보다 길면 저장 요청을 보내지 않는다', async () => {
+    const socket = renderWithSession();
+    provideTemplateList(socket, []);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('option', { name: /Create your first template/ }));
+    const nameInput = screen.getByRole('textbox', { name: 'Name' });
+    expect(nameInput).toHaveAttribute('maxLength', '120');
+    fireEvent.change(nameInput, { target: { value: '이름'.repeat(61) } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('1–120 characters');
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('template.save'));
+  });
+
+  it('템플릿 설명이 프로토콜 제한보다 길면 저장 요청을 보내지 않는다', async () => {
+    const socket = renderWithSession();
+    provideTemplateList(socket, []);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('option', { name: /Create your first template/ }));
+    const descriptionInput = screen.getByRole('textbox', { name: 'Description' });
+    expect(descriptionInput).toHaveAttribute('maxLength', '500');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), {
+      target: { value: '유효한 이름' },
+    });
+    fireEvent.change(descriptionInput, { target: { value: '설명'.repeat(251) } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('500 characters or fewer');
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('template.save'));
+  });
+
+  it('템플릿 본문이 프롬프트 제한보다 길면 저장 요청을 보내지 않는다', async () => {
+    const socket = renderWithSession();
+    provideTemplateList(socket, []);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('option', { name: /Create your first template/ }));
+    const bodyInput = screen.getByRole('textbox', { name: 'Markdown body' });
+    expect(bodyInput).toHaveAttribute('maxLength', '12000');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), {
+      target: { value: '유효한 이름' },
+    });
+    fireEvent.change(bodyInput, { target: { value: '가'.repeat(12_001) } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Markdown body must be 12,000');
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('template.save'));
+  });
+
+  it('템플릿 항목에서 삭제를 선택하고 확인하면 삭제 요청을 보낸다', async () => {
+    const socket = renderWithSession();
+    const template = {
+      id: '00000000-0000-4000-8000-000000000033',
+      name: '삭제할 템플릿',
+      description: '설명',
+      body: '본문',
+    };
+    provideTemplateList(socket, [template]);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete 삭제할 템플릿' }));
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('삭제할 템플릿');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete template' }));
+
+    const deleteRequest = JSON.parse(String(socket.send.mock.calls.at(-1)?.[0])) as {
+      requestId: string;
+      id: string;
+    };
+    expect(deleteRequest).toMatchObject({ type: 'template.delete', id: template.id });
+    act(() =>
+      socket.emit(
+        'message',
+        JSON.stringify({
+          type: 'template.result',
+          requestId: deleteRequest.requestId,
+          status: 'accepted',
+          templates: [],
+        }),
+      ),
+    );
+
+    expect(screen.getByText('No project templates yet.')).toBeInTheDocument();
+  });
+
+  it('삭제 확인창에서 Escape를 누르면 확인창을 닫는다', async () => {
+    const socket = renderWithSession();
+    provideTemplateList(socket, [
+      {
+        id: '00000000-0000-4000-8000-000000000035',
+        name: '삭제할 템플릿',
+        description: '설명',
+        body: '본문',
+      },
+    ]);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete 삭제할 템플릿' }));
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+  });
+
+  it('선택하지 않은 템플릿 항목에서 수정을 누르면 해당 템플릿을 편집한다', async () => {
+    const socket = renderWithSession();
+    provideTemplateList(socket, [
+      {
+        id: '00000000-0000-4000-8000-000000000034',
+        name: '수정할 템플릿',
+        description: '기존 설명',
+        body: '기존 본문',
+      },
+    ]);
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit 수정할 템플릿' }));
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('Edit template');
+    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('수정할 템플릿');
+    expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('기존 설명');
+    expect(screen.getByRole('textbox', { name: 'Markdown body' })).toHaveValue('기존 본문');
+  });
+
+  it('편집기가 비어 있으면 선택한 템플릿을 바로 적용한다', async () => {
+    const socket = renderWithSession();
+    provideTemplateList(socket, [
+      {
+        id: '00000000-0000-4000-8000-000000000031',
+        name: '작업 템플릿',
+        description: '짧은 설명',
+        body: '# 작업 지시\n\n실행해줘',
+      },
+    ]);
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('option', { name: /작업 템플릿/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    await waitFor(() =>
+      expect(crepeTestState.state.instance?.getMarkdown()).toBe('# 작업 지시\n\n실행해줘'),
+    );
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(socket.send).toHaveBeenCalledTimes(1);
+    expect(socket.send).toHaveBeenCalledWith(expect.stringContaining('session.handshake'));
+  });
+
+  it('기존 편집 내용을 템플릿으로 바꾸기 전에 확인을 요청한다', async () => {
+    const socket = renderWithSession('http://127.0.0.1:4321', '현재 명령');
+    provideTemplateList(
+      socket,
+      [
+        {
+          id: '00000000-0000-4000-8000-000000000032',
+          name: '새 명령',
+          description: '설명',
+          body: '새 본문',
+        },
+      ],
+      '현재 명령',
+    );
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
+    fireEvent.click(await screen.findByRole('option', { name: /새 명령/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('새 명령');
+    expect(crepeTestState.state.instance?.getMarkdown()).toBe('현재 명령');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(crepeTestState.state.instance?.getMarkdown()).toBe('현재 명령');
+  });
+
   it('세션 토큰이 없으면 오류를 표시하고 전송을 막는다', () => {
     render(<App />);
 
@@ -584,7 +847,9 @@ describe('명령 편집기', () => {
       }),
     );
 
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Sent'));
+    await waitFor(() =>
+      expect(screen.getByRole('status', { hidden: true })).toHaveTextContent('Sent'),
+    );
   });
 
   it('서버가 명령을 거부하면 오류를 표시한다', async () => {

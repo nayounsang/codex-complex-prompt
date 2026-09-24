@@ -45,6 +45,17 @@ describe('복합 명령 초기 Markdown 입력 resolver', () => {
     expect(result).toBe(content);
   });
 
+  it('hook cwd를 기준으로 상대 Markdown 파일 경로를 읽는다', async () => {
+    const directory = await createTemporaryDirectory();
+    const content = '# Codex 프로젝트 입력';
+    await writeFile(join(directory, 'task.md'), content, 'utf8');
+    vi.spyOn(process, 'cwd').mockReturnValue('/unrelated/cli-directory');
+
+    const result = await resolveInitialMarkdown('task.md', directory);
+
+    expect(result).toBe(content);
+  });
+
   it('현재 작업 디렉터리의 텍스트 파일 내용을 초기 Markdown으로 읽는다', async () => {
     const directory = await createTemporaryDirectory();
     const content = '첫 줄\n둘째 줄\n특수문자: <>&';

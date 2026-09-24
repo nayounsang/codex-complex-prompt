@@ -26,6 +26,7 @@ import {
 } from './codex-prompt-config.js';
 import { runCodexUserPromptHook } from './features/input/codex-user-prompt-hook.js';
 import { runCodexStopHook } from './features/feedback/codex-stop-hook.js';
+import { createProjectTemplateStore } from './features/templates/project-templates.js';
 
 export interface CliBridgeOptions {
   readonly inputAdapter?: CodexSessionInput;
@@ -37,6 +38,8 @@ export interface CliBridgeOptions {
   readonly sessionTtlMs?: number;
   readonly promptTimeoutMs?: number;
   readonly staticDir?: string;
+  readonly projectDirectory?: string;
+  readonly templatesError?: string;
 }
 
 export interface RunningCliBridge {
@@ -50,6 +53,10 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
   const webUrl = options.webUrl === undefined ? undefined : validateWebUrl(options.webUrl);
   const inputAdapter = options.inputAdapter ?? new CodexSessionInputAdapter();
   const staticDir = options.staticDir ?? resolveStaticDir();
+  const templateStore =
+    options.projectDirectory === undefined
+      ? undefined
+      : createProjectTemplateStore(options.projectDirectory);
   const serverOptions = {
     onPrompt: (prompt: string, context: CodexSessionInputContext) =>
       inputAdapter.submit(prompt, context),
@@ -59,6 +66,8 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
     ...(options.promptTimeoutMs === undefined ? {} : { promptTimeoutMs: options.promptTimeoutMs }),
     ...(options.initialMarkdown === undefined ? {} : { initialMarkdown: options.initialMarkdown }),
     ...(options.feedbackLoop === undefined ? {} : { feedbackLoop: options.feedbackLoop }),
+    ...(templateStore === undefined ? {} : { templateStore }),
+    ...(options.templatesError === undefined ? {} : { templatesError: options.templatesError }),
   };
   const server = await startLocalBridgeServer(serverOptions);
   const session = server.createSession();
