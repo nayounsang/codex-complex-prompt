@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { WebSocket } from 'ws';
 
-import { MockCodexSessionInputAdapter } from './adapters/codex-session-input.js';
+import { MockCodexSessionInputAdapter } from './features/input/adapters/codex-session-input.js';
 import { startCliBridge } from './index.js';
 
 const adapter = new MockCodexSessionInputAdapter();

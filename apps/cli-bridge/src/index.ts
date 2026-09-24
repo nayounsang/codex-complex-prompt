@@ -15,18 +15,21 @@ import {
   CodexSessionInputAdapter,
   type CodexSessionInputContext,
   type CodexSessionInput,
-} from './adapters/codex-session-input.js';
-import { installCodexUserPromptHook, removeCodexUserPromptHook } from './codex-hook-config.js';
+} from './features/input/adapters/codex-session-input.js';
+import {
+  installCodexUserPromptHook,
+  removeCodexUserPromptHook,
+} from './features/setup/hooks/codex-hook-config.js';
 import {
   CODEX_COMPLEX_PROMPT_NAME,
   installCodexSkill,
   installCodexPrompt,
   removeCodexSkill,
   removeCodexPrompt,
-} from './codex-prompt-config.js';
-import { runCodexUserPromptHook } from './features/input/codex-user-prompt-hook.js';
-import { runCodexStopHook } from './features/feedback/codex-stop-hook.js';
-import { createProjectTemplateStore } from './features/templates/project-templates.js';
+} from './features/setup/prompts/codex-prompt-config.js';
+import { runCodexUserPromptHook } from './features/input/hooks/codex-user-prompt-hook.js';
+import { runCodexStopHook } from './features/feedback/hooks/codex-stop-hook.js';
+import { createProjectTemplateStore } from './features/templates/storage/project-templates.js';
 
 export interface CliBridgeOptions {
   readonly inputAdapter?: CodexSessionInput;
@@ -289,14 +292,14 @@ function isCliEntrypoint(): boolean {
 export {
   CodexSessionInputAdapter,
   MockCodexSessionInputAdapter,
-} from './adapters/codex-session-input.js';
+} from './features/input/adapters/codex-session-input.js';
 export {
   installCodexUserPromptHook,
   removeCodexUserPromptHook,
   type CodexHookConfigOptions,
   type CodexHookConfigResult,
-} from './codex-hook-config.js';
-export { runCodexStopHook } from './features/feedback/codex-stop-hook.js';
+} from './features/setup/hooks/codex-hook-config.js';
+export { runCodexStopHook } from './features/feedback/hooks/codex-stop-hook.js';
 export {
   CODEX_COMPLEX_PROMPT_CONTENT,
   CODEX_COMPLEX_PROMPT_FILE_MARKER,
@@ -313,10 +316,10 @@ export {
   type CodexPromptConfigResult,
   type CodexSkillConfigOptions,
   type CodexSkillConfigResult,
-} from './codex-prompt-config.js';
+} from './features/setup/prompts/codex-prompt-config.js';
 export {
   parseCodexUserPromptHookInput,
   runCodexUserPromptHook,
   type CodexUserPromptHookOutput,
   type RunCodexUserPromptHookOptions,
-} from './features/input/codex-user-prompt-hook.js';
+} from './features/input/hooks/codex-user-prompt-hook.js';
