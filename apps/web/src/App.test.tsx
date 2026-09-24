@@ -434,8 +434,6 @@ describe('명령 편집기', () => {
     };
     provideTemplateList(socket, [template]);
     fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
-    fireEvent.click(await screen.findByRole('option', { name: /삭제할 템플릿/ }));
-    fireEvent.click(screen.getByRole('combobox', { name: 'Project template' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Delete 삭제할 템플릿' }));
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('삭제할 템플릿');
 
