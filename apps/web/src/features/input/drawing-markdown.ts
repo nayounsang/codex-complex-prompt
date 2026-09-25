@@ -26,18 +26,17 @@ export function findMarkdownDrawingReferences(markdown: string): MarkdownDrawing
 export function removeMarkdownDrawingReferences(markdown: string, id: string): string {
   const normalizedId = id.toLowerCase();
   const updatedMarkdown = transformMarkdownBodyLines(markdown, (line) => {
-    const updatedLine = line.replace(drawingImagePattern, (image, _label: string, imageId: string) =>
-      imageId.toLowerCase() === normalizedId ? '' : image,
+    const updatedLine = line.replace(
+      drawingImagePattern,
+      (image, _label: string, imageId: string) =>
+        imageId.toLowerCase() === normalizedId ? '' : image,
     );
     return updatedLine.trim() === '' ? '' : updatedLine;
   });
   return updatedMarkdown.replace(/\n{3,}/g, '\n\n');
 }
 
-function transformMarkdownBodyLines(
-  markdown: string,
-  transform: (line: string) => string,
-): string {
+function transformMarkdownBodyLines(markdown: string, transform: (line: string) => string): string {
   let activeFence: { readonly character: '`' | '~'; readonly length: number } | null = null;
 
   return markdown

@@ -70,8 +70,7 @@ function isAllowedAttachmentImage(
   characters: readonly string[],
   index: number,
   attachment:
-    | { readonly baseUrl: string; readonly token: string; readonly refreshKey: number }
-    | undefined,
+    { readonly baseUrl: string; readonly token: string; readonly refreshKey: number } | undefined,
 ): boolean {
   if (attachment === undefined) return false;
   const match = /^!\[[^\]]*\]\(([^)]+)\)/.exec(characters.slice(index).join(''));
