@@ -80,10 +80,9 @@ export function createProjectAttachmentStore(projectDirectory: string): ProjectA
         ]);
         throw error;
       }
-      await Promise.all([
-        rm(imageBackup, { force: true }),
-        rm(sceneBackup, { force: true }),
-      ]).catch(() => undefined);
+      await Promise.all([rm(imageBackup, { force: true }), rm(sceneBackup, { force: true })]).catch(
+        () => undefined,
+      );
       return id;
     },
     read: async (id) => {

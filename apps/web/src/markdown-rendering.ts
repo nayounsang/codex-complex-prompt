@@ -1,5 +1,3 @@
-import { createAttachmentImageUrl } from './attachment-image-url.js';
-
 /**
  * Keeps Markdown image syntax from becoming a network-backed `<img>` in a
  * read-only document. The replacement is length-preserving so source offsets
@@ -90,27 +88,6 @@ function isAllowedAttachmentImage(
     return /^\.complex-prompt\/attachments\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.png$/i.test(
       source,
     );
-  }
-}
-
-export function replaceRenderedAttachmentImageUrls(
-  root: ParentNode,
-  attachment: { readonly baseUrl: string; readonly token: string; readonly refreshKey: number },
-): void {
-  for (const image of root.querySelectorAll<HTMLImageElement>('img[src]')) {
-    const match = image
-      .getAttribute('src')
-      ?.match(
-        /^\.complex-prompt\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.png$/i,
-      );
-    if (match?.[1] === undefined) continue;
-    const url = createAttachmentImageUrl(
-      attachment.baseUrl,
-      match[1],
-      attachment.token,
-      attachment.refreshKey,
-    );
-    if (image.src !== url) image.src = url;
   }
 }
 

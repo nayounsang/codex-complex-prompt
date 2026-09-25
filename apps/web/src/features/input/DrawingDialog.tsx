@@ -131,7 +131,8 @@ export function DrawingDialog({
       open={open}
       onOpenChange={(next, eventDetails) => {
         if (next || saving) return;
-        if (eventDetails?.reason === 'escape-key' || eventDetails?.reason === 'outside-press') return;
+        if (eventDetails?.reason === 'escape-key' || eventDetails?.reason === 'outside-press')
+          return;
         onClose();
       }}
     >
