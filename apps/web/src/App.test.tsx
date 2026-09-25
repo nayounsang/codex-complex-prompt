@@ -225,24 +225,30 @@ vi.mock('./features/input/DrawingDialog.js', async () => {
   return {
     DrawingDialog: (props: {
       readonly attachmentId?: string;
+      readonly initialScene?: string;
       readonly onSave: (input: { id?: string; png: string; scene: string }) => Promise<void>;
       readonly onClose: () => void;
     }) =>
       React.createElement(
-        'button',
-        {
-          type: 'button',
-          onClick: () => {
-            void props
-              .onSave({
-                ...(props.attachmentId === undefined ? {} : { id: props.attachmentId }),
-                png: 'data:image/png;base64,updated',
-                scene: '{"elements":[]}',
-              })
-              .then(props.onClose);
+        React.Fragment,
+        null,
+        React.createElement('output', { 'data-testid': 'drawing-scene' }, props.initialScene ?? ''),
+        React.createElement(
+          'button',
+          {
+            type: 'button',
+            onClick: () => {
+              void props
+                .onSave({
+                  ...(props.attachmentId === undefined ? {} : { id: props.attachmentId }),
+                  png: 'data:image/png;base64,updated',
+                  scene: '{"elements":[]}',
+                })
+                .then(props.onClose);
+            },
           },
-        },
-        'Save mocked drawing',
+          'Save mocked drawing',
+        ),
       ),
   };
 });
@@ -435,7 +441,7 @@ describe('명령 편집기', () => {
     expect(screen.queryByRole('button', { name: '그림 편집' })).not.toBeInTheDocument();
   });
 
-  it('편집 데이터가 있는 Draw 이미지에서 연필 버튼을 누르면 원본 편집 데이터를 연다', async () => {
+  it('연필 버튼을 누르면 불러온 편집 데이터를 그림 편집기에 표시한다', async () => {
     const id = '00000000-0000-4000-8000-000000000010';
     const attachment = {
       url: 'http://127.0.0.1:8765/_complex-prompt/attachments',
@@ -464,6 +470,7 @@ describe('명령 편집기', () => {
       2,
       `${attachment.url}/${id}.json?token=${attachment.token}`,
     );
+    expect(await screen.findByTestId('drawing-scene')).toHaveTextContent(scene);
   });
 
   it('수정한 그림을 저장하면 편집기와 문서 미리보기에 새 이미지를 표시한다', async () => {

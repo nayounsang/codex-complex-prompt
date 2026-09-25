@@ -149,4 +149,4 @@ and confirm Codex reopens the improved document. Remove the temporary directory 
 
 In the browser editor, open **Advanced → New drawing** to create a drawing with Excalidraw. Saved drawings are stored under `.complex-prompt/attachments/` in the project working directory as a PNG for Codex and an Excalidraw scene JSON file for later editing. The Markdown keeps a relative image path, so the attachment remains available when the prompt is submitted and when AI Feedback reopens the document.
 
-PNG attachments are limited to 25 MB. The Excalidraw canvas uses Excalifont for drawing text; its font asset is served from the bundled web app, and the editor interface continues to use Pretendard. Excalidraw's MIT license is included in the published package as `THIRD-PARTY-NOTICES.txt`.
+PNG attachments are limited to 25 MB. The Excalidraw canvas uses Excalifont for drawing text; Excalidraw's font assets are served from the bundled web app, and the editor interface continues to use Pretendard. Excalidraw's MIT license is included in the published package as `THIRD-PARTY-NOTICES.txt`.

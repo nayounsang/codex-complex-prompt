@@ -484,7 +484,8 @@ function serveAttachmentRequest(
   if (request.method === 'DELETE') {
     void attachmentStore
       .delete(id)
-      .then((deleted) => response.writeHead(deleted ? 204 : 404).end());
+      .then((deleted) => response.writeHead(deleted ? 204 : 404).end())
+      .catch(() => response.writeHead(500).end());
     return true;
   }
   void attachmentStore

@@ -9,8 +9,13 @@ import { PromptSessionShell } from './PromptSessionShell.js';
 import { SubmitFeedbackDialog } from './SubmitFeedbackDialog.js';
 import { useFeedbackAnnotations } from './features/feedback/useFeedbackAnnotations.js';
 import { useFeedbackSubmission } from './features/feedback/useFeedbackSubmission.js';
+import {
+  findMarkdownDrawingReferences,
+  removeMarkdownDrawingReferences,
+} from './features/input/drawing-markdown.js';
 import './styles.css';
 const DrawingDialog = lazy(async () => {
+  (window as Window & { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH = '/';
   const module = await import('./features/input/DrawingDialog.js');
   return { default: module.DrawingDialog };
 });
@@ -59,13 +64,7 @@ export function App(): React.JSX.Element {
   });
   const isConnected = state === 'connected';
   const isSubmitting = state === 'submitting' || feedbackSubmission.isSubmitting;
-  const drawings = Array.from(
-    markdown.matchAll(/!\[([^\]]*)\]\(\.complex-prompt\/attachments\/([0-9a-f-]{36})\.png\)/gi),
-    (match) => ({
-      label: match[1]?.trim() || 'Drawing',
-      id: match[2] ?? '',
-    }),
-  );
+  const drawings = findMarkdownDrawingReferences(markdown);
 
   const attachmentEndpoint = (id?: string, extension?: 'png' | 'json'): string | null => {
     if (attachmentUrl === null || attachmentToken === null) return null;
@@ -130,12 +129,7 @@ export function App(): React.JSX.Element {
       const response = await fetch(endpoint, { method: 'DELETE' });
       if (!response.ok && response.status !== 404)
         throw new Error('그림 파일을 삭제하지 못했습니다.');
-      const next = markdown
-        .replace(
-          new RegExp(`^!?\\[[^\\]]*\\]\\(\\.complex-prompt/attachments/${id}\\.png\\)\\s*$`, 'gmi'),
-          '',
-        )
-        .replace(/\n{3,}/g, '\n\n');
+      const next = removeMarkdownDrawingReferences(markdown, id);
       setMarkdownOverride(next);
       setEditorResetVersion((version) => version + 1);
     } catch (reason) {
