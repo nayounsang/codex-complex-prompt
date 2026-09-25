@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
+import { AttachmentTooLargeError, AttachmentValidationError } from '@codex-complex-prompt/protocol';
+
 export const MAX_ATTACHMENT_PNG_BYTES = 25 * 1024 * 1024;
 
 export interface ProjectAttachment {
@@ -22,15 +24,15 @@ export function createProjectAttachmentStore(projectDirectory: string): ProjectA
 
   return {
     save: async ({ id = randomUUID(), png, scene }) => {
-      if (!isAttachmentId(id)) throw new Error('Attachment ID is invalid.');
+      if (!isAttachmentId(id)) throw new AttachmentValidationError('Attachment ID is invalid.');
       const image = decodePng(png);
       if (image.byteLength > MAX_ATTACHMENT_PNG_BYTES) {
-        throw new Error('PNG attachments must be 25 MB or smaller.');
+        throw new AttachmentTooLargeError();
       }
       try {
         JSON.parse(scene) as unknown;
       } catch (error) {
-        throw new Error(
+        throw new AttachmentValidationError(
           `Drawing scene JSON is invalid: ${
             error instanceof Error ? error.message : 'unknown parse error'
           }`,
@@ -45,25 +47,43 @@ export function createProjectAttachmentStore(projectDirectory: string): ProjectA
       const imageBackup = `${imagePath}${suffix}.bak`;
       const sceneBackup = `${scenePath}${suffix}.bak`;
       await writeFile(imageTemporary, image, { mode: 0o600, flag: 'wx' });
+      let imageBackedUp = false;
+      let sceneBackedUp = false;
+      let imageReplaced = false;
+      let sceneReplaced = false;
       try {
-        await writeFile(sceneTemporary, scene, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-        if (await fileExists(imagePath)) await rename(imagePath, imageBackup);
-        if (await fileExists(scenePath)) await rename(scenePath, sceneBackup);
+        await writeFile(sceneTemporary, scene, {
+          encoding: 'utf8',
+          mode: 0o600,
+          flag: 'wx',
+        });
+        if (await fileExists(imagePath)) {
+          await rename(imagePath, imageBackup);
+          imageBackedUp = true;
+        }
+        if (await fileExists(scenePath)) {
+          await rename(scenePath, sceneBackup);
+          sceneBackedUp = true;
+        }
         await rename(imageTemporary, imagePath);
+        imageReplaced = true;
         await rename(sceneTemporary, scenePath);
-        await Promise.all([rm(imageBackup, { force: true }), rm(sceneBackup, { force: true })]);
+        sceneReplaced = true;
       } catch (error) {
-        await Promise.all([rm(imagePath, { force: true }), rm(scenePath, { force: true })]);
-        if (await fileExists(imageBackup)) await rename(imageBackup, imagePath);
-        if (await fileExists(sceneBackup)) await rename(sceneBackup, scenePath);
+        if (imageReplaced) await rm(imagePath, { force: true });
+        if (sceneReplaced) await rm(scenePath, { force: true });
+        if (imageBackedUp) await rename(imageBackup, imagePath);
+        if (sceneBackedUp) await rename(sceneBackup, scenePath);
         await Promise.all([
           rm(imageTemporary, { force: true }),
           rm(sceneTemporary, { force: true }),
-          rm(imageBackup, { force: true }),
-          rm(sceneBackup, { force: true }),
         ]);
         throw error;
       }
+      await Promise.all([
+        rm(imageBackup, { force: true }),
+        rm(sceneBackup, { force: true }),
+      ]).catch(() => undefined);
       return id;
     },
     read: async (id) => {
@@ -106,13 +126,15 @@ export function isAttachmentId(value: string): boolean {
 
 function decodePng(value: string): Buffer {
   if (value.length > Math.ceil((MAX_ATTACHMENT_PNG_BYTES + 2) / 3) * 4 + 32) {
-    throw new Error('PNG attachments must be 25 MB or smaller.');
+    throw new AttachmentTooLargeError();
   }
   const match = value.match(/^data:image\/png;base64,([A-Za-z0-9+/]*={0,2})$/);
-  if (match === null) throw new Error('The drawing must be saved as a PNG image.');
+  if (match === null) {
+    throw new AttachmentValidationError('The drawing must be saved as a PNG image.');
+  }
   const buffer = Buffer.from(match[1] ?? '', 'base64');
   if (buffer.byteLength === 0 || buffer.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') {
-    throw new Error('The drawing PNG is invalid.');
+    throw new AttachmentValidationError('The drawing PNG is invalid.');
   }
   return buffer;
 }

@@ -4,6 +4,7 @@ import { get } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { AttachmentTooLargeError } from '@codex-complex-prompt/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 
@@ -545,7 +546,7 @@ describe('로컬 브리지 서버', () => {
   it('첨부 저장소가 PNG 크기 제한 오류를 반환하면 413 응답을 반환한다', async () => {
     const { server, token } = await startAttachmentTestServer({
       save: async () => {
-        throw new Error('PNG attachment exceeds the 25 MB limit.');
+        throw new AttachmentTooLargeError('PNG attachment exceeds the 25 MB limit.');
       },
     });
 

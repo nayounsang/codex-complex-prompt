@@ -83,7 +83,11 @@ export async function runCodexUserPromptHook(
       submit: async (command: string, context) => {
         const mode = context?.mode ?? 'edit';
         if (mode === 'feedback' && command.trim() !== '') {
-          await feedbackLoopState.activate(input.session_id, input.cwd);
+          const cwd = input.cwd?.trim();
+          await feedbackLoopState.activate(
+            input.session_id,
+            cwd === undefined || cwd === '' ? undefined : cwd,
+          );
         } else {
           await feedbackLoopState.clear(input.session_id);
         }

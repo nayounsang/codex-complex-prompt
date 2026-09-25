@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export { AttachmentTooLargeError, AttachmentValidationError } from './attachment-errors.js';
+
 export const MAX_PROMPT_LENGTH = 12_000;
 
 /**

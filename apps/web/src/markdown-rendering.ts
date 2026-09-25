@@ -30,9 +30,7 @@ export function makeMarkdownImagesInert(
         activeFence = { character: marker[0] as '`' | '~', length: marker.length };
         return line;
       }
-      const previewLine =
-        attachment === undefined ? line : rewriteAttachmentImagePaths(line, attachment);
-      return makeInlineMarkdownImagesInert(previewLine, attachment);
+      return makeInlineMarkdownImagesInert(line, attachment);
     })
     .join('\n');
 }
@@ -89,41 +87,31 @@ function isAllowedAttachmentImage(
           url.searchParams.get('refresh') === String(attachment.refreshKey)))
     );
   } catch {
-    return false;
+    return /^\.complex-prompt\/attachments\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.png$/i.test(
+      source,
+    );
   }
 }
 
-function rewriteAttachmentImagePaths(
-  line: string,
+export function replaceRenderedAttachmentImageUrls(
+  root: ParentNode,
   attachment: { readonly baseUrl: string; readonly token: string; readonly refreshKey: number },
-): string {
-  let rewritten = '';
-  let inlineCodeFenceLength = 0;
-  for (let index = 0; index < line.length;) {
-    if (line[index] === '`') {
-      let end = index;
-      while (line[end] === '`') end += 1;
-      const length = end - index;
-      if (inlineCodeFenceLength === 0) inlineCodeFenceLength = length;
-      else if (inlineCodeFenceLength === length) inlineCodeFenceLength = 0;
-      rewritten += line.slice(index, end);
-      index = end;
-      continue;
-    }
-    if (inlineCodeFenceLength === 0 && line.startsWith('![', index)) {
-      const match = /^!\[([^\]]*)\]\(\.complex-prompt\/attachments\/([0-9a-f-]{36})\.png\)/i.exec(
-        line.slice(index),
+): void {
+  for (const image of root.querySelectorAll<HTMLImageElement>('img[src]')) {
+    const match = image
+      .getAttribute('src')
+      ?.match(
+        /^\.complex-prompt\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.png$/i,
       );
-      if (match !== null) {
-        rewritten += `![${match[1]}](${createAttachmentImageUrl(attachment.baseUrl, match[2] ?? '', attachment.token, attachment.refreshKey)})`;
-        index += match[0].length;
-        continue;
-      }
-    }
-    rewritten += line[index];
-    index += 1;
+    if (match?.[1] === undefined) continue;
+    const url = createAttachmentImageUrl(
+      attachment.baseUrl,
+      match[1],
+      attachment.token,
+      attachment.refreshKey,
+    );
+    if (image.src !== url) image.src = url;
   }
-  return rewritten;
 }
 
 function isUnescapedImageStart(characters: readonly string[], index: number): boolean {

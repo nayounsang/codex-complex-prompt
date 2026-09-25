@@ -18,10 +18,18 @@ export function createFeedbackLoopStateStore(
       const path = statePath(directory, sessionId);
       if (path === undefined) return false;
       await mkdir(directory, { recursive: true, mode: 0o700 });
-      await writeFile(path, JSON.stringify({ sessionId, ...(cwd === undefined ? {} : { cwd }) }), {
-        encoding: 'utf8',
-        mode: 0o600,
-      });
+      const projectDirectory = cwd === undefined || cwd.trim() === '' ? undefined : cwd.trim();
+      await writeFile(
+        path,
+        JSON.stringify({
+          sessionId,
+          ...(projectDirectory === undefined ? {} : { cwd: projectDirectory }),
+        }),
+        {
+          encoding: 'utf8',
+          mode: 0o600,
+        },
+      );
       return true;
     },
     isActive: async (sessionId) => {

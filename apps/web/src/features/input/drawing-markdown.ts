@@ -25,15 +25,32 @@ export function findMarkdownDrawingReferences(markdown: string): MarkdownDrawing
 
 export function removeMarkdownDrawingReferences(markdown: string, id: string): string {
   const normalizedId = id.toLowerCase();
+  const removedDrawingLine = '\u0000removed-drawing-line\u0000';
   const updatedMarkdown = transformMarkdownBodyLines(markdown, (line) => {
     const updatedLine = line.replace(
       drawingImagePattern,
       (image, _label: string, imageId: string) =>
         imageId.toLowerCase() === normalizedId ? '' : image,
     );
-    return updatedLine.trim() === '' ? '' : updatedLine;
+    return updatedLine !== line && updatedLine.trim() === '' ? removedDrawingLine : updatedLine;
   });
-  return updatedMarkdown.replace(/\n{3,}/g, '\n\n');
+  const lines = updatedMarkdown.split('\n');
+  return lines
+    .filter((line, index) => {
+      if (line !== removedDrawingLine) return true;
+      const previous = lines[index - 1];
+      const next = lines[index + 1];
+      return !(
+        previous === undefined ||
+        previous.trim() === '' ||
+        previous === removedDrawingLine ||
+        next === undefined ||
+        next.trim() === '' ||
+        next === removedDrawingLine
+      );
+    })
+    .map((line) => (line === removedDrawingLine ? '' : line))
+    .join('\n');
 }
 
 function transformMarkdownBodyLines(markdown: string, transform: (line: string) => string): string {

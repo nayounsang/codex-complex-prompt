@@ -10,6 +10,8 @@ import {
 import { extname, resolve, sep } from 'node:path';
 
 import {
+  AttachmentTooLargeError,
+  AttachmentValidationError,
   ClientMessageSchema,
   encodeServerMessage,
   type PromptSubmit,
@@ -434,9 +436,14 @@ function serveAttachmentRequest(
       .then((body) => {
         let input: { id?: unknown; png?: unknown; scene?: unknown };
         try {
-          input = JSON.parse(body) as typeof input;
+          const parsed: unknown = JSON.parse(body);
+          if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new AttachmentValidationError('Invalid attachment request.');
+          }
+          input = parsed;
         } catch (error) {
-          throw new Error(
+          if (error instanceof AttachmentValidationError) throw error;
+          throw new AttachmentValidationError(
             `Attachment request JSON is invalid: ${
               error instanceof Error ? error.message : 'unknown parse error'
             }`,
@@ -447,7 +454,7 @@ function serveAttachmentRequest(
           typeof input.scene !== 'string' ||
           (input.id !== undefined && typeof input.id !== 'string')
         )
-          throw new Error('Invalid attachment request.');
+          throw new AttachmentValidationError('Invalid attachment request.');
         return attachmentStore.save({
           ...(typeof input.id === 'string' ? { id: input.id } : {}),
           png: input.png,
@@ -458,8 +465,11 @@ function serveAttachmentRequest(
         response.writeHead(201, { 'Content-Type': 'application/json' }).end(JSON.stringify({ id })),
       )
       .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : 'Attachment could not be saved.';
-        const status = /25 MB/.test(message) ? 413 : 400;
+        const isTooLarge = error instanceof AttachmentTooLargeError;
+        const isInvalidRequest = error instanceof AttachmentValidationError;
+        const status = isTooLarge ? 413 : isInvalidRequest ? 400 : 500;
+        const message =
+          isTooLarge || isInvalidRequest ? error.message : 'Attachment could not be saved.';
         response
           .writeHead(status, { 'Content-Type': 'application/json' })
           .end(JSON.stringify({ error: message }));
@@ -522,7 +532,9 @@ async function readRequestBody(request: IncomingMessage, maxBytes: number): Prom
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.byteLength;
-    if (size > maxBytes) throw new Error('The attachment request is too large.');
+    if (size > maxBytes) {
+      throw new AttachmentTooLargeError('The attachment request exceeds the request size limit.');
+    }
     chunks.push(buffer);
   }
   return Buffer.concat(chunks).toString('utf8');

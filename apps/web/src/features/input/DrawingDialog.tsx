@@ -129,8 +129,10 @@ export function DrawingDialog({
   return (
     <Dialog.Root
       open={open}
-      onOpenChange={(next) => {
-        if (!next && !saving) onClose();
+      onOpenChange={(next, eventDetails) => {
+        if (next || saving) return;
+        if (eventDetails?.reason === 'escape-key' || eventDetails?.reason === 'outside-press') return;
+        onClose();
       }}
     >
       <Dialog.Portal>

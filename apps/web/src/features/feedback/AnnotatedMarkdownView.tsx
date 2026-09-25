@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { LazyMarkdownEditor } from '../input/LazyMarkdownEditor.js';
-import { makeMarkdownImagesInert } from '../../markdown-rendering.js';
+import {
+  makeMarkdownImagesInert,
+  replaceRenderedAttachmentImageUrls,
+} from '../../markdown-rendering.js';
 import { decorateMarkdownRoot, type SourceFeedbackRange } from '../../markdown-source-map.js';
 import {
   getCodeBlockSelectionAnchor,
@@ -67,6 +70,18 @@ export function AnnotatedMarkdownView({
     root.setAttribute('aria-label', 'Markdown feedback document');
     setRendererRoot(root);
   }, []);
+
+  useEffect(
+    function authenticateRenderedAttachmentImages() {
+      if (rendererRoot === null || attachmentUrl === null || attachmentToken === null) return;
+      replaceRenderedAttachmentImageUrls(rendererRoot, {
+        baseUrl: attachmentUrl,
+        token: attachmentToken,
+        refreshKey: attachmentRefreshKey,
+      });
+    },
+    [attachmentRefreshKey, attachmentToken, attachmentUrl, renderedMarkdown, rendererRoot],
+  );
 
   const handleSelection = useCallback((): void => {
     const root = rootRef.current;

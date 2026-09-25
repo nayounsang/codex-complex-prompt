@@ -67,7 +67,9 @@ export async function runCodexStopHook(
     ...options.bridgeOptions,
     initialMarkdown: markdown,
     feedbackLoop: true,
-    ...(projectDirectory === undefined ? {} : { projectDirectory }),
+    ...(projectDirectory === undefined || projectDirectory.trim() === ''
+      ? {}
+      : { projectDirectory }),
     inputAdapter: {
       submit: (prompt, context) => {
         resolveSubmission?.({ prompt, mode: context?.mode ?? 'edit' });
