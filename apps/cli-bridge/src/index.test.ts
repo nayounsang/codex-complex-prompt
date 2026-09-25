@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import {
   CodexSessionInputAdapter,
   MockCodexSessionInputAdapter,
-} from './adapters/codex-session-input.js';
+} from './features/input/adapters/codex-session-input.js';
 import { startCliBridge } from './index.js';
 
 vi.mock('open', () => ({ default: () => Promise.resolve() }));

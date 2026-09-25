@@ -1,89 +1,38 @@
-import { createReadStream } from 'node:fs';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { stat } from 'node:fs/promises';
 import {
   createServer,
   type IncomingMessage,
   type Server as HttpServer,
   type ServerResponse,
 } from 'node:http';
-import { extname, resolve, sep } from 'node:path';
 
-import {
-  AttachmentTooLargeError,
-  AttachmentValidationError,
-  ClientMessageSchema,
-  encodeServerMessage,
-  type PromptSubmit,
-  type PromptSubmitMode,
-  type PromptTemplate,
-  type TemplateRequest,
-  type ServerMessage,
-} from '@codex-complex-prompt/protocol';
-import { WebSocketServer, type RawData, type WebSocket } from 'ws';
+import { AttachmentTooLargeError, AttachmentValidationError } from '@codex-complex-prompt/protocol';
 
-import { SessionStore, type SessionStoreOptions } from './session-store.js';
+import { WebSocketServer } from 'ws';
 
-export { SessionStore } from './session-store.js';
-export type { SessionRecord, SessionStoreOptions } from './session-store.js';
+import { SessionStore } from './features/session/storage/session-store.js';
+import { attachConnection } from './features/session/connection/attach-connection.js';
+import { serveStatic, resolveStaticPath } from './infrastructure/http/static-files.js';
+import type {
+  AttachmentStore,
+  LocalBridgeServerOptions,
+  RunningLocalBridgeServer,
+} from './shared/types.js';
 
-export interface PromptContext {
-  readonly sessionId: string;
-  readonly submissionId: string;
-  readonly mode: PromptSubmitMode;
-}
-
-export type PromptAdapterResult = string | void;
-
-export interface TemplateStore {
-  readonly list: () => Promise<readonly PromptTemplate[]>;
-  readonly save: (template: PromptTemplate) => Promise<readonly PromptTemplate[]>;
-  readonly delete: (id: string) => Promise<readonly PromptTemplate[]>;
-}
-
-export interface AttachmentStore {
-  readonly save: (input: { id?: string; png: string; scene: string }) => Promise<string>;
-  readonly read: (
-    id: string,
-  ) => Promise<{ readonly png: Buffer; readonly scene: string } | undefined>;
-  readonly hasSceneData: (id: string) => Promise<boolean>;
-  readonly delete: (id: string) => Promise<boolean>;
-}
-
-export interface LocalBridgeServerOptions extends SessionStoreOptions {
-  readonly host?: string;
-  readonly port?: number;
-  readonly staticDir?: string;
-  readonly promptTimeoutMs?: number;
-  readonly maxConnections?: number;
-  readonly handshakeTimeoutMs?: number;
-  readonly initialMarkdown?: string;
-  readonly feedbackLoop?: boolean;
-  readonly templateStore?: TemplateStore;
-  readonly templatesError?: string;
-  readonly attachmentStore?: AttachmentStore;
-  readonly onPrompt: (prompt: string, context: PromptContext) => Promise<PromptAdapterResult>;
-}
-
-export interface RunningLocalBridgeServer {
-  readonly host: string;
-  readonly port: number;
-  readonly url: string;
-  readonly createSession: () => {
-    id: string;
-    token: string;
-    expiresAt: Date;
-  };
-  readonly close: () => Promise<void>;
-}
-
-const mimeTypes: Record<string, string> = {
-  '.css': 'text/css; charset=utf-8',
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-};
+export { SessionStore } from './features/session/storage/session-store.js';
+export type {
+  SessionRecord,
+  SessionStoreOptions,
+} from './features/session/storage/session-store.js';
+export type {
+  LocalBridgeServerOptions,
+  PromptAdapterResult,
+  PromptContext,
+  RunningLocalBridgeServer,
+  TemplateStore,
+  AttachmentStore,
+} from './shared/types.js';
+export { resolveStaticPath };
 
 export async function startLocalBridgeServer(
   options: LocalBridgeServerOptions,
@@ -96,7 +45,8 @@ export async function startLocalBridgeServer(
   validatePositiveInteger(promptTimeoutMs, 'Prompt timeout');
   validatePositiveInteger(maxConnections, 'Maximum connections');
   validatePositiveInteger(handshakeTimeoutMs, 'Handshake timeout');
-  const store = new SessionStore(options);
+
+  const sessionStore = new SessionStore(options);
   const attachmentTokens = new Map<string, string>();
   let attachmentUrl = '';
   const httpServer = createServer((request, response) => {
@@ -110,47 +60,19 @@ export async function startLocalBridgeServer(
     void serveStatic(request, response, options.staticDir);
   });
   const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
-  let activeConnections = 0;
-
-  httpServer.on('upgrade', (request, socket, head) => {
-    const url = new URL(request.url ?? '/', `http://${host}`);
-    if (url.pathname !== '/ws') {
-      socket.destroy();
-      return;
-    }
-    webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
-      webSocketServer.emit('connection', webSocket, request);
-    });
-  });
-
-  webSocketServer.on('connection', (webSocket) => {
-    if (activeConnections >= maxConnections) {
-      webSocket.close(1013, 'The bridge has reached its connection limit.');
-      return;
-    }
-    activeConnections += 1;
-    let released = false;
-    const releaseConnection = (): void => {
-      if (released) return;
-      released = true;
-      activeConnections -= 1;
-    };
-    webSocket.once('close', releaseConnection);
-    webSocket.once('error', releaseConnection);
-    attachConnection(
-      webSocket,
-      store,
-      options.onPrompt,
+  registerWebSocketUpgrade(httpServer, webSocketServer, host);
+  registerConnections(
+    webSocketServer,
+    sessionStore,
+    options,
+    {
+      maxConnections,
       promptTimeoutMs,
       handshakeTimeoutMs,
-      options.initialMarkdown,
-      options.feedbackLoop ?? false,
-      options.templateStore,
-      options.templatesError,
-      options.attachmentStore === undefined ? undefined : attachmentTokens,
-      () => attachmentUrl,
-    );
-  });
+    },
+    attachmentTokens,
+    () => attachmentUrl,
+  );
 
   await listen(httpServer, host, port);
   const address = httpServer.address();
@@ -165,7 +87,7 @@ export async function startLocalBridgeServer(
     port: address.port,
     url: `http://${host}:${address.port}`,
     createSession: () => {
-      const session = store.create();
+      const session = sessionStore.create();
       if (options.attachmentStore !== undefined) {
         attachmentTokens.set(session.id, randomBytes(32).toString('base64url'));
       }
@@ -179,217 +101,66 @@ export async function startLocalBridgeServer(
   };
 }
 
-export function resolveStaticPath(staticDir: string, requestPath: string): string | undefined {
-  const safeRoot = resolve(staticDir);
-  const relativePath = requestPath === '/' ? 'index.html' : `.${requestPath}`;
-  const candidate = resolve(safeRoot, relativePath);
-  if (candidate !== safeRoot && !candidate.startsWith(`${safeRoot}${sep}`)) return undefined;
-  return candidate;
+interface ConnectionLimits {
+  readonly maxConnections: number;
+  readonly promptTimeoutMs: number;
+  readonly handshakeTimeoutMs: number;
 }
 
-function attachConnection(
-  webSocket: WebSocket,
-  store: SessionStore,
-  onPrompt: LocalBridgeServerOptions['onPrompt'],
-  promptTimeoutMs: number,
-  handshakeTimeoutMs: number,
-  initialMarkdown: string | undefined,
-  feedbackLoop: boolean,
-  templateStore: TemplateStore | undefined,
-  templatesError: string | undefined,
-  attachmentTokens: Map<string, string> | undefined,
-  getAttachmentUrl: () => string,
+function registerWebSocketUpgrade(
+  httpServer: HttpServer,
+  webSocketServer: WebSocketServer,
+  host: string,
 ): void {
-  let sessionId: string | undefined;
-  const submissions = new Set<string>();
-  let handshakeComplete = false;
-  let sessionExpiryTimeout: NodeJS.Timeout | undefined;
-  let submissionQueue = Promise.resolve();
-  const handshakeTimeout = setTimeout(() => {
-    if (!handshakeComplete) {
-      sendError(webSocket, 'invalid_token', 'A session handshake is required.');
-      webSocket.close(1008);
+  httpServer.on('upgrade', (request, socket, head) => {
+    const url = new URL(request.url ?? '/', `http://${host}`);
+    if (url.pathname !== '/ws') {
+      socket.destroy();
+      return;
     }
-  }, handshakeTimeoutMs);
-
-  webSocket.on('message', (raw: RawData) => {
-    /* c8 ignore next 3 -- handleMessage catches all expected protocol and adapter failures. */
-    void handleMessage(rawDataToString(raw)).catch(() => {
-      sendError(webSocket, 'adapter_error', 'The bridge could not process this message.');
+    webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+      webSocketServer.emit('connection', webSocket, request);
     });
   });
-  webSocket.on('close', () => {
-    clearTimeout(handshakeTimeout);
-    if (sessionExpiryTimeout !== undefined) clearTimeout(sessionExpiryTimeout);
-  });
-
-  async function handleMessage(raw: string): Promise<void> {
-    let input: unknown;
-    try {
-      input = JSON.parse(raw) as unknown;
-    } catch {
-      sendError(webSocket, 'invalid_message', 'Message must be valid JSON.');
-      return;
-    }
-
-    const parsed = ClientMessageSchema.safeParse(input);
-    if (!parsed.success) {
-      sendError(webSocket, 'invalid_message', 'Message does not match the protocol.');
-      return;
-    }
-
-    if (!handshakeComplete) {
-      if (parsed.data.type !== 'session.handshake') {
-        sendError(webSocket, 'invalid_token', 'The first message must be a session handshake.');
-        webSocket.close(1008);
-        return;
-      }
-      const session = store.authenticate(parsed.data.token);
-      if (session === undefined) {
-        sendError(
-          webSocket,
-          'invalid_token',
-          'This session token is invalid, expired, or already used.',
-        );
-        webSocket.close(1008);
-        return;
-      }
-      handshakeComplete = true;
-      sessionId = session.id;
-      clearTimeout(handshakeTimeout);
-      sessionExpiryTimeout = setTimeout(
-        () => {
-          sendError(webSocket, 'session_expired', 'This bridge session has expired.');
-          webSocket.close(1008);
-        },
-        Math.max(0, session.expiresAt.getTime() - Date.now()),
-      );
-      let templates: readonly PromptTemplate[] | undefined;
-      let resolvedTemplatesError = templatesError;
-      if (templateStore !== undefined) {
-        try {
-          templates = await templateStore.list();
-        } catch (error) {
-          resolvedTemplatesError = templateStoreErrorMessage(
-            error,
-            'Project templates could not be loaded from this directory.',
-          );
-        }
-      }
-      send(webSocket, {
-        type: 'session.ready',
-        sessionId: session.id,
-        expiresAt: session.expiresAt.toISOString(),
-        ...(initialMarkdown === undefined ? {} : { initialMarkdown }),
-        ...(feedbackLoop ? { feedbackLoop } : {}),
-        ...(templates === undefined ? {} : { templates: [...templates] }),
-        ...(resolvedTemplatesError === undefined ? {} : { templatesError: resolvedTemplatesError }),
-        ...(attachmentTokens === undefined
-          ? {}
-          : {
-              attachmentUrl: getAttachmentUrl(),
-              attachmentToken: attachmentTokens.get(session.id),
-            }),
-      });
-      return;
-    }
-
-    /* c8 ignore next 4 -- sessionId is assigned by the successful handshake above. */
-    if (sessionId === undefined) {
-      sendError(webSocket, 'invalid_message', 'The bridge session is not ready.');
-      return;
-    }
-    if (
-      parsed.data.type === 'template.list' ||
-      parsed.data.type === 'template.save' ||
-      parsed.data.type === 'template.delete'
-    ) {
-      await handleTemplateRequest(parsed.data);
-      return;
-    }
-    if (parsed.data.type !== 'prompt.submit') {
-      sendError(
-        webSocket,
-        'invalid_message',
-        'Only prompt submissions are accepted after handshake.',
-      );
-      return;
-    }
-    const promptSubmission = parsed.data;
-    const queuedSubmission = submissionQueue.then(() => handleSubmission(promptSubmission));
-    submissionQueue = queuedSubmission.catch(() => undefined);
-    await queuedSubmission;
-  }
-
-  async function handleTemplateRequest(request: TemplateRequest): Promise<void> {
-    if (templateStore === undefined) {
-      send(webSocket, {
-        type: 'template.result',
-        requestId: request.requestId,
-        status: 'failed',
-        error: templatesError ?? 'Project templates are unavailable.',
-      });
-      return;
-    }
-    try {
-      let templates: readonly PromptTemplate[];
-      if (request.type === 'template.list') templates = await templateStore.list();
-      else if (request.type === 'template.save')
-        templates = await templateStore.save(request.template);
-      else templates = await templateStore.delete(request.id);
-      send(webSocket, {
-        type: 'template.result',
-        requestId: request.requestId,
-        status: 'accepted',
-        templates: [...templates],
-      });
-    } catch (error) {
-      send(webSocket, {
-        type: 'template.result',
-        requestId: request.requestId,
-        status: 'failed',
-        error: templateStoreErrorMessage(error, 'Project templates could not be updated.'),
-      });
-    }
-  }
-
-  async function handleSubmission(submission: PromptSubmit): Promise<void> {
-    if (submissions.has(submission.submissionId)) {
-      sendError(webSocket, 'duplicate_submission', 'This submission has already been received.');
-      return;
-    }
-    submissions.add(submission.submissionId);
-    try {
-      const latestMarkdown = await withTimeout(
-        onPrompt(submission.prompt, {
-          sessionId: sessionId as string,
-          submissionId: submission.submissionId,
-          mode: submission.mode ?? 'edit',
-        }),
-        promptTimeoutMs,
-      );
-      const result: ServerMessage = {
-        type: 'prompt.result',
-        submissionId: submission.submissionId,
-        status: 'accepted',
-        ...(latestMarkdown === undefined ? {} : { prompt: latestMarkdown }),
-      };
-      send(webSocket, result);
-    } catch {
-      send(webSocket, {
-        type: 'prompt.result',
-        submissionId: submission.submissionId,
-        status: 'failed',
-        error: 'The Codex session could not accept this prompt.',
-      });
-    }
-  }
 }
 
-function rawDataToString(raw: RawData): string {
-  if (raw instanceof ArrayBuffer) return Buffer.from(raw).toString();
-  if (Array.isArray(raw)) return Buffer.concat(raw).toString();
-  return Buffer.from(raw).toString();
+function registerConnections(
+  webSocketServer: WebSocketServer,
+  sessionStore: SessionStore,
+  options: LocalBridgeServerOptions,
+  limits: ConnectionLimits,
+  attachmentTokens: Map<string, string>,
+  getAttachmentUrl: () => string,
+): void {
+  let activeConnections = 0;
+  webSocketServer.on('connection', (webSocket) => {
+    if (activeConnections >= limits.maxConnections) {
+      webSocket.close(1013, 'The bridge has reached its connection limit.');
+      return;
+    }
+    activeConnections += 1;
+    let released = false;
+    const releaseConnection = (): void => {
+      if (released) return;
+      released = true;
+      activeConnections -= 1;
+    };
+    webSocket.once('close', releaseConnection);
+    webSocket.once('error', releaseConnection);
+    attachConnection({
+      webSocket,
+      sessionStore,
+      onPrompt: options.onPrompt,
+      promptTimeoutMs: limits.promptTimeoutMs,
+      handshakeTimeoutMs: limits.handshakeTimeoutMs,
+      initialMarkdown: options.initialMarkdown,
+      feedbackLoop: options.feedbackLoop ?? false,
+      templateStore: options.templateStore,
+      templatesError: options.templatesError,
+      attachmentTokens: options.attachmentStore === undefined ? undefined : attachmentTokens,
+      getAttachmentUrl,
+    });
+  });
 }
 
 function serveAttachmentRequest(
@@ -561,71 +332,6 @@ function isLoopbackOrigin(origin: string): boolean {
 function validatePositiveInteger(value: number, label: string): void {
   if (!Number.isInteger(value) || value <= 0)
     throw new Error(`${label} must be a positive integer.`);
-}
-
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  let timeout: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error('The prompt adapter timed out.')), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeout !== undefined) clearTimeout(timeout);
-  }
-}
-
-function send(webSocket: WebSocket, message: ServerMessage): void {
-  if (webSocket.readyState === webSocket.OPEN) webSocket.send(encodeServerMessage(message));
-}
-
-function templateStoreErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && 'code' in error && error.code === 'ERR_TEMPLATE_SYMLINK') {
-    return 'Project template storage does not allow symbolic links. Replace them with regular files and directories.';
-  }
-  return fallback;
-}
-
-function sendError(
-  webSocket: WebSocket,
-  code: Extract<ServerMessage, { type: 'session.error' }>['code'],
-  message: string,
-): void {
-  send(webSocket, { type: 'session.error', code, message });
-}
-
-async function serveStatic(
-  request: IncomingMessage,
-  response: ServerResponse,
-  staticDir: string | undefined,
-): Promise<void> {
-  if (staticDir === undefined) {
-    response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
-    response.end('Codex Complex Prompt bridge is running.');
-    return;
-  }
-  const requestPath = new URL(request.url ?? '/', 'http://localhost').pathname;
-  const candidate = resolveStaticPath(staticDir, requestPath);
-  /* c8 ignore start -- the HTTP URL parser normalizes dot segments; the helper is tested directly. */
-  if (candidate === undefined) {
-    response.writeHead(400);
-    response.end('Bad request');
-    return;
-  }
-  /* c8 ignore stop */
-  try {
-    const file = await stat(candidate);
-    if (!file.isFile()) throw new Error('Not a file');
-    response.writeHead(200, {
-      'content-type': mimeTypes[extname(candidate)] ?? 'application/octet-stream',
-    });
-    createReadStream(candidate).pipe(response);
-  } catch {
-    response.writeHead(404);
-    response.end('Not found');
-  }
 }
 
 function listen(server: HttpServer, host: string, port: number): Promise<void> {

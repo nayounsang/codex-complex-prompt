@@ -7,3 +7,4 @@ pnpm-lock.yaml
 .playwright-mcp
 e2e/test-results
 e2e/playwright-report
+**/complex-prompt/templates/00000000-0000-4000-8000-00000000010[1-6].md
