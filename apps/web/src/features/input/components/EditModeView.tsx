@@ -9,6 +9,13 @@ interface EditModeViewProps {
   readonly onMarkdownChange: (markdown: string) => void;
   readonly validationError: string | null;
   readonly editorRef: React.RefObject<MarkdownEditorHandle | null>;
+  readonly attachmentUrl: string | null;
+  readonly attachmentToken: string | null;
+  readonly attachmentRefreshKey: number;
+  readonly drawings: readonly { id: string; label: string }[];
+  readonly onDraw: () => void;
+  readonly onEditDrawing: (id: string) => void;
+  readonly onDeleteDrawing: (id: string) => void;
 }
 
 export function EditModeView({
@@ -17,6 +24,13 @@ export function EditModeView({
   onMarkdownChange,
   validationError,
   editorRef,
+  attachmentUrl,
+  attachmentToken,
+  attachmentRefreshKey,
+  drawings,
+  onDraw,
+  onEditDrawing,
+  onDeleteDrawing,
 }: EditModeViewProps): React.JSX.Element {
   const [initialMarkdown] = useState(editorInitialMarkdown);
   return (
@@ -27,6 +41,13 @@ export function EditModeView({
           defaultMarkdown={initialMarkdown}
           readOnly={isSubmitting}
           onMarkdownChange={onMarkdownChange}
+          attachmentUrl={attachmentUrl}
+          attachmentToken={attachmentToken}
+          attachmentRefreshKey={attachmentRefreshKey}
+          drawings={drawings}
+          onDraw={onDraw}
+          onEditDrawing={onEditDrawing}
+          onDeleteDrawing={onDeleteDrawing}
         />
         {validationError !== null && (
           <p className="prompt-limit" role="alert">

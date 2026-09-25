@@ -3,6 +3,39 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode } from 'react';
 import { crepeTestState } from '../shared/testing/mock-crepe.js';
 
+vi.mock('../features/input/DrawingDialog.js', async () => {
+  const React = await import('react');
+  return {
+    DrawingDialog: (props: {
+      readonly attachmentId?: string;
+      readonly initialScene?: string;
+      readonly onSave: (input: { id?: string; png: string; scene: string }) => Promise<void>;
+      readonly onClose: () => void;
+    }) =>
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement('output', { 'data-testid': 'drawing-scene' }, props.initialScene ?? ''),
+        React.createElement(
+          'button',
+          {
+            type: 'button',
+            onClick: () => {
+              void props
+                .onSave({
+                  ...(props.attachmentId === undefined ? {} : { id: props.attachmentId }),
+                  png: 'data:image/png;base64,updated',
+                  scene: '{"elements":[]}',
+                })
+                .then(props.onClose);
+            },
+          },
+          'Save mocked drawing',
+        ),
+      ),
+  };
+});
+
 import { App } from './App.js';
 import { hasRenderedSourceMap } from '../shared/markdown/markdown-source-map.js';
 import { restoreSelectionAnchor } from '../shared/markdown/selection-anchor.js';
@@ -61,6 +94,7 @@ function renderWithSession(
   bridge = 'http://127.0.0.1:4321',
   initialMarkdown?: string,
   feedbackLoop = false,
+  attachment?: { readonly url: string; readonly token: string },
 ): MockWebSocket {
   const params = new URLSearchParams({ token: 'test-token', bridge });
   window.history.replaceState({}, '', `/?${params.toString()}`);
@@ -79,6 +113,9 @@ function renderWithSession(
         expiresAt: '2026-09-20T00:00:00.000Z',
         ...(initialMarkdown === undefined ? {} : { initialMarkdown }),
         ...(feedbackLoop ? { feedbackLoop } : {}),
+        ...(attachment === undefined
+          ? {}
+          : { attachmentUrl: attachment.url, attachmentToken: attachment.token }),
       }),
     );
   });
@@ -1030,5 +1067,117 @@ describe('App integration', () => {
         prompt: 'Submit this document',
       }),
     );
+  });
+});
+
+describe('그림 첨부', () => {
+  it('일반 이미지에는 그림 편집 버튼을 표시하지 않는다', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    renderWithSession('http://127.0.0.1:4321', '![사진](https://example.com/photo.png)', false, {
+      url: 'http://127.0.0.1:8765/_complex-prompt/attachments',
+      token: 'a'.repeat(32),
+    });
+    const image = await screen.findByAltText('사진');
+
+    fireEvent.pointerMove(image);
+
+    expect(screen.queryByRole('button', { name: '그림 편집' })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('편집 데이터가 없는 첨부 이미지는 그림 편집 버튼을 표시하지 않는다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    vi.stubGlobal('fetch', fetchMock);
+    const id = '00000000-0000-4000-8000-000000000009';
+    const attachment = {
+      url: 'http://127.0.0.1:8765/_complex-prompt/attachments',
+      token: 'a'.repeat(32),
+    };
+    renderWithSession(
+      'http://127.0.0.1:4321',
+      `![사진](.complex-prompt/attachments/${id}.png)`,
+      false,
+      attachment,
+    );
+    const image = await screen.findByAltText('사진');
+
+    fireEvent.pointerMove(image);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${attachment.url}/${id}.json?token=${attachment.token}`,
+      { method: 'HEAD' },
+    );
+    expect(screen.queryByRole('button', { name: '그림 편집' })).not.toBeInTheDocument();
+  });
+
+  it('연필 버튼을 누르면 불러온 편집 데이터를 그림 편집기에 표시한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000010';
+    const attachment = {
+      url: 'http://127.0.0.1:8765/_complex-prompt/attachments',
+      token: 'a'.repeat(32),
+    };
+    const scene = '{"elements":[]}';
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200 })
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => scene });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWithSession(
+      'http://127.0.0.1:4321',
+      `![그림](.complex-prompt/attachments/${id}.png)`,
+      false,
+      attachment,
+    );
+    const image = await screen.findByAltText('그림');
+    fireEvent.pointerMove(image);
+
+    const editButton = await screen.findByRole('button', { name: '그림 편집' });
+    fireEvent.click(editButton);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      `${attachment.url}/${id}.json?token=${attachment.token}`,
+    );
+    expect(await screen.findByTestId('drawing-scene')).toHaveTextContent(scene);
+  });
+
+  it('수정한 그림을 저장하면 편집기와 문서 미리보기에 새 이미지를 표시한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000012';
+    const attachment = {
+      url: 'http://127.0.0.1:8765/_complex-prompt/attachments',
+      token: 'a'.repeat(32),
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200 })
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => '{"elements":[]}' })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({ id }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWithSession(
+      'http://127.0.0.1:4321',
+      `![그림](.complex-prompt/attachments/${id}.png)`,
+      false,
+      attachment,
+    );
+    const image = await screen.findByAltText('그림');
+
+    fireEvent.pointerMove(image);
+    fireEvent.click(await screen.findByRole('button', { name: '그림 편집' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Save mocked drawing' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    const updatedImageUrl = `${attachment.url}/${id}.png?token=${attachment.token}&refresh=1`;
+    expect(await screen.findByAltText('그림')).toHaveAttribute('src', updatedImageUrl);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    expect(await screen.findByAltText('그림')).toHaveAttribute('src', updatedImageUrl);
   });
 });

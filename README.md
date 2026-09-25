@@ -139,3 +139,9 @@ pnpm test:e2e
 1. 기능을 변경하면 `pnpm changeset`으로 변경 기록을 추가하세요. 이 프로젝트는 [semver](https://semver.org/lang/ko/)를 따릅니다.
 2. 작업 PR이 병합되면 변경 기록을 반영한 버전 PR이 생성됩니다.
 3. 버전 PR을 병합하면 릴리스합니다.
+
+### 그림 첨부
+
+브라우저 편집기의 **Advanced → Draw**에서 Excalidraw 그림을 만들 수 있습니다. 저장한 그림은 프로젝트 작업 디렉터리의 `.complex-prompt/attachments/`에 Codex가 읽을 PNG와 다시 편집할 수 있는 Excalidraw JSON으로 저장됩니다. Markdown에는 상대 이미지 경로가 남으므로 프롬프트 제출과 AI 피드백 후에도 그림을 사용할 수 있습니다.
+
+PNG 첨부 파일은 최대 25 MB입니다. 그림의 텍스트에는 Excalifont를 사용하며, Excalidraw 글꼴 파일은 웹 앱에서 제공합니다. 관련 MIT 라이선스와 글꼴 고지는 배포 패키지의 `THIRD-PARTY-NOTICES.txt`에 포함됩니다.

@@ -20,6 +20,8 @@ export interface BridgeSession {
   readonly bridgeUrl: string | null;
   readonly initialMarkdown: string | null;
   readonly feedbackLoop: boolean;
+  readonly attachmentUrl: string | null;
+  readonly attachmentToken: string | null;
   readonly templateSnapshot: {
     readonly templates: readonly PromptTemplate[];
     readonly error: string | null;
@@ -85,6 +87,8 @@ export function useBridgeSession(): BridgeSession {
   const [closeInSeconds, setCloseInSeconds] = useState<number | null>(null);
   const [initialMarkdown, setInitialMarkdown] = useState<string | null>(null);
   const [feedbackLoop, setFeedbackLoop] = useState(false);
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [attachmentToken, setAttachmentToken] = useState<string | null>(null);
   const [templateSnapshot, setTemplateSnapshot] = useState<BridgeSession['templateSnapshot']>(null);
   const [bridgeUrl, setBridgeUrl] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -145,6 +149,8 @@ export function useBridgeSession(): BridgeSession {
           setError(null);
           setInitialMarkdown(message.initialMarkdown ?? '');
           setFeedbackLoop(message.feedbackLoop ?? false);
+          setAttachmentUrl(message.attachmentUrl ?? null);
+          setAttachmentToken(message.attachmentToken ?? null);
           setTemplateSnapshot({
             templates: message.templates ?? [],
             error: message.templatesError ?? null,
@@ -305,6 +311,8 @@ export function useBridgeSession(): BridgeSession {
     bridgeUrl,
     initialMarkdown,
     feedbackLoop,
+    attachmentUrl,
+    attachmentToken,
     templateSnapshot,
     requestTemplateChange,
     submit,

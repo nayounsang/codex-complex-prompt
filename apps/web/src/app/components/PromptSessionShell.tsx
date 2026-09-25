@@ -53,10 +53,19 @@ interface PromptSessionShellProps {
       error?: string;
     }>;
   };
+  readonly drawings: {
+    readonly items: readonly { id: string; label: string }[];
+    readonly onDraw: () => void;
+    readonly onEdit: (id: string) => void;
+    readonly onDelete: (id: string) => void;
+    readonly attachmentUrl: string | null;
+    readonly attachmentToken: string | null;
+    readonly attachmentRefreshKey: number;
+  };
 }
 
 export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.Element {
-  const { session, editor, feedback, templates } = props;
+  const { session, editor, feedback, templates, drawings } = props;
   return (
     <>
       <PromptHeader
@@ -86,6 +95,13 @@ export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.El
           onMarkdownChange={editor.onMarkdownChange}
           validationError={editor.validationError}
           editorRef={editor.ref}
+          attachmentUrl={drawings.attachmentUrl}
+          attachmentToken={drawings.attachmentToken}
+          attachmentRefreshKey={drawings.attachmentRefreshKey}
+          drawings={drawings.items}
+          onDraw={drawings.onDraw}
+          onEditDrawing={drawings.onEdit}
+          onDeleteDrawing={drawings.onDelete}
         />
       ) : (
         <FeedbackModeView
@@ -98,6 +114,9 @@ export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.El
           onUpdate={feedback.onUpdate}
           onDelete={feedback.onDelete}
           error={feedback.error}
+          attachmentUrl={drawings.attachmentUrl}
+          attachmentToken={drawings.attachmentToken}
+          attachmentRefreshKey={drawings.attachmentRefreshKey}
         />
       )}
     </>

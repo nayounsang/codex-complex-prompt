@@ -42,6 +42,8 @@ export const SessionReadySchema = z.object({
   feedbackLoop: z.boolean().optional(),
   templates: z.array(PromptTemplateSchema).optional(),
   templatesError: z.string().optional(),
+  attachmentUrl: z.string().url().optional(),
+  attachmentToken: z.string().min(32).optional(),
 });
 
 export const PromptResultSchema = z.object({

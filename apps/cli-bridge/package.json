@@ -23,6 +23,7 @@
     "!dist/smoke.*",
     "web/dist/**",
     "README.md",
+    "THIRD-PARTY-NOTICES.txt",
     "LICENSE"
   ],
   "bin": {

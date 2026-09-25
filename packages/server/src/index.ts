@@ -1,11 +1,23 @@
-import { createServer, type Server as HttpServer } from 'node:http';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import {
+  createServer,
+  type IncomingMessage,
+  type Server as HttpServer,
+  type ServerResponse,
+} from 'node:http';
+
+import { AttachmentTooLargeError, AttachmentValidationError } from '@codex-complex-prompt/protocol';
 
 import { WebSocketServer } from 'ws';
 
 import { SessionStore } from './features/session/storage/session-store.js';
 import { attachConnection } from './features/session/connection/attach-connection.js';
 import { serveStatic, resolveStaticPath } from './infrastructure/http/static-files.js';
-import type { LocalBridgeServerOptions, RunningLocalBridgeServer } from './shared/types.js';
+import type {
+  AttachmentStore,
+  LocalBridgeServerOptions,
+  RunningLocalBridgeServer,
+} from './shared/types.js';
 
 export { SessionStore } from './features/session/storage/session-store.js';
 export type {
@@ -18,6 +30,7 @@ export type {
   PromptContext,
   RunningLocalBridgeServer,
   TemplateStore,
+  AttachmentStore,
 } from './shared/types.js';
 export { resolveStaticPath };
 
@@ -34,16 +47,32 @@ export async function startLocalBridgeServer(
   validatePositiveInteger(handshakeTimeoutMs, 'Handshake timeout');
 
   const sessionStore = new SessionStore(options);
+  const attachmentTokens = new Map<string, string>();
+  let attachmentUrl = '';
   const httpServer = createServer((request, response) => {
+    const attachmentRequest = serveAttachmentRequest(
+      request,
+      response,
+      options.attachmentStore,
+      attachmentTokens,
+    );
+    if (attachmentRequest) return;
     void serveStatic(request, response, options.staticDir);
   });
   const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
   registerWebSocketUpgrade(httpServer, webSocketServer, host);
-  registerConnections(webSocketServer, sessionStore, options, {
-    maxConnections,
-    promptTimeoutMs,
-    handshakeTimeoutMs,
-  });
+  registerConnections(
+    webSocketServer,
+    sessionStore,
+    options,
+    {
+      maxConnections,
+      promptTimeoutMs,
+      handshakeTimeoutMs,
+    },
+    attachmentTokens,
+    () => attachmentUrl,
+  );
 
   await listen(httpServer, host, port);
   const address = httpServer.address();
@@ -51,6 +80,7 @@ export async function startLocalBridgeServer(
   if (address === null || typeof address === 'string') {
     throw new Error('The local bridge server did not expose a TCP address.');
   }
+  attachmentUrl = `http://${host}:${address.port}/_complex-prompt/attachments`;
 
   return {
     host,
@@ -58,6 +88,9 @@ export async function startLocalBridgeServer(
     url: `http://${host}:${address.port}`,
     createSession: () => {
       const session = sessionStore.create();
+      if (options.attachmentStore !== undefined) {
+        attachmentTokens.set(session.id, randomBytes(32).toString('base64url'));
+      }
       return { id: session.id, token: session.token, expiresAt: session.expiresAt };
     },
     close: async () => {
@@ -96,6 +129,8 @@ function registerConnections(
   sessionStore: SessionStore,
   options: LocalBridgeServerOptions,
   limits: ConnectionLimits,
+  attachmentTokens: Map<string, string>,
+  getAttachmentUrl: () => string,
 ): void {
   let activeConnections = 0;
   webSocketServer.on('connection', (webSocket) => {
@@ -122,8 +157,176 @@ function registerConnections(
       feedbackLoop: options.feedbackLoop ?? false,
       templateStore: options.templateStore,
       templatesError: options.templatesError,
+      attachmentTokens: options.attachmentStore === undefined ? undefined : attachmentTokens,
+      getAttachmentUrl,
     });
   });
+}
+
+function serveAttachmentRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  attachmentStore: AttachmentStore | undefined,
+  attachmentTokens: Map<string, string>,
+): boolean {
+  const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+  if (!url.pathname.startsWith('/_complex-prompt/attachments')) return false;
+  const origin = request.headers.origin;
+  if (origin !== undefined && isLoopbackOrigin(origin)) {
+    response.setHeader('Access-Control-Allow-Origin', origin);
+    response.setHeader('Vary', 'Origin');
+    response.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, DELETE, OPTIONS');
+    response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+  if (request.method === 'OPTIONS') {
+    response.writeHead(204).end();
+    return true;
+  }
+  if (attachmentStore === undefined) {
+    response.writeHead(404).end();
+    return true;
+  }
+  const suppliedToken = url.searchParams.get('token') ?? '';
+  const sessionId = [...attachmentTokens].find(([, token]) =>
+    tokensEqual(token, suppliedToken),
+  )?.[0];
+  if (sessionId === undefined) {
+    response
+      .writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' })
+      .end('Invalid attachment token.');
+    return true;
+  }
+  const suffix = url.pathname.slice('/_complex-prompt/attachments'.length);
+  const match = suffix.match(/^(?:\/([0-9a-f-]{36})(?:\.(png|json))?)?\/?$/i);
+  if (match === null) {
+    response.writeHead(404).end();
+    return true;
+  }
+  if (request.method === 'POST' && match[1] === undefined) {
+    void readRequestBody(request, 36 * 1024 * 1024)
+      .then((body) => {
+        let input: { id?: unknown; png?: unknown; scene?: unknown };
+        try {
+          const parsed: unknown = JSON.parse(body);
+          if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new AttachmentValidationError('Invalid attachment request.');
+          }
+          input = parsed;
+        } catch (error) {
+          if (error instanceof AttachmentValidationError) throw error;
+          throw new AttachmentValidationError(
+            `Attachment request JSON is invalid: ${
+              error instanceof Error ? error.message : 'unknown parse error'
+            }`,
+          );
+        }
+        if (
+          typeof input.png !== 'string' ||
+          typeof input.scene !== 'string' ||
+          (input.id !== undefined && typeof input.id !== 'string')
+        )
+          throw new AttachmentValidationError('Invalid attachment request.');
+        return attachmentStore.save({
+          ...(typeof input.id === 'string' ? { id: input.id } : {}),
+          png: input.png,
+          scene: input.scene,
+        });
+      })
+      .then((id) =>
+        response.writeHead(201, { 'Content-Type': 'application/json' }).end(JSON.stringify({ id })),
+      )
+      .catch((error: unknown) => {
+        const isTooLarge = error instanceof AttachmentTooLargeError;
+        const isInvalidRequest = error instanceof AttachmentValidationError;
+        const status = isTooLarge ? 413 : isInvalidRequest ? 400 : 500;
+        const message =
+          isTooLarge || isInvalidRequest ? error.message : 'Attachment could not be saved.';
+        response
+          .writeHead(status, { 'Content-Type': 'application/json' })
+          .end(JSON.stringify({ error: message }));
+      });
+    return true;
+  }
+  const id = match[1];
+  const kind = match[2];
+  if (id === undefined || !['GET', 'HEAD', 'DELETE'].includes(request.method ?? '')) {
+    response.writeHead(405).end();
+    return true;
+  }
+  if (request.method === 'HEAD') {
+    void attachmentStore
+      .hasSceneData(id)
+      .then((exists) =>
+        response.writeHead(exists ? 200 : 404, { 'Cache-Control': 'no-store' }).end(),
+      )
+      .catch(() => response.writeHead(500).end());
+    return true;
+  }
+  if (request.method === 'DELETE') {
+    void attachmentStore
+      .delete(id)
+      .then((deleted) => response.writeHead(deleted ? 204 : 404).end())
+      .catch(() => response.writeHead(500).end());
+    return true;
+  }
+  void attachmentStore
+    .read(id)
+    .then((attachment) => {
+      if (attachment === undefined) {
+        response.writeHead(404).end();
+        return;
+      }
+      if (kind === 'png') {
+        response
+          .writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' })
+          .end(attachment.png);
+        return;
+      }
+      if (kind === 'json') {
+        response
+          .writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-store',
+          })
+          .end(attachment.scene);
+        return;
+      }
+      response.writeHead(400).end();
+    })
+    .catch(() => response.writeHead(500).end());
+  return true;
+}
+
+async function readRequestBody(request: IncomingMessage, maxBytes: number): Promise<string> {
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.byteLength;
+    if (size > maxBytes) {
+      throw new AttachmentTooLargeError('The attachment request exceeds the request size limit.');
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+function tokensEqual(expected: string, provided: string): boolean {
+  const expectedBytes = Buffer.from(expected);
+  const providedBytes = Buffer.from(provided);
+  return (
+    expectedBytes.byteLength === providedBytes.byteLength &&
+    timingSafeEqual(expectedBytes, providedBytes)
+  );
+}
+
+function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const hostname = new URL(origin).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  } catch {
+    return false;
+  }
 }
 
 function validatePositiveInteger(value: number, label: string): void {

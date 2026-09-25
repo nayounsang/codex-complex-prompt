@@ -24,6 +24,8 @@ export interface BridgeConnectionOptions {
   readonly feedbackLoop: boolean;
   readonly templateStore: TemplateStore | undefined;
   readonly templatesError: string | undefined;
+  readonly attachmentTokens: Map<string, string> | undefined;
+  readonly getAttachmentUrl: () => string;
 }
 
 export function attachConnection(options: BridgeConnectionOptions): void {
@@ -37,6 +39,8 @@ export function attachConnection(options: BridgeConnectionOptions): void {
     feedbackLoop,
     templateStore,
     templatesError,
+    attachmentTokens,
+    getAttachmentUrl,
   } = options;
   let sessionId: string | undefined;
   let handlePromptMessage: ReturnType<typeof createPromptMessageHandler> | undefined;
@@ -113,6 +117,8 @@ export function attachConnection(options: BridgeConnectionOptions): void {
         feedbackLoop,
         templateStore,
         templatesError,
+        attachmentTokens,
+        getAttachmentUrl,
       });
       send(webSocket, readyMessage);
       return;
@@ -148,6 +154,8 @@ export function attachConnection(options: BridgeConnectionOptions): void {
     readonly feedbackLoop: boolean;
     readonly templateStore: TemplateStore | undefined;
     readonly templatesError: string | undefined;
+    readonly attachmentTokens: Map<string, string> | undefined;
+    readonly getAttachmentUrl: () => string;
   }): Promise<ServerMessage> {
     const { session } = input;
     let templates: readonly PromptTemplate[] | undefined;
@@ -170,6 +178,12 @@ export function attachConnection(options: BridgeConnectionOptions): void {
       ...(input.feedbackLoop ? { feedbackLoop: input.feedbackLoop } : {}),
       ...(templates === undefined ? {} : { templates: [...templates] }),
       ...(resolvedTemplatesError === undefined ? {} : { templatesError: resolvedTemplatesError }),
+      ...(input.attachmentTokens === undefined
+        ? {}
+        : {
+            attachmentUrl: input.getAttachmentUrl(),
+            attachmentToken: input.attachmentTokens.get(session.id),
+          }),
     };
   }
 }

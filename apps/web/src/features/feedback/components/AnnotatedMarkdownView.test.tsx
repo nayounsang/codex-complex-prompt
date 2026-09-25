@@ -10,6 +10,9 @@ function renderMarkdown(markdown: string, onSelection = vi.fn()): HTMLElement {
   render(
     <AnnotatedMarkdownView
       markdown={markdown}
+      attachmentUrl={null}
+      attachmentToken={null}
+      attachmentRefreshKey={0}
       annotations={[]}
       selectionPopoverOpen={false}
       onSelection={onSelection}

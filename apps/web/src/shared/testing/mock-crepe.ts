@@ -100,6 +100,15 @@ const mockCrepe = vi.hoisted(() => {
   function appendMockInline(root: HTMLElement, markdown: string): void {
     let cursor = 0;
     while (cursor < markdown.length) {
+      const image = markdown.slice(cursor).match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+      if (image !== null) {
+        const imageElement = document.createElement('img');
+        imageElement.alt = image[1] ?? '';
+        imageElement.src = image[2] ?? '';
+        root.append(imageElement);
+        cursor += image[0].length;
+        continue;
+      }
       const link = markdown.slice(cursor).match(/^\[([^\]]+)\]\(([^)]+)\)/);
       if (link !== null) {
         const anchor = document.createElement('a');

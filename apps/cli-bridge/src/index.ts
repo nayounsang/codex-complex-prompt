@@ -30,6 +30,7 @@ import {
 import { runCodexUserPromptHook } from './features/input/hooks/codex-user-prompt-hook.js';
 import { runCodexStopHook } from './features/feedback/hooks/codex-stop-hook.js';
 import { createProjectTemplateStore } from './features/templates/storage/project-templates.js';
+import { createProjectAttachmentStore } from './features/attachments/project-attachments.js';
 
 export interface CliBridgeOptions {
   readonly inputAdapter?: CodexSessionInput;
@@ -60,6 +61,10 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
     options.projectDirectory === undefined
       ? undefined
       : createProjectTemplateStore(options.projectDirectory);
+  const attachmentStore =
+    options.projectDirectory === undefined
+      ? undefined
+      : createProjectAttachmentStore(options.projectDirectory);
   const serverOptions = {
     onPrompt: (prompt: string, context: CodexSessionInputContext) =>
       inputAdapter.submit(prompt, context),
@@ -70,6 +75,7 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
     ...(options.initialMarkdown === undefined ? {} : { initialMarkdown: options.initialMarkdown }),
     ...(options.feedbackLoop === undefined ? {} : { feedbackLoop: options.feedbackLoop }),
     ...(templateStore === undefined ? {} : { templateStore }),
+    ...(attachmentStore === undefined ? {} : { attachmentStore }),
     ...(options.templatesError === undefined ? {} : { templatesError: options.templatesError }),
   };
   const server = await startLocalBridgeServer(serverOptions);

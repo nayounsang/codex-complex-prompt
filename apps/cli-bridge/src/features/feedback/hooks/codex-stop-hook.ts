@@ -53,6 +53,7 @@ export async function runCodexStopHook(
       'The feedback editor was not reopened because the latest response was empty.',
     );
   }
+  const projectDirectory = await stateStore.getCwd?.(input.session_id);
 
   let resolveSubmission: ((submission: BrowserSubmission) => void) | undefined;
   let resolveBridgeSubmission: (() => void) | undefined;
@@ -66,6 +67,9 @@ export async function runCodexStopHook(
     ...options.bridgeOptions,
     initialMarkdown: markdown,
     feedbackLoop: true,
+    ...(projectDirectory === undefined || projectDirectory.trim() === ''
+      ? {}
+      : { projectDirectory }),
     inputAdapter: {
       submit: (prompt, context) => {
         resolveSubmission?.({ prompt, mode: context?.mode ?? 'edit' });

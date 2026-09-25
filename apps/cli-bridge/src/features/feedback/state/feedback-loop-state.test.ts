@@ -45,6 +45,28 @@ describe('feedback loop 상태 저장소', () => {
     await expect(readdir(directory)).resolves.toEqual([]);
   });
 
+  it('프로젝트 경로를 정리해 상태에 저장하고 다시 읽는다', async () => {
+    const directory = await createDirectory();
+    const stateStore = createFeedbackLoopStateStore(directory);
+    const sessionId = 'cwd-session';
+
+    await expect(stateStore.activate(sessionId, '  /workspace/project  ')).resolves.toBe(true);
+
+    const cwd = await stateStore.getCwd?.(sessionId);
+    expect(cwd).toBe('/workspace/project');
+  });
+
+  it('공백뿐인 프로젝트 경로는 상태에 저장하지 않는다', async () => {
+    const directory = await createDirectory();
+    const stateStore = createFeedbackLoopStateStore(directory);
+    const sessionId = 'blank-cwd-session';
+
+    await expect(stateStore.activate(sessionId, '  \t  ')).resolves.toBe(true);
+
+    const cwd = await stateStore.getCwd?.(sessionId);
+    expect(cwd).toBeUndefined();
+  });
+
   it('아직 생성되지 않은 상태를 정리해도 오류를 던지지 않는다', async () => {
     const directory = await createDirectory();
     const stateStore = createFeedbackLoopStateStore(directory);

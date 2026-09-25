@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  AttachmentTooLargeError,
+  AttachmentValidationError,
   ClientMessageSchema,
   countPromptCharacters,
   MAX_PROMPT_LENGTH,
@@ -10,6 +12,24 @@ import {
   truncatePromptCharacters,
   type ServerMessage,
 } from './index.js';
+
+describe('첨부 파일 오류', () => {
+  it('용량 초과 오류를 Error 하위 타입으로 제공한다', () => {
+    const error = new AttachmentTooLargeError();
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.name).toBe('AttachmentTooLargeError');
+    expect(error.message).toBe('PNG attachments must be 25 MB or smaller.');
+  });
+
+  it('검증 오류의 이름과 메시지를 보존한다', () => {
+    const error = new AttachmentValidationError('Invalid attachment data.');
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.name).toBe('AttachmentValidationError');
+    expect(error.message).toBe('Invalid attachment data.');
+  });
+});
 
 describe('프롬프트 길이 유틸리티', () => {
   it('지정한 Unicode code point 길이까지만 문자열을 반환한다', () => {

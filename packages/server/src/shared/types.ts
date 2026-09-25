@@ -16,6 +16,15 @@ export interface TemplateStore {
   readonly delete: (id: string) => Promise<readonly PromptTemplate[]>;
 }
 
+export interface AttachmentStore {
+  readonly save: (input: { id?: string; png: string; scene: string }) => Promise<string>;
+  readonly read: (
+    id: string,
+  ) => Promise<{ readonly png: Buffer; readonly scene: string } | undefined>;
+  readonly hasSceneData: (id: string) => Promise<boolean>;
+  readonly delete: (id: string) => Promise<boolean>;
+}
+
 export interface LocalBridgeServerOptions extends SessionStoreOptions {
   readonly host?: string;
   readonly port?: number;
@@ -27,6 +36,7 @@ export interface LocalBridgeServerOptions extends SessionStoreOptions {
   readonly feedbackLoop?: boolean;
   readonly templateStore?: TemplateStore;
   readonly templatesError?: string;
+  readonly attachmentStore?: AttachmentStore;
   readonly onPrompt: (prompt: string, context: PromptContext) => Promise<PromptAdapterResult>;
 }
 
