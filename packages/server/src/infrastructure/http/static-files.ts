@@ -1,7 +1,7 @@
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, realpath, stat } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { extname, resolve, sep } from 'node:path';
+import { extname, relative, resolve, sep } from 'node:path';
 
 const mimeTypes: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
@@ -17,6 +17,16 @@ export function resolveStaticPath(staticDir: string, requestPath: string): strin
   const candidate = resolve(safeRoot, relativePath);
   if (candidate !== safeRoot && !candidate.startsWith(`${safeRoot}${sep}`)) return undefined;
   return candidate;
+}
+
+function isWithinDirectory(directory: string, candidate: string): boolean {
+  const relativePath = relative(directory, candidate);
+  return (
+    relativePath !== '' &&
+    relativePath !== '..' &&
+    !relativePath.startsWith(`..${sep}`) &&
+    !relativePath.startsWith(sep)
+  );
 }
 
 export async function serveStatic(
@@ -38,14 +48,40 @@ export async function serveStatic(
     return;
   }
   /* c8 ignore stop */
+  let fileHandle: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    const file = await stat(candidate);
-    if (!file.isFile()) throw new Error('Not a file');
+    const realStaticDir = await realpath(staticDir);
+    const realCandidate = await realpath(candidate);
+    if (!isWithinDirectory(realStaticDir, realCandidate))
+      throw new Error('Outside static directory');
+
+    const [verifiedPath, verifiedFile] = await Promise.all([
+      realpath(realCandidate),
+      stat(realCandidate),
+    ]);
+    if (
+      verifiedPath !== realCandidate ||
+      !isWithinDirectory(realStaticDir, verifiedPath) ||
+      !verifiedFile.isFile()
+    ) {
+      throw new Error('Static file changed while validating');
+    }
+
+    fileHandle = await open(realCandidate, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const openedFile = await fileHandle.stat();
+    if (
+      !openedFile.isFile() ||
+      openedFile.dev !== verifiedFile.dev ||
+      openedFile.ino !== verifiedFile.ino
+    ) {
+      throw new Error('Static file changed while opening');
+    }
     response.writeHead(200, {
-      'content-type': mimeTypes[extname(candidate)] ?? 'application/octet-stream',
+      'content-type': mimeTypes[extname(realCandidate)] ?? 'application/octet-stream',
     });
-    createReadStream(candidate).pipe(response);
+    fileHandle.createReadStream().pipe(response);
   } catch {
+    await fileHandle?.close().catch(() => undefined);
     response.writeHead(404);
     response.end('Not found');
   }

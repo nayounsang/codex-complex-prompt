@@ -183,9 +183,11 @@ const mockCrepe = vi.hoisted(() => {
     }
 
     public create(): Promise<this> {
-      if (state.createError !== undefined) throw state.createError;
+      if (state.createError !== undefined) return Promise.reject(state.createError);
       const root = this.options['root'];
-      if (!(root instanceof HTMLElement)) throw new Error('Crepe root was not provided.');
+      if (!(root instanceof HTMLElement)) {
+        return Promise.reject(new Error('Crepe root was not provided.'));
+      }
       const editor = document.createElement('div');
       editor.className = 'ProseMirror';
       editor.setAttribute('contenteditable', String(!this.readOnly));

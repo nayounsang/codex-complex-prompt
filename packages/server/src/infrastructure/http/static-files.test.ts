@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -30,6 +30,29 @@ describe('정적 파일과 HTTP 연결', () => {
     } finally {
       await server.close();
       await rm(staticDir, { recursive: true, force: true });
+    }
+  });
+
+  it('정적 디렉터리 안의 심볼릭 링크로 외부 파일을 제공하지 않는다', async () => {
+    const staticDir = await mkdtemp(join(tmpdir(), 'codex-complex-prompt-static-'));
+    const outsideDir = await mkdtemp(join(tmpdir(), 'codex-complex-prompt-outside-'));
+    await writeFile(join(outsideDir, 'secret.txt'), 'private content');
+    await symlink(join(outsideDir, 'secret.txt'), join(staticDir, 'secret.txt'));
+    const server = await startLocalBridgeServer({
+      staticDir,
+      onPrompt: async () => undefined,
+    });
+
+    try {
+      const response = await getHttp(`${server.url}/secret.txt`);
+
+      expect(response).toEqual({ statusCode: 404, body: 'Not found' });
+    } finally {
+      await server.close();
+      await Promise.all([
+        rm(staticDir, { recursive: true, force: true }),
+        rm(outsideDir, { recursive: true, force: true }),
+      ]);
     }
   });
 
