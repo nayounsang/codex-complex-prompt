@@ -92,8 +92,8 @@ export function createProjectAttachmentStore(projectDirectory: string): ProjectA
       const imagePath = join(directory, `${id}.png`);
       const scenePath = join(directory, `${id}.excalidraw.json`);
       const [imageRemoved, sceneRemoved] = await Promise.all([
-        rm(imagePath, { force: true }).then(() => true),
-        rm(scenePath, { force: true }).then(() => true),
+        removeFile(imagePath),
+        removeFile(scenePath),
       ]);
       return imageRemoved || sceneRemoved;
     },
@@ -124,6 +124,16 @@ function isMissingFile(error: unknown): boolean {
 async function fileExists(path: string): Promise<boolean> {
   try {
     await access(path);
+    return true;
+  } catch (error) {
+    if (isMissingFile(error)) return false;
+    throw error;
+  }
+}
+
+async function removeFile(path: string): Promise<boolean> {
+  try {
+    await rm(path);
     return true;
   } catch (error) {
     if (isMissingFile(error)) return false;
