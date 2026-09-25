@@ -17,6 +17,8 @@ interface BridgeSession {
   readonly feedbackLoop: boolean;
   readonly templates: readonly PromptTemplate[];
   readonly templatesError: string | null;
+  readonly attachmentUrl: string | null;
+  readonly attachmentToken: string | null;
   readonly saveTemplate: (template: PromptTemplate) => Promise<TemplateResult>;
   readonly deleteTemplate: (id: string) => Promise<TemplateResult>;
   readonly submit: (prompt: string, mode?: PromptSubmitMode) => Promise<PromptResult>;
@@ -77,6 +79,8 @@ export function useBridgeSession(): BridgeSession {
   const [feedbackLoop, setFeedbackLoop] = useState(false);
   const [templates, setTemplates] = useState<readonly PromptTemplate[]>([]);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [attachmentToken, setAttachmentToken] = useState<string | null>(null);
   const [bridgeUrl, setBridgeUrl] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     return new URLSearchParams(window.location.search).get('bridge') ?? window.location.origin;
@@ -163,6 +167,8 @@ export function useBridgeSession(): BridgeSession {
           setFeedbackLoop(message.data.feedbackLoop ?? false);
           setTemplates(message.data.templates ?? []);
           setTemplatesError(message.data.templatesError ?? null);
+          setAttachmentUrl(message.data.attachmentUrl ?? null);
+          setAttachmentToken(message.data.attachmentToken ?? null);
         } else if (message.data.type === 'template.result') {
           const result: TemplateResult = {
             status: message.data.status,
@@ -331,6 +337,8 @@ export function useBridgeSession(): BridgeSession {
     feedbackLoop,
     templates,
     templatesError,
+    attachmentUrl,
+    attachmentToken,
     saveTemplate,
     deleteTemplate,
     submit,

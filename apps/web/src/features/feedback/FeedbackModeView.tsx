@@ -18,6 +18,9 @@ interface FeedbackModeViewProps {
   readonly onUpdate: (id: string, feedback: string) => void;
   readonly onDelete: (id: string) => void;
   readonly error: string | null;
+  readonly attachmentUrl: string | null;
+  readonly attachmentToken: string | null;
+  readonly attachmentRefreshKey: number;
 }
 
 export function FeedbackModeView(props: FeedbackModeViewProps): React.JSX.Element {
@@ -48,6 +51,9 @@ export function FeedbackModeView(props: FeedbackModeViewProps): React.JSX.Elemen
               annotations={props.annotations}
               selectionPopoverOpen={props.pendingSelection !== null}
               onSelection={props.onSelection}
+              attachmentUrl={props.attachmentUrl}
+              attachmentToken={props.attachmentToken}
+              attachmentRefreshKey={props.attachmentRefreshKey}
             />
             <Popover.Root
               open={props.pendingSelection !== null}

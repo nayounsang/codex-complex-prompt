@@ -42,6 +42,13 @@ interface PromptSessionShellProps {
     templates?: readonly PromptTemplate[];
     error?: string;
   }>;
+  readonly drawings: readonly { id: string; label: string }[];
+  readonly onDraw: () => void;
+  readonly onEditDrawing: (id: string) => void;
+  readonly onDeleteDrawing: (id: string) => void;
+  readonly attachmentUrl: string | null;
+  readonly attachmentToken: string | null;
+  readonly attachmentRefreshKey: number;
 }
 
 export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.Element {
@@ -74,6 +81,13 @@ export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.El
           onMarkdownChange={props.onMarkdownChange}
           validationError={props.validationError}
           editorRef={props.editorRef}
+          attachmentUrl={props.attachmentUrl}
+          attachmentToken={props.attachmentToken}
+          attachmentRefreshKey={props.attachmentRefreshKey}
+          drawings={props.drawings}
+          onDraw={props.onDraw}
+          onEditDrawing={props.onEditDrawing}
+          onDeleteDrawing={props.onDeleteDrawing}
         />
       ) : (
         <FeedbackModeView
@@ -86,6 +100,9 @@ export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.El
           onUpdate={props.onUpdateFeedback}
           onDelete={props.onDeleteFeedback}
           error={props.feedbackError}
+          attachmentUrl={props.attachmentUrl}
+          attachmentToken={props.attachmentToken}
+          attachmentRefreshKey={props.attachmentRefreshKey}
         />
       )}
     </>
