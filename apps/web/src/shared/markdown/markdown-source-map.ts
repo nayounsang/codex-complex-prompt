@@ -1,3 +1,12 @@
+import remarkGfm from 'remark-gfm';
+import remarkParse from 'remark-parse';
+import { unified } from 'unified';
+import {
+  getConfiguredAttachmentId,
+  getMarkdownAttachmentId,
+  MARKDOWN_ATTACHMENT_DIRECTORY,
+} from './attachment-path.js';
+
 export interface SourceCharacter {
   readonly char: string;
   readonly start: number;
@@ -8,6 +17,12 @@ export interface SourceFeedbackRange {
   readonly start: number;
   readonly end: number;
   readonly id: string;
+}
+
+interface MarkdownAttachmentImageRange {
+  readonly id: string;
+  readonly start: number;
+  readonly end: number;
 }
 
 interface RenderedCharacter extends SourceCharacter {
@@ -151,6 +166,8 @@ export function decorateMarkdownRoot(
   root: HTMLElement,
   markdown: string,
   ranges: readonly SourceFeedbackRange[],
+  sourceMarkdown: string = markdown,
+  attachmentUrl: string | null = null,
 ): void {
   const proseMirror = root.matches('.ProseMirror')
     ? root
@@ -159,6 +176,7 @@ export function decorateMarkdownRoot(
   const sortedRanges = [...ranges].sort((left, right) => left.start - right.start);
   decorateTableSourceRanges(proseMirror, markdown, sortedRanges);
   decorateCodeBlockSourceRanges(proseMirror, markdown, sortedRanges);
+  decorateAttachmentImages(proseMirror, sourceMarkdown, sortedRanges, attachmentUrl);
 
   const sourceMap = getVisibleSourceMap(markdown);
   const mappings: RenderedTextMapping[] = [];
@@ -209,6 +227,86 @@ export function decorateMarkdownRoot(
   }
   renderedTextMappings.set(proseMirror, mappings);
   paintFeedbackHighlights(mappings, sortedRanges);
+}
+
+function decorateAttachmentImages(
+  root: HTMLElement,
+  markdown: string,
+  feedbackRanges: readonly SourceFeedbackRange[],
+  attachmentUrl: string | null,
+): void {
+  const imageRanges = getMarkdownAttachmentImageRanges(markdown);
+  const rangesById = new Map<string, MarkdownAttachmentImageRange[]>();
+  for (const range of imageRanges) {
+    const ranges = rangesById.get(range.id) ?? [];
+    ranges.push(range);
+    rangesById.set(range.id, ranges);
+  }
+  for (const image of root.querySelectorAll<HTMLImageElement>('img')) {
+    const id = getAttachmentImageId(image, attachmentUrl);
+    const matchingRanges = id === null ? undefined : rangesById.get(id);
+    const sourceRange = matchingRanges?.shift();
+    if (sourceRange === undefined) {
+      delete image.dataset['feedbackSourceStart'];
+      delete image.dataset['feedbackSourceEnd'];
+      image.removeAttribute('role');
+      image.removeAttribute('tabindex');
+      image.removeAttribute('aria-label');
+      image.classList.remove('feedback-image-highlight');
+      continue;
+    }
+    image.dataset['feedbackSourceStart'] = String(sourceRange.start);
+    image.dataset['feedbackSourceEnd'] = String(sourceRange.end);
+    image.setAttribute('role', 'button');
+    image.tabIndex = 0;
+    image.setAttribute(
+      'aria-label',
+      `Select image for feedback: ${image.alt.trim() || 'Drawing'} (${MARKDOWN_ATTACHMENT_DIRECTORY}/${id}.png)`,
+    );
+    image.classList.toggle(
+      'feedback-image-highlight',
+      feedbackRanges.some(
+        (range) => range.start < sourceRange.end && range.end > sourceRange.start,
+      ),
+    );
+  }
+}
+
+function getAttachmentImageId(
+  image: HTMLImageElement,
+  attachmentUrl: string | null,
+): string | null {
+  const source = image.getAttribute('src');
+  if (source === null) return null;
+  return getMarkdownAttachmentId(source, true) ?? getConfiguredAttachmentId(source, attachmentUrl);
+}
+
+function getMarkdownAttachmentImageRanges(markdown: string): MarkdownAttachmentImageRange[] {
+  const ranges: MarkdownAttachmentImageRange[] = [];
+  const tree = unified().use(remarkParse).use(remarkGfm).parse(markdown) as MarkdownNode;
+  const visit = (node: MarkdownNode): void => {
+    if (node.type === 'image' && node.url !== undefined && node.position !== undefined) {
+      const id = getMarkdownAttachmentId(node.url);
+      const { start, end } = node.position;
+      if (id !== null && typeof start.offset === 'number' && typeof end.offset === 'number') {
+        ranges.push({ id, start: start.offset, end: end.offset });
+      }
+    }
+    node.children?.forEach(visit);
+  };
+  visit(tree);
+
+  return ranges;
+}
+
+interface MarkdownNode {
+  readonly type: string;
+  readonly url?: string;
+  readonly position?: {
+    readonly start: { readonly offset?: number };
+    readonly end: { readonly offset?: number };
+  };
+  readonly children?: readonly MarkdownNode[];
 }
 
 function decorateTableSourceRanges(

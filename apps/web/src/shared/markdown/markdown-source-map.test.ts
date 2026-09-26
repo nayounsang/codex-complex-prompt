@@ -67,4 +67,49 @@ describe('Markdown source map', () => {
     expect(getMappedSourceOffset(root, text, 6)).toBe(6);
     expect(locateMappedText(root, 12)).toEqual({ node: text, offset: 12 });
   });
+
+  it('같은 UUID의 외부 이미지가 첨부 그림의 선택 범위를 차지하지 않는다', () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const attachmentUrl = 'http://127.0.0.1:8765/_complex-prompt/attachments';
+    const drawingMarkdown = `![drawing](.complex-prompt/attachments/${id}.png)`;
+    const markdown = `![other](https://example.test/${id}.png)\n\n${drawingMarkdown}`;
+    const root = document.createElement('div');
+    root.className = 'ProseMirror';
+    const externalImage = document.createElement('img');
+    externalImage.src = `https://example.test/${id}.png`;
+    const drawingImage = document.createElement('img');
+    drawingImage.src = `${attachmentUrl}/${id}.png?token=test-token`;
+    root.append(externalImage, drawingImage);
+    document.body.append(root);
+
+    decorateMarkdownRoot(root, markdown, [], markdown, attachmentUrl);
+
+    expect(externalImage).not.toHaveAttribute('role', 'button');
+    expect(externalImage.dataset['feedbackSourceStart']).toBeUndefined();
+    expect(drawingImage).toHaveAttribute('role', 'button');
+    expect(drawingImage.dataset['feedbackSourceStart']).toBe(
+      String(markdown.indexOf(drawingMarkdown)),
+    );
+    expect(drawingImage.dataset['feedbackSourceEnd']).toBe(
+      String(markdown.indexOf(drawingMarkdown) + drawingMarkdown.length),
+    );
+  });
+
+  it('첨부 서버의 다른 경로에 있는 같은 UUID 이미지에는 선택 범위를 연결하지 않는다', () => {
+    const id = '00000000-0000-4000-8000-000000000002';
+    const attachmentUrl = 'http://127.0.0.1:8765/_complex-prompt/attachments';
+    const drawingMarkdown = `![drawing](.complex-prompt/attachments/${id}.png)`;
+    const root = document.createElement('div');
+    root.className = 'ProseMirror';
+    const wrongPathImage = document.createElement('img');
+    wrongPathImage.src = `http://127.0.0.1:8765/preview/${id}.png`;
+    root.append(wrongPathImage);
+    document.body.append(root);
+
+    decorateMarkdownRoot(root, drawingMarkdown, [], drawingMarkdown, attachmentUrl);
+
+    expect(wrongPathImage).not.toHaveAttribute('role', 'button');
+    expect(wrongPathImage.dataset['feedbackSourceStart']).toBeUndefined();
+    expect(wrongPathImage.dataset['feedbackSourceEnd']).toBeUndefined();
+  });
 });

@@ -8,9 +8,14 @@ import {
   useState,
 } from 'react';
 
+import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
 import { Crepe } from '@milkdown/crepe';
 import type { BlockEditFeatureConfig } from '@milkdown/crepe/feature/block-edit';
 import { createAttachmentImageUrl } from '../../../attachment-image-url.js';
+import {
+  getConfiguredAttachmentId,
+  getMarkdownAttachmentId,
+} from '../../../shared/markdown/attachment-path.js';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
 
@@ -28,7 +33,6 @@ export interface MarkdownEditorProps {
   readonly attachmentUrl?: string | null;
   readonly attachmentToken?: string | null;
   readonly attachmentRefreshKey?: number;
-  readonly drawings?: readonly { id: string; label: string }[];
   readonly onDraw?: () => void;
   readonly onEditDrawing?: (id: string) => void;
   readonly onDeleteDrawing?: (id: string) => void;
@@ -41,8 +45,6 @@ const crepeFeatures = {
 
 const drawingIcon =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 16.5 9.8-9.8a2.1 2.1 0 0 1 3 3L7 19.5 3.5 20.5 4 16.5Z"/><path d="m12.5 8 3 3"/></svg>';
-const drawingIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 interface DrawingEditTarget {
   readonly id: string;
   readonly image: HTMLImageElement;
@@ -55,23 +57,13 @@ function getDrawingIdFromImage(
 ): string | null {
   const source = image.getAttribute('src');
   if (source === null) return null;
-  const relativeMatch = source.match(/^(?:\.\/)?\.complex-prompt\/attachments\/([^/]+)\.png$/i);
-  if (relativeMatch?.[1] !== undefined && drawingIdPattern.test(relativeMatch[1])) {
-    return relativeMatch[1];
-  }
+  const markdownId = getMarkdownAttachmentId(source);
+  if (markdownId !== null) return markdownId;
   if (attachmentUrl == null || attachmentToken == null) return null;
   try {
     const imageUrl = new URL(source, document.baseURI);
-    const baseUrl = new URL(attachmentUrl);
-    if (
-      imageUrl.origin !== baseUrl.origin ||
-      imageUrl.searchParams.get('token') !== attachmentToken
-    )
-      return null;
-    const prefix = `${baseUrl.pathname.replace(/\/+$/, '')}/`;
-    if (!imageUrl.pathname.startsWith(prefix)) return null;
-    const match = imageUrl.pathname.slice(prefix.length).match(/^([^/]+)\.png$/i);
-    return match?.[1] !== undefined && drawingIdPattern.test(match[1]) ? match[1] : null;
+    if (imageUrl.searchParams.get('token') !== attachmentToken) return null;
+    return getConfiguredAttachmentId(source, attachmentUrl);
   } catch {
     return null;
   }
@@ -89,7 +81,6 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       attachmentUrl,
       attachmentToken,
       attachmentRefreshKey = 0,
-      drawings = [],
       onDraw,
       onEditDrawing,
       onDeleteDrawing,
@@ -106,16 +97,15 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const drawingAvailabilityRef = useRef(new Map<string, Promise<boolean>>());
     const [drawingEditTarget, setDrawingEditTarget] = useState<DrawingEditTarget | null>(null);
     const [drawingEditPosition, setDrawingEditPosition] = useState({ top: 0, left: 0 });
+    const drawingActionsOverlayRef = useRef<HTMLDivElement>(null);
     const [initializationError, setInitializationError] = useState<Error | null>(null);
     const drawingActionsRef = useRef({
-      drawings,
       onDraw,
       onEditDrawing,
       onDeleteDrawing,
       enabled: !readOnly,
     });
     drawingActionsRef.current = {
-      drawings,
       onDraw,
       onEditDrawing,
       onDeleteDrawing,
@@ -129,7 +119,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     };
     const handleDrawingImageHover = (image: HTMLImageElement): void => {
       const actions = drawingActionsRef.current;
-      if (!actions.enabled || actions.onEditDrawing === undefined) return;
+      if (
+        !actions.enabled ||
+        (actions.onEditDrawing === undefined && actions.onDeleteDrawing === undefined)
+      )
+        return;
       const id = getDrawingIdFromImage(image, attachmentUrl, attachmentToken);
       if (id === null || hoveredImageRef.current === image) return;
       hoveredImageRef.current = image;
@@ -161,7 +155,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const handleEditorPointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      if (target.closest('.drawing-edit-overlay') !== null) return;
+      if (target.closest('.drawing-actions-overlay') !== null) return;
       const image = target.closest('img');
       if (image instanceof HTMLImageElement) {
         handleDrawingImageHover(image);
@@ -175,38 +169,53 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       const image = target.closest('img');
       if (image instanceof HTMLImageElement) handleDrawingImageHover(image);
     };
+    const handleEditorKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const image = target.closest<HTMLImageElement>('img[data-drawing-id]');
+      if (image === null) return;
+      event.preventDefault();
+      handleDrawingImageHover(image);
+    };
+    const handleEditorFocusCapture = (event: React.FocusEvent<HTMLDivElement>): void => {
+      const target = event.target;
+      if (target instanceof HTMLImageElement && target.dataset['drawingId'] !== undefined) {
+        handleDrawingImageHover(target);
+      }
+    };
+    const handleEditorBlurCapture = (event: React.FocusEvent<HTMLDivElement>): void => {
+      const nextTarget = event.relatedTarget;
+      if (nextTarget instanceof Node && drawingActionsOverlayRef.current?.contains(nextTarget)) {
+        return;
+      }
+      if (hoveredImageRef.current !== null) clearDrawingEditTarget();
+    };
 
     useLayoutEffect(
       function positionDrawingEditOverlay() {
         const target = drawingEditTarget;
-        const host = hostRef.current;
-        if (target === null || host === null) return;
+        const overlay = drawingActionsOverlayRef.current;
+        if (target === null || overlay === null) return;
+        let active = true;
         const updatePosition = (): void => {
           if (!target.image.isConnected) {
             clearDrawingEditTarget();
             return;
           }
-          const imageRect = target.image.getBoundingClientRect();
-          const hostRect = host.getBoundingClientRect();
-          setDrawingEditPosition({
-            top: imageRect.top - hostRect.top + host.scrollTop + 6,
-            left: imageRect.left - hostRect.left + host.scrollLeft + 6,
+          void computePosition(target.image, overlay, {
+            placement: 'top-start',
+            strategy: 'absolute',
+            middleware: [offset(6), flip(), shift({ padding: 8 })],
+          }).then(({ x, y }) => {
+            if (!active || !target.image.isConnected) return;
+            setDrawingEditPosition({ top: y, left: x });
           });
         };
-        const resizeObserver =
-          typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updatePosition);
-        resizeObserver?.observe(host);
-        resizeObserver?.observe(target.image);
-        const mutationObserver = new MutationObserver(updatePosition);
-        mutationObserver.observe(host, { childList: true, subtree: true });
-        window.addEventListener('resize', updatePosition);
-        window.addEventListener('scroll', updatePosition, true);
-        updatePosition();
+        const stopAutoUpdate = autoUpdate(target.image, overlay, updatePosition);
         return () => {
-          resizeObserver?.disconnect();
-          mutationObserver.disconnect();
-          window.removeEventListener('resize', updatePosition);
-          window.removeEventListener('scroll', updatePosition, true);
+          active = false;
+          stopAutoUpdate();
         };
       },
       [drawingEditTarget],
@@ -246,22 +255,6 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
               icon: drawingIcon,
               onRun: () => actions.onDraw?.(),
             });
-            for (const drawing of actions.drawings) {
-              if (actions.onEditDrawing !== undefined) {
-                advanced.addItem(`edit-${drawing.id}`, {
-                  label: `Edit: ${drawing.label}`,
-                  icon: drawingIcon,
-                  onRun: () => drawingActionsRef.current.onEditDrawing?.(drawing.id),
-                });
-              }
-              if (actions.onDeleteDrawing !== undefined) {
-                advanced.addItem(`delete-${drawing.id}`, {
-                  label: `Delete: ${drawing.label}`,
-                  icon: drawingIcon,
-                  onRun: () => drawingActionsRef.current.onDeleteDrawing?.(drawing.id),
-                });
-              }
-            }
           },
         };
         const featureConfigs = {
@@ -381,6 +374,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         onPointerMove={handleEditorPointerMove}
         onPointerLeave={clearDrawingEditTarget}
         onClickCapture={handleEditorClickCapture}
+        onKeyDownCapture={handleEditorKeyDownCapture}
+        onFocusCapture={handleEditorFocusCapture}
+        onBlurCapture={handleEditorBlurCapture}
       >
         <div
           ref={rootRef}
@@ -392,30 +388,67 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           aria-disabled={readOnly}
         />
         {drawingEditTarget !== null && !readOnly && (
-          <button
-            type="button"
-            className="drawing-edit-overlay"
-            style={{ top: drawingEditPosition.top, left: drawingEditPosition.left }}
-            aria-label="그림 편집"
-            title="그림 편집"
-            onPointerDown={(event) => event.preventDefault()}
-            onClick={() => drawingActionsRef.current.onEditDrawing?.(drawingEditTarget.id)}
+          <div
+            ref={drawingActionsOverlayRef}
+            className="drawing-actions-overlay"
+            style={drawingEditPosition}
           >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="m4 16.5 9.8-9.8a2.1 2.1 0 0 1 3 3L7 19.5 3.5 20.5 4 16.5Z" />
-              <path d="m12.5 8 3 3" />
-            </svg>
-          </button>
+            {drawingActionsRef.current.onEditDrawing !== undefined && (
+              <button
+                type="button"
+                className="drawing-edit-overlay"
+                aria-label="그림 편집"
+                title="그림 편집"
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => drawingActionsRef.current.onEditDrawing?.(drawingEditTarget.id)}
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m4 16.5 9.8-9.8a2.1 2.1 0 0 1 3 3L7 19.5 3.5 20.5 4 16.5Z" />
+                  <path d="m12.5 8 3 3" />
+                </svg>
+              </button>
+            )}
+            {drawingActionsRef.current.onDeleteDrawing !== undefined && (
+              <button
+                type="button"
+                className="drawing-edit-overlay"
+                aria-label="그림 삭제"
+                title="그림 삭제"
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  drawingActionsRef.current.onDeleteDrawing?.(drawingEditTarget.id);
+                  clearDrawingEditTarget();
+                }}
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="m19 6-1 14H6L5 6" />
+                  <path d="M10 11v5M14 11v5" />
+                </svg>
+              </button>
+            )}
+          </div>
         )}
       </div>
     );
@@ -436,16 +469,14 @@ function replaceAttachmentImageUrls(
   )
     return;
   for (const image of root.querySelectorAll<HTMLImageElement>('img[src]')) {
-    const match = image
-      .getAttribute('src')
-      ?.match(/^\.complex-prompt\/attachments\/([0-9a-f-]{36})\.png$/i);
-    if (match?.[1] === undefined) continue;
-    const url = createAttachmentImageUrl(
-      attachmentUrl,
-      match[1],
-      attachmentToken,
-      attachmentRefreshKey,
-    );
+    const source = image.getAttribute('src');
+    const id = source === null ? null : getMarkdownAttachmentId(source);
+    if (id === null) continue;
+    const url = createAttachmentImageUrl(attachmentUrl, id, attachmentToken, attachmentRefreshKey);
+    image.tabIndex = 0;
+    image.dataset['drawingId'] = id;
+    image.setAttribute('role', 'button');
+    image.setAttribute('aria-label', `Drawing actions: ${image.alt.trim() || 'Drawing'}`);
     if (image.src !== url) image.src = url;
   }
 }

@@ -451,6 +451,30 @@ button:focus-visible,
   background: #fff8d8;
 }
 
+.annotated-markdown img[role='button'] {
+  cursor: pointer;
+}
+
+.markdown-editor img[role='button'] {
+  cursor: pointer;
+}
+
+.annotated-markdown img[role='button']:focus-visible {
+  outline: 2px solid #b08b16;
+  outline-offset: 3px;
+}
+
+.markdown-editor img[role='button']:focus-visible {
+  outline: 2px solid #b08b16;
+  outline-offset: 3px;
+}
+
+.annotated-markdown img.feedback-image-highlight {
+  border-radius: 3px;
+  outline: 3px solid rgb(238 203 84 / 80%);
+  outline-offset: 2px;
+}
+
 .markdown-editor .milkdown .milkdown-slash-menu {
   z-index: 20;
 }
@@ -1089,9 +1113,13 @@ button:focus-visible,
 .drawing-dialog-viewport {
   padding: 16px;
 }
-.drawing-edit-overlay {
+.drawing-actions-overlay {
   position: absolute;
   z-index: 30;
+  display: flex;
+  gap: 6px;
+}
+.drawing-edit-overlay {
   display: grid;
   width: 32px;
   height: 32px;

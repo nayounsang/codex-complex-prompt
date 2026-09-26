@@ -74,6 +74,25 @@ export function getCodeBlockSelectionAnchor(
   };
 }
 
+export function getImageSelectionAnchor(
+  root: HTMLElement,
+  markdown: string,
+  image: HTMLImageElement,
+): SelectionAnchor | null {
+  if (!root.contains(image)) return null;
+  const start = Number(image.dataset['feedbackSourceStart']);
+  const end = Number(image.dataset['feedbackSourceEnd']);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start >= end) return null;
+  const quote = markdown.slice(start, end);
+  if (quote === '') return null;
+  return {
+    quote,
+    start,
+    end,
+    rect: toSelectionRect(image.getBoundingClientRect()),
+  };
+}
+
 function toSelectionRect(rect: DOMRect): SelectionRect {
   return {
     x: rect.x,

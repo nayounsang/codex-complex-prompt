@@ -1,3 +1,5 @@
+import { getConfiguredAttachmentId, getMarkdownAttachmentId } from './attachment-path.js';
+
 /**
  * Keeps Markdown image syntax from becoming a network-backed `<img>` in a
  * read-only document. The replacement is length-preserving so source offsets
@@ -72,23 +74,16 @@ function isAllowedAttachmentImage(
   const match = /^!\[[^\]]*\]\(([^)]+)\)/.exec(characters.slice(index).join(''));
   const source = match?.[1];
   if (source === undefined) return false;
-  try {
-    const url = new URL(source);
-    const base = new URL(attachment.baseUrl);
-    return (
-      url.origin === base.origin &&
-      url.pathname.startsWith(`${base.pathname}/`) &&
-      /^\/[0-9a-f-]{36}\.png$/i.test(url.pathname.slice(base.pathname.length)) &&
-      url.searchParams.get('token') === attachment.token &&
-      (url.searchParams.size === 1 ||
-        (url.searchParams.size === 2 &&
-          url.searchParams.get('refresh') === String(attachment.refreshKey)))
-    );
-  } catch {
-    return /^\.complex-prompt\/attachments\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.png$/i.test(
-      source,
-    );
-  }
+  if (getMarkdownAttachmentId(source) !== null) return true;
+  const id = getConfiguredAttachmentId(source, attachment.baseUrl);
+  if (id === null) return false;
+  const url = new URL(source);
+  return (
+    url.searchParams.get('token') === attachment.token &&
+    (url.searchParams.size === 1 ||
+      (url.searchParams.size === 2 &&
+        url.searchParams.get('refresh') === String(attachment.refreshKey)))
+  );
 }
 
 function isUnescapedImageStart(characters: readonly string[], index: number): boolean {
