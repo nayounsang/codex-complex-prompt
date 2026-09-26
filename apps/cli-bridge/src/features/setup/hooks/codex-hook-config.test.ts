@@ -92,6 +92,64 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
     ]);
   });
 
+  it('npx로 실행하는 Plannotator 훅을 조건부 래퍼로 감싼다', async () => {
+    const configPath = await createConfig({
+      hooks: {
+        Stop: [{ hooks: [{ type: 'command', command: 'npx --yes plannotator hook stop' }] }],
+      },
+    });
+
+    const result = await installCodexUserPromptHook({ configPath });
+    const stopHooks = (
+      result.config['hooks'] as { Stop: Array<{ hooks: Array<{ command: string }> }> }
+    ).Stop;
+
+    expect(stopHooks[0]?.hooks[0]?.command).toMatch(/^complex-prompt hook plannotator-stop /);
+  });
+
+  it('sh -c 안에서 실행하는 Plannotator 훅을 조건부 래퍼로 감싼다', async () => {
+    const configPath = await createConfig({
+      hooks: {
+        Stop: [{ hooks: [{ type: 'command', command: "sh -c 'plannotator hook stop'" }] }],
+      },
+    });
+
+    const result = await installCodexUserPromptHook({ configPath });
+    const stopHooks = (
+      result.config['hooks'] as { Stop: Array<{ hooks: Array<{ command: string }> }> }
+    ).Stop;
+
+    expect(stopHooks[0]?.hooks[0]?.command).toMatch(/^complex-prompt hook plannotator-stop /);
+  });
+
+  it('Plannotator가 포함된 파일 경로는 래핑하지 않는다', async () => {
+    const command = '~/plannotator-notes/log.sh';
+    const configPath = await createConfig({
+      hooks: { Stop: [{ hooks: [{ type: 'command', command }] }] },
+    });
+
+    const result = await installCodexUserPromptHook({ configPath });
+    const stopHooks = (
+      result.config['hooks'] as { Stop: Array<{ hooks: Array<{ command: string }> }> }
+    ).Stop;
+
+    expect(stopHooks[0]?.hooks[0]?.command).toBe(command);
+  });
+
+  it('echo 인자에 적힌 Plannotator 명령은 래핑하지 않는다', async () => {
+    const command = "echo 'plannotator hook stop'";
+    const configPath = await createConfig({
+      hooks: { Stop: [{ hooks: [{ type: 'command', command }] }] },
+    });
+
+    const result = await installCodexUserPromptHook({ configPath });
+    const stopHooks = (
+      result.config['hooks'] as { Stop: Array<{ hooks: Array<{ command: string }> }> }
+    ).Stop;
+
+    expect(stopHooks[0]?.hooks[0]?.command).toBe(command);
+  });
+
   it('드라이런에서는 훅 파일을 쓰지 않는다', async () => {
     const configPath = join(await createDirectory(), 'hooks.json');
 
