@@ -12,6 +12,10 @@ import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/d
 import { Crepe } from '@milkdown/crepe';
 import type { BlockEditFeatureConfig } from '@milkdown/crepe/feature/block-edit';
 import { createAttachmentImageUrl } from '../../../attachment-image-url.js';
+import {
+  getConfiguredAttachmentId,
+  getMarkdownAttachmentId,
+} from '../../../shared/markdown/attachment-path.js';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
 
@@ -41,8 +45,6 @@ const crepeFeatures = {
 
 const drawingIcon =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 16.5 9.8-9.8a2.1 2.1 0 0 1 3 3L7 19.5 3.5 20.5 4 16.5Z"/><path d="m12.5 8 3 3"/></svg>';
-const drawingIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 interface DrawingEditTarget {
   readonly id: string;
   readonly image: HTMLImageElement;
@@ -55,23 +57,13 @@ function getDrawingIdFromImage(
 ): string | null {
   const source = image.getAttribute('src');
   if (source === null) return null;
-  const relativeMatch = source.match(/^(?:\.\/)?\.complex-prompt\/attachments\/([^/]+)\.png$/i);
-  if (relativeMatch?.[1] !== undefined && drawingIdPattern.test(relativeMatch[1])) {
-    return relativeMatch[1];
-  }
+  const markdownId = getMarkdownAttachmentId(source);
+  if (markdownId !== null) return markdownId;
   if (attachmentUrl == null || attachmentToken == null) return null;
   try {
     const imageUrl = new URL(source, document.baseURI);
-    const baseUrl = new URL(attachmentUrl);
-    if (
-      imageUrl.origin !== baseUrl.origin ||
-      imageUrl.searchParams.get('token') !== attachmentToken
-    )
-      return null;
-    const prefix = `${baseUrl.pathname.replace(/\/+$/, '')}/`;
-    if (!imageUrl.pathname.startsWith(prefix)) return null;
-    const match = imageUrl.pathname.slice(prefix.length).match(/^([^/]+)\.png$/i);
-    return match?.[1] !== undefined && drawingIdPattern.test(match[1]) ? match[1] : null;
+    if (imageUrl.searchParams.get('token') !== attachmentToken) return null;
+    return getConfiguredAttachmentId(source, attachmentUrl);
   } catch {
     return null;
   }
@@ -477,18 +469,12 @@ function replaceAttachmentImageUrls(
   )
     return;
   for (const image of root.querySelectorAll<HTMLImageElement>('img[src]')) {
-    const match = image
-      .getAttribute('src')
-      ?.match(/^\.complex-prompt\/attachments\/([0-9a-f-]{36})\.png$/i);
-    if (match?.[1] === undefined) continue;
-    const url = createAttachmentImageUrl(
-      attachmentUrl,
-      match[1],
-      attachmentToken,
-      attachmentRefreshKey,
-    );
+    const source = image.getAttribute('src');
+    const id = source === null ? null : getMarkdownAttachmentId(source);
+    if (id === null) continue;
+    const url = createAttachmentImageUrl(attachmentUrl, id, attachmentToken, attachmentRefreshKey);
     image.tabIndex = 0;
-    image.dataset['drawingId'] = match[1];
+    image.dataset['drawingId'] = id;
     image.setAttribute('role', 'button');
     image.setAttribute('aria-label', `Drawing actions: ${image.alt.trim() || 'Drawing'}`);
     if (image.src !== url) image.src = url;

@@ -154,9 +154,10 @@ export function AnnotatedMarkdownView({
         renderedMarkdown,
         JSON.parse(decorationRangeKey) as SourceFeedbackRange[],
         markdown,
+        attachmentUrl,
       );
     },
-    [decorationRangeKey, markdown, rendererRoot, renderedMarkdown],
+    [attachmentUrl, decorationRangeKey, markdown, rendererRoot, renderedMarkdown],
   );
 
   useEffect(

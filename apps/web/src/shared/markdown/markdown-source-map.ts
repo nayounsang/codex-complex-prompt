@@ -1,6 +1,11 @@
 import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
+import {
+  getConfiguredAttachmentId,
+  getMarkdownAttachmentId,
+  MARKDOWN_ATTACHMENT_DIRECTORY,
+} from './attachment-path.js';
 
 export interface SourceCharacter {
   readonly char: string;
@@ -162,6 +167,7 @@ export function decorateMarkdownRoot(
   markdown: string,
   ranges: readonly SourceFeedbackRange[],
   sourceMarkdown: string = markdown,
+  attachmentUrl: string | null = null,
 ): void {
   const proseMirror = root.matches('.ProseMirror')
     ? root
@@ -170,7 +176,7 @@ export function decorateMarkdownRoot(
   const sortedRanges = [...ranges].sort((left, right) => left.start - right.start);
   decorateTableSourceRanges(proseMirror, markdown, sortedRanges);
   decorateCodeBlockSourceRanges(proseMirror, markdown, sortedRanges);
-  decorateAttachmentImages(proseMirror, sourceMarkdown, sortedRanges);
+  decorateAttachmentImages(proseMirror, sourceMarkdown, sortedRanges, attachmentUrl);
 
   const sourceMap = getVisibleSourceMap(markdown);
   const mappings: RenderedTextMapping[] = [];
@@ -227,6 +233,7 @@ function decorateAttachmentImages(
   root: HTMLElement,
   markdown: string,
   feedbackRanges: readonly SourceFeedbackRange[],
+  attachmentUrl: string | null,
 ): void {
   const imageRanges = getMarkdownAttachmentImageRanges(markdown);
   const rangesById = new Map<string, MarkdownAttachmentImageRange[]>();
@@ -236,7 +243,7 @@ function decorateAttachmentImages(
     rangesById.set(range.id, ranges);
   }
   for (const image of root.querySelectorAll<HTMLImageElement>('img')) {
-    const id = getAttachmentImageId(image);
+    const id = getAttachmentImageId(image, attachmentUrl);
     const matchingRanges = id === null ? undefined : rangesById.get(id);
     const sourceRange = matchingRanges?.shift();
     if (sourceRange === undefined) {
@@ -254,7 +261,7 @@ function decorateAttachmentImages(
     image.tabIndex = 0;
     image.setAttribute(
       'aria-label',
-      `Select image for feedback: ${image.alt.trim() || 'Drawing'} (.complex-prompt/attachments/${id}.png)`,
+      `Select image for feedback: ${image.alt.trim() || 'Drawing'} (${MARKDOWN_ATTACHMENT_DIRECTORY}/${id}.png)`,
     );
     image.classList.toggle(
       'feedback-image-highlight',
@@ -265,25 +272,13 @@ function decorateAttachmentImages(
   }
 }
 
-function getAttachmentImageId(image: HTMLImageElement): string | null {
+function getAttachmentImageId(
+  image: HTMLImageElement,
+  attachmentUrl: string | null,
+): string | null {
   const source = image.getAttribute('src');
   if (source === null) return null;
-  const directPath = source.match(
-    /^(?:\.\/)?\.complex-prompt\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.png(?:\?.*)?$/i,
-  );
-  if (directPath?.[1] !== undefined) return directPath[1].toLowerCase();
-  try {
-    const pathname = new URL(source, document.baseURI).pathname;
-    return (
-      pathname
-        .match(
-          /\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.png$/i,
-        )?.[1]
-        ?.toLowerCase() ?? null
-    );
-  } catch {
-    return null;
-  }
+  return getMarkdownAttachmentId(source, true) ?? getConfiguredAttachmentId(source, attachmentUrl);
 }
 
 function getMarkdownAttachmentImageRanges(markdown: string): MarkdownAttachmentImageRange[] {
@@ -291,12 +286,10 @@ function getMarkdownAttachmentImageRanges(markdown: string): MarkdownAttachmentI
   const tree = unified().use(remarkParse).use(remarkGfm).parse(markdown) as MarkdownNode;
   const visit = (node: MarkdownNode): void => {
     if (node.type === 'image' && node.url !== undefined && node.position !== undefined) {
-      const id = node.url.match(
-        /^(?:\.\/)?\.complex-prompt\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.png$/i,
-      )?.[1];
+      const id = getMarkdownAttachmentId(node.url);
       const { start, end } = node.position;
-      if (id !== undefined && typeof start.offset === 'number' && typeof end.offset === 'number') {
-        ranges.push({ id: id.toLowerCase(), start: start.offset, end: end.offset });
+      if (id !== null && typeof start.offset === 'number' && typeof end.offset === 'number') {
+        ranges.push({ id, start: start.offset, end: end.offset });
       }
     }
     node.children?.forEach(visit);

@@ -1,10 +1,11 @@
+import { createMarkdownAttachmentImagePattern } from '../../shared/markdown/attachment-path.js';
+
 export interface MarkdownDrawingReference {
   readonly id: string;
   readonly label: string;
 }
 
-const drawingImagePattern =
-  /!\[([^\]]*)\]\(\.complex-prompt\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.png\)/gi;
+const drawingImagePattern = createMarkdownAttachmentImagePattern();
 
 export function findMarkdownDrawingReferences(markdown: string): MarkdownDrawingReference[] {
   const drawingsById = new Map<string, MarkdownDrawingReference>();
