@@ -32,6 +32,7 @@ import { runCodexStopHook } from './features/feedback/hooks/codex-stop-hook.js';
 import { runCodexPlannotatorStopHook } from './features/feedback/hooks/codex-plannotator-stop-hook.js';
 import { createProjectTemplateStore } from './features/templates/storage/project-templates.js';
 import { createProjectAttachmentStore } from './features/attachments/project-attachments.js';
+import { DEFAULT_BRIDGE_SESSION_TTL_MS } from './shared/hook-timeouts.js';
 
 export interface CliBridgeOptions {
   readonly inputAdapter?: CodexSessionInput;
@@ -71,7 +72,7 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
       inputAdapter.submit(prompt, context),
     ...(staticDir === undefined ? {} : { staticDir }),
     ...(options.port === undefined ? {} : { port: options.port }),
-    ...(options.sessionTtlMs === undefined ? {} : { ttlMs: options.sessionTtlMs }),
+    ttlMs: options.sessionTtlMs ?? DEFAULT_BRIDGE_SESSION_TTL_MS,
     ...(options.promptTimeoutMs === undefined ? {} : { promptTimeoutMs: options.promptTimeoutMs }),
     ...(options.initialMarkdown === undefined ? {} : { initialMarkdown: options.initialMarkdown }),
     ...(options.feedbackLoop === undefined ? {} : { feedbackLoop: options.feedbackLoop }),

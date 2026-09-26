@@ -79,3 +79,5 @@ hook은 stdin JSON의 `prompt`가 `$complex-prompt` 또는 `/complex-prompt` 호
 ```
 
 빈 입력, malformed JSON, 브라우저 실패, timeout은 turn을 차단하지 않고 `systemMessage`가 포함된 JSON으로 보고합니다. Stop hook은 feedback loop가 활성화된 세션에만 편집기를 엽니다. Send Feedback은 Stop hook의 `decision: "block"` continuation으로 검토를 이어가고, Submit은 최종 Markdown에 담긴 명령을 실행하도록 continuation을 전달한 뒤 loop 상태를 종료합니다.
+
+Codex hook 제한과 브리지 세션은 3일로 설정되어 편집기를 오래 열어 두어도 세션이 먼저 만료되지 않습니다.
