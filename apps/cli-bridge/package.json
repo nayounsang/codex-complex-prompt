@@ -1,7 +1,7 @@
 {
   "name": "@codex-complex-prompt/cli-bridge",
   "private": false,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A browser Markdown editor connected to Codex UserPromptSubmit and Stop hooks.",
   "type": "module",
   "engines": {
