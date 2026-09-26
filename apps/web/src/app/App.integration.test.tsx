@@ -1071,6 +1071,21 @@ describe('App integration', () => {
 });
 
 describe('그림 첨부', () => {
+  it('25 MB를 넘는 이미지는 읽기 전에 크기 제한 메시지를 표시한다', async () => {
+    const readAsDataURL = vi.spyOn(FileReader.prototype, 'readAsDataURL');
+    renderWithSession();
+    const editor = await screen.findByRole('textbox', { name: 'Command' });
+    const image = new File(['image'], 'large.png', { type: 'image/png' });
+    Object.defineProperty(image, 'size', { value: 25 * 1024 * 1024 + 1 });
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { files: [image], items: [] } });
+
+    editor.dispatchEvent(paste);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('이미지 파일은 25 MB 이하여야 합니다.');
+    expect(readAsDataURL).not.toHaveBeenCalled();
+  });
+
   it('일반 이미지에는 그림 편집 버튼을 표시하지 않는다', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -1087,7 +1102,11 @@ describe('그림 첨부', () => {
   });
 
   it('편집 데이터가 없는 첨부 이미지는 그림 편집 버튼을 표시하지 않는다', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'X-Attachment-Editable': 'false' }),
+    });
     vi.stubGlobal('fetch', fetchMock);
     const id = '00000000-0000-4000-8000-000000000009';
     const attachment = {
@@ -1121,7 +1140,11 @@ describe('그림 첨부', () => {
     const scene = '{"elements":[]}';
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce({ ok: true, status: 200 })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'X-Attachment-Editable': 'true' }),
+      })
       .mockResolvedValueOnce({ ok: true, status: 200, text: async () => scene });
     vi.stubGlobal('fetch', fetchMock);
     renderWithSession(
@@ -1152,7 +1175,11 @@ describe('그림 첨부', () => {
     };
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce({ ok: true, status: 200 })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'X-Attachment-Editable': 'true' }),
+      })
       .mockResolvedValueOnce({ ok: true, status: 200, text: async () => '{"elements":[]}' })
       .mockResolvedValueOnce({
         ok: true,

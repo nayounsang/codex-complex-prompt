@@ -15,6 +15,7 @@ import { createAttachmentImageUrl } from '../../../attachment-image-url.js';
 import {
   getConfiguredAttachmentId,
   getMarkdownAttachmentId,
+  getMarkdownAttachmentExtension,
 } from '../../../shared/markdown/attachment-path.js';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
@@ -34,6 +35,7 @@ export interface MarkdownEditorProps {
   readonly attachmentToken?: string | null;
   readonly attachmentRefreshKey?: number;
   readonly onDraw?: () => void;
+  readonly onImageFiles?: (files: readonly File[]) => void | Promise<void>;
   readonly onEditDrawing?: (id: string) => void;
   readonly onDeleteDrawing?: (id: string) => void;
   readonly onReady?: (root: HTMLDivElement) => void;
@@ -48,6 +50,7 @@ const drawingIcon =
 interface DrawingEditTarget {
   readonly id: string;
   readonly image: HTMLImageElement;
+  readonly editable: boolean;
 }
 
 function getDrawingIdFromImage(
@@ -82,6 +85,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       attachmentToken,
       attachmentRefreshKey = 0,
       onDraw,
+      onImageFiles,
       onEditDrawing,
       onDeleteDrawing,
       onReady,
@@ -94,7 +98,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const markdownRef = useRef(defaultMarkdown);
     const hoveredImageRef = useRef<HTMLImageElement | null>(null);
     const hoverRequestIdRef = useRef(0);
-    const drawingAvailabilityRef = useRef(new Map<string, Promise<boolean>>());
+    const drawingAvailabilityRef = useRef(
+      new Map<string, Promise<{ readonly exists: boolean; readonly editable: boolean }>>(),
+    );
     const [drawingEditTarget, setDrawingEditTarget] = useState<DrawingEditTarget | null>(null);
     const [drawingEditPosition, setDrawingEditPosition] = useState({ top: 0, left: 0 });
     const drawingActionsOverlayRef = useRef<HTMLDivElement>(null);
@@ -133,23 +139,29 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       if (available === undefined) {
         available =
           attachmentUrl == null || attachmentToken == null
-            ? Promise.resolve(false)
+            ? Promise.resolve({ exists: false, editable: false })
             : fetch(`${attachmentUrl}/${id}.json?token=${encodeURIComponent(attachmentToken)}`, {
                 method: 'HEAD',
               })
-                .then((response) => response.ok)
-                .catch(() => false);
+                .then((response) => {
+                  if (!response.ok) return { exists: false, editable: false };
+                  return {
+                    exists: true,
+                    editable: response.headers.get('X-Attachment-Editable') === 'true',
+                  };
+                })
+                .catch(() => ({ exists: false, editable: false }));
         drawingAvailabilityRef.current.set(cacheKey, available);
       }
-      void available.then((exists) => {
+      void available.then((result) => {
         if (
-          !exists ||
+          !result.exists ||
           requestId !== hoverRequestIdRef.current ||
           hoveredImageRef.current !== image ||
           !image.isConnected
         )
           return;
-        setDrawingEditTarget({ id, image });
+        setDrawingEditTarget({ id, image, editable: result.editable });
       });
     };
     const handleEditorPointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
@@ -230,6 +242,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const notifyReady = useEffectEvent((root: HTMLDivElement) => {
       onReady?.(root);
     });
+    const receiveImageFiles = useEffectEvent((files: readonly File[]) => {
+      void onImageFiles?.(files);
+    });
 
     useImperativeHandle(
       forwardedRef,
@@ -268,12 +283,20 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         let disposed = false;
         let crepe: Crepe | null = null;
         const blockFileTransfer = (event: ClipboardEvent | DragEvent): void => {
-          const files =
-            'clipboardData' in event ? event.clipboardData?.files : event.dataTransfer?.files;
-          if (files !== undefined && files.length > 0) {
-            event.preventDefault();
-            event.stopPropagation();
+          const transfer = 'clipboardData' in event ? event.clipboardData : event.dataTransfer;
+          const files = transfer === null ? [] : Array.from(transfer.files);
+          if (files.length === 0 && 'clipboardData' in event && transfer !== null) {
+            for (const item of Array.from(transfer.items)) {
+              if (item.kind !== 'file') continue;
+              const file = item.getAsFile();
+              if (file !== null) files.push(file);
+            }
           }
+          const imageFiles = files.filter((file) => file.type.startsWith('image/'));
+          if (imageFiles.length === 0) return;
+          event.preventDefault();
+          event.stopPropagation();
+          receiveImageFiles(imageFiles);
         };
         editorRoot.addEventListener('paste', blockFileTransfer, true);
         editorRoot.addEventListener('drop', blockFileTransfer, true);
@@ -393,31 +416,32 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             className="drawing-actions-overlay"
             style={drawingEditPosition}
           >
-            {drawingActionsRef.current.onEditDrawing !== undefined && (
-              <button
-                type="button"
-                className="drawing-edit-overlay"
-                aria-label="그림 편집"
-                title="그림 편집"
-                onPointerDown={(event) => event.preventDefault()}
-                onClick={() => drawingActionsRef.current.onEditDrawing?.(drawingEditTarget.id)}
-              >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  width="18"
-                  height="18"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+            {drawingEditTarget.editable &&
+              drawingActionsRef.current.onEditDrawing !== undefined && (
+                <button
+                  type="button"
+                  className="drawing-edit-overlay"
+                  aria-label="그림 편집"
+                  title="그림 편집"
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={() => drawingActionsRef.current.onEditDrawing?.(drawingEditTarget.id)}
                 >
-                  <path d="m4 16.5 9.8-9.8a2.1 2.1 0 0 1 3 3L7 19.5 3.5 20.5 4 16.5Z" />
-                  <path d="m12.5 8 3 3" />
-                </svg>
-              </button>
-            )}
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="m4 16.5 9.8-9.8a2.1 2.1 0 0 1 3 3L7 19.5 3.5 20.5 4 16.5Z" />
+                    <path d="m12.5 8 3 3" />
+                  </svg>
+                </button>
+              )}
             {drawingActionsRef.current.onDeleteDrawing !== undefined && (
               <button
                 type="button"
@@ -471,8 +495,15 @@ function replaceAttachmentImageUrls(
   for (const image of root.querySelectorAll<HTMLImageElement>('img[src]')) {
     const source = image.getAttribute('src');
     const id = source === null ? null : getMarkdownAttachmentId(source);
-    if (id === null) continue;
-    const url = createAttachmentImageUrl(attachmentUrl, id, attachmentToken, attachmentRefreshKey);
+    const extension = source === null ? null : getMarkdownAttachmentExtension(source);
+    if (id === null || extension === null) continue;
+    const url = createAttachmentImageUrl(
+      attachmentUrl,
+      id,
+      attachmentToken,
+      attachmentRefreshKey,
+      extension,
+    );
     image.tabIndex = 0;
     image.dataset['drawingId'] = id;
     image.setAttribute('role', 'button');

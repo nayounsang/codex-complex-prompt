@@ -2,7 +2,9 @@ import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import {
+  getConfiguredAttachmentExtension,
   getConfiguredAttachmentId,
+  getMarkdownAttachmentExtension,
   getMarkdownAttachmentId,
   MARKDOWN_ATTACHMENT_DIRECTORY,
 } from './attachment-path.js';
@@ -244,6 +246,7 @@ function decorateAttachmentImages(
   }
   for (const image of root.querySelectorAll<HTMLImageElement>('img')) {
     const id = getAttachmentImageId(image, attachmentUrl);
+    const extension = getAttachmentImageExtension(image, attachmentUrl);
     const matchingRanges = id === null ? undefined : rangesById.get(id);
     const sourceRange = matchingRanges?.shift();
     if (sourceRange === undefined) {
@@ -261,7 +264,7 @@ function decorateAttachmentImages(
     image.tabIndex = 0;
     image.setAttribute(
       'aria-label',
-      `Select image for feedback: ${image.alt.trim() || 'Drawing'} (${MARKDOWN_ATTACHMENT_DIRECTORY}/${id}.png)`,
+      `Select image for feedback: ${image.alt.trim() || 'Drawing'} (${MARKDOWN_ATTACHMENT_DIRECTORY}/${id}.${extension ?? 'png'})`,
     );
     image.classList.toggle(
       'feedback-image-highlight',
@@ -279,6 +282,18 @@ function getAttachmentImageId(
   const source = image.getAttribute('src');
   if (source === null) return null;
   return getMarkdownAttachmentId(source, true) ?? getConfiguredAttachmentId(source, attachmentUrl);
+}
+
+function getAttachmentImageExtension(
+  image: HTMLImageElement,
+  attachmentUrl: string | null,
+): string | null {
+  const source = image.getAttribute('src');
+  if (source === null) return null;
+  return (
+    getMarkdownAttachmentExtension(source) ??
+    getConfiguredAttachmentExtension(source, attachmentUrl)
+  );
 }
 
 function getMarkdownAttachmentImageRanges(markdown: string): MarkdownAttachmentImageRange[] {

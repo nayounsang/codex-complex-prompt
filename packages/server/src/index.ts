@@ -177,6 +177,7 @@ function serveAttachmentRequest(
     response.setHeader('Vary', 'Origin');
     response.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, DELETE, OPTIONS');
     response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    response.setHeader('Access-Control-Expose-Headers', 'X-Attachment-Editable');
   }
   if (request.method === 'OPTIONS') {
     response.writeHead(204).end();
@@ -197,15 +198,21 @@ function serveAttachmentRequest(
     return true;
   }
   const suffix = url.pathname.slice('/_complex-prompt/attachments'.length);
-  const match = suffix.match(/^(?:\/([0-9a-f-]{36})(?:\.(png|json))?)?\/?$/i);
+  const match = suffix.match(/^(?:\/([0-9a-f-]{36})(?:\.([a-z0-9]+))?)?\/?$/i);
   if (match === null) {
     response.writeHead(404).end();
     return true;
   }
   if (request.method === 'POST' && match[1] === undefined) {
     void readRequestBody(request, 36 * 1024 * 1024)
-      .then((body) => {
-        let input: { id?: unknown; png?: unknown; scene?: unknown };
+      .then(async (body) => {
+        let input: {
+          id?: unknown;
+          image?: unknown;
+          png?: unknown;
+          extension?: unknown;
+          scene?: unknown;
+        };
         try {
           const parsed: unknown = JSON.parse(body);
           if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -221,16 +228,27 @@ function serveAttachmentRequest(
           );
         }
         if (
-          typeof input.png !== 'string' ||
+          (typeof input.image !== 'string' && typeof input.png !== 'string') ||
           typeof input.scene !== 'string' ||
-          (input.id !== undefined && typeof input.id !== 'string')
+          (input.id !== undefined && typeof input.id !== 'string') ||
+          (input.extension !== undefined && typeof input.extension !== 'string')
         )
           throw new AttachmentValidationError('Invalid attachment request.');
-        return attachmentStore.save({
+        const extension =
+          typeof input.extension === 'string'
+            ? input.extension
+            : typeof input.image === 'string'
+              ? undefined
+              : 'png';
+        const id = await attachmentStore.save({
           ...(typeof input.id === 'string' ? { id: input.id } : {}),
-          png: input.png,
+          ...(typeof input.image === 'string'
+            ? { image: input.image }
+            : { png: input.png as string }),
+          ...(extension === undefined ? {} : { extension }),
           scene: input.scene,
         });
+        return id;
       })
       .then((id) =>
         response.writeHead(201, { 'Content-Type': 'application/json' }).end(JSON.stringify({ id })),
@@ -254,6 +272,35 @@ function serveAttachmentRequest(
     return true;
   }
   if (request.method === 'HEAD') {
+    if (kind === 'json' && attachmentStore.readScene !== undefined) {
+      void attachmentStore
+        .readScene(id)
+        .then((scene) => {
+          if (scene === undefined) {
+            response.writeHead(404, { 'Cache-Control': 'no-store' }).end();
+            return;
+          }
+          let editable = false;
+          try {
+            const value: unknown = JSON.parse(scene);
+            editable =
+              value !== null &&
+              typeof value === 'object' &&
+              'elements' in value &&
+              Array.isArray(value.elements);
+          } catch {
+            editable = false;
+          }
+          response
+            .writeHead(200, {
+              'Cache-Control': 'no-store',
+              'X-Attachment-Editable': String(editable),
+            })
+            .end();
+        })
+        .catch(() => response.writeHead(500).end());
+      return true;
+    }
     void attachmentStore
       .hasSceneData(id)
       .then((exists) =>
@@ -269,20 +316,47 @@ function serveAttachmentRequest(
       .catch(() => response.writeHead(500).end());
     return true;
   }
+  if (request.method === 'GET' && kind === undefined) {
+    response.writeHead(400).end();
+    return true;
+  }
+  if (kind === 'json' && attachmentStore.readScene !== undefined) {
+    void attachmentStore
+      .readScene(id)
+      .then((scene) => {
+        if (scene === undefined) {
+          response.writeHead(404).end();
+          return;
+        }
+        response
+          .writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-store',
+          })
+          .end(scene);
+      })
+      .catch(() => response.writeHead(500).end());
+    return true;
+  }
   void attachmentStore
-    .read(id)
+    .read(id, kind)
     .then((attachment) => {
       if (attachment === undefined) {
         response.writeHead(404).end();
         return;
       }
-      if (kind === 'png') {
+      const image = attachment.image ?? attachment.png;
+      if (kind !== 'json' && image !== undefined) {
         response
-          .writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' })
-          .end(attachment.png);
+          .writeHead(200, {
+            'Content-Type':
+              attachment.mimeType ?? (kind === 'png' ? 'image/png' : 'application/octet-stream'),
+            'Cache-Control': 'no-store',
+          })
+          .end(image);
         return;
       }
-      if (kind === 'json') {
+      if (kind === 'json' && attachment.scene !== undefined) {
         response
           .writeHead(200, {
             'Content-Type': 'application/json; charset=utf-8',

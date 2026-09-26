@@ -87,6 +87,7 @@ describe('로컬 브리지 서버', () => {
       attachmentStore: {
         save: async () => id,
         read: async () => ({ png: Buffer.from('png'), scene: '{"elements":[]}' }),
+        readScene: async () => '{"elements":[]}',
         hasSceneData: async () => true,
         delete: async () => false,
       },
@@ -103,6 +104,7 @@ describe('로컬 브리지 서버', () => {
       );
 
       expect(response.status).toBe(200);
+      expect(response.headers.get('x-attachment-editable')).toBe('true');
       expect(await response.text()).toBe('');
     } finally {
       await server.close();
@@ -115,6 +117,7 @@ describe('로컬 브리지 서버', () => {
       attachmentStore: {
         save: async () => id,
         read: async () => undefined,
+        readScene: async () => undefined,
         hasSceneData: async () => false,
         delete: async () => false,
       },
