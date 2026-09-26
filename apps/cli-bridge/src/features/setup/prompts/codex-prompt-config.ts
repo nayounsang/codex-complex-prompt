@@ -14,12 +14,13 @@ argument-hint: "[PROMPT=<text>]"
 
 ${CODEX_COMPLEX_PROMPT_FILE_MARKER}
 This is a browser-only command entrypoint. Do not analyze or answer this request before the
-UserPromptSubmit hook returns. Execute the command in its additionalContext. If it contains an AI
-Feedback request, apply it to the complete Current Markdown included with that request and return
-the complete revised Markdown only, without a summary or code fence. The Stop hook will reopen the
-browser editor with your response. Continue the feedback loop when the user chooses Send Feedback;
-when the user chooses Submit, treat the accepted Markdown as the final request and execute its
-command without reopening the browser.
+UserPromptSubmit hook returns. Follow the mode-specific instruction in the hook's additionalContext.
+When the user chooses AI Feedback, apply it to the complete Current Markdown and return the complete
+revised Markdown only, without a summary or code fence. Do not call ExitPlanMode during AI Feedback;
+the Stop hook will reopen the browser editor so the user can continue review. In Plan Mode, only
+after the user chooses Submit to end the review, prepare an implementation plan without editing
+files and call ExitPlanMode when it is ready for approval. In other modes, execute the accepted
+command as written without reopening the browser editor.
 `;
 
 export const CODEX_COMPLEX_SKILL_CONTENT = `---
@@ -29,12 +30,13 @@ description: Open the browser command editor for complex requests and send one c
 
 ${CODEX_COMPLEX_SKILL_FILE_MARKER}
 This is a browser-only command entrypoint. Do not analyze or answer the request before the installed
-UserPromptSubmit hook returns. Execute the command in its additionalContext. If it contains an AI
-Feedback request, apply it to the complete Current Markdown included with that request and return
-the complete revised Markdown only, without a summary or code fence. The Stop hook will reopen the
-browser editor with your response. Continue the feedback loop when the user chooses Send Feedback;
-when the user chooses Submit, treat the accepted Markdown as the final request and execute its
-command without reopening the browser.
+UserPromptSubmit hook returns. Follow the mode-specific instruction in the hook's additionalContext.
+When the user chooses AI Feedback, apply it to the complete Current Markdown and return the complete
+revised Markdown only, without a summary or code fence. Do not call ExitPlanMode during AI Feedback;
+the Stop hook will reopen the browser editor so the user can continue review. In Plan Mode, only
+after the user chooses Submit to end the review, prepare an implementation plan without editing
+files and call ExitPlanMode when it is ready for approval. In other modes, execute the accepted
+command as written without reopening the browser editor.
 `;
 
 export interface CodexPromptConfigOptions {

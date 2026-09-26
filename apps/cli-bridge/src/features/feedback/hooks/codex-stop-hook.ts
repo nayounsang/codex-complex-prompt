@@ -98,9 +98,7 @@ export async function runCodexStopHook(
       }
       return {
         decision: 'block',
-        reason:
-          "The user submitted the final Markdown and ended the browser review. Execute the user's requested command using the complete accepted document below as its instructions and context. Do not reopen the browser editor.\n\n" +
-          submission.prompt,
+        reason: buildFinalSubmissionPrompt(submission.prompt, input.permission_mode),
       };
     }
     return {
@@ -120,13 +118,26 @@ export async function runCodexStopHook(
 function buildContinuationPrompt(submission: BrowserSubmission): string {
   if (submission.mode === 'feedback') {
     return (
-      "Apply the user's browser feedback to the complete Current Markdown document included below. Preserve all unaffected content. Return the complete updated Markdown only, without an introduction, summary, or code fence. The browser editor will reopen after your response.\n\n" +
+      "The user selected AI Feedback, not Submit. Apply the user's browser feedback to the complete Current Markdown document included below. Preserve all unaffected content. Return the complete updated Markdown only, without an introduction, summary, or code fence. Do not call ExitPlanMode for this feedback submission; the browser editor will reopen so the user can continue review.\n\n" +
       submission.prompt
     );
   }
   return (
     'The user edited the complete Markdown document in the browser. Use this submitted version as the document to continue from and return the complete Markdown only, without an introduction, summary, or code fence. The browser editor will reopen after your response.\n\n' +
     submission.prompt
+  );
+}
+
+function buildFinalSubmissionPrompt(prompt: string, permissionMode: string | undefined): string {
+  if (permissionMode === 'plan') {
+    return (
+      'Plan Mode is active and the user selected Submit to end the browser review. Treat the complete accepted document below as a request to prepare an implementation plan only. Do not edit files or carry out the plan. Once the plan is ready, call ExitPlanMode to present it for user approval. Do not reopen the browser editor.\n\n' +
+      prompt
+    );
+  }
+  return (
+    "The user submitted the final Markdown and ended the browser review. Execute the user's requested command using the complete accepted document below as its instructions and context. Do not reopen the browser editor.\n\n" +
+    prompt
   );
 }
 

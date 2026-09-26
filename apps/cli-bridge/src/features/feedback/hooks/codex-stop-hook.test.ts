@@ -131,7 +131,7 @@ describe('Codex Stop hook feedback editor', () => {
     expect(await stateStore.isActive(sessionId)).toBe(false);
   });
 
-  it('사용자가 다시 feedback을 보내면 feedback continuation을 반환한다', async () => {
+  it('Plan Mode에서 다시 feedback을 보내면 승인 요청 없이 feedback continuation을 반환한다', async () => {
     const directory = await createDirectory();
     const stateStore = createFeedbackLoopStateStore(directory);
     const sessionId = 'feedback-continuation-session';
@@ -142,6 +142,7 @@ describe('Codex Stop hook feedback editor', () => {
         hook_event_name: 'Stop',
         session_id: sessionId,
         last_assistant_message: '# Current Markdown',
+        permission_mode: 'plan',
       }),
       {
         timeoutMs: 2_000,
@@ -167,10 +168,12 @@ describe('Codex Stop hook feedback editor', () => {
       }),
     );
 
-    await expect(resultPromise).resolves.toMatchObject({
-      decision: 'block',
-      reason: expect.stringContaining("Apply the user's browser feedback"),
-    });
+    const result = await resultPromise;
+    if (!('reason' in result)) throw new Error('Expected a feedback continuation.');
+    expect(result.decision).toBe('block');
+    expect(result.reason).toContain("Apply the user's browser feedback");
+    expect(result.reason).toContain('Do not call ExitPlanMode for this feedback submission');
+    expect(result.reason).not.toContain('call ExitPlanMode to present the plan');
   });
 
   it('브라우저 제출이 timeout을 넘으면 상태를 지우고 Codex를 계속 진행한다', async () => {
@@ -292,7 +295,7 @@ describe('Codex Stop hook feedback editor', () => {
     expect(await stateStore.isActive(sessionId)).toBe(false);
   });
 
-  it('최종 Submit 전에 편집한 Markdown을 명령 실행 continuation에 전달한다', async () => {
+  it('Plan Mode에서 최종 Submit하면 승인 요청 continuation에 편집한 Markdown을 전달한다', async () => {
     const directory = await createDirectory();
     const stateStore = createFeedbackLoopStateStore(directory);
     const sessionId = 'finish-edited-loop-session';
@@ -305,6 +308,7 @@ describe('Codex Stop hook feedback editor', () => {
         hook_event_name: 'Stop',
         session_id: sessionId,
         last_assistant_message: markdown,
+        permission_mode: 'plan',
       }),
       {
         timeoutMs: 2_000,
@@ -330,10 +334,12 @@ describe('Codex Stop hook feedback editor', () => {
       }),
     );
 
-    await expect(resultPromise).resolves.toEqual({
-      decision: 'block',
-      reason: expect.stringContaining(finalMarkdown),
-    });
+    const result = await resultPromise;
+    if (!('reason' in result)) throw new Error('Expected a plan approval continuation.');
+    expect(result.decision).toBe('block');
+    expect(result.reason).toContain('call ExitPlanMode');
+    expect(result.reason).toContain(finalMarkdown);
+    expect(result.reason).not.toContain("Execute the user's requested command");
     expect(await stateStore.isActive(sessionId)).toBe(false);
   });
 

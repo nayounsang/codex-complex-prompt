@@ -29,6 +29,7 @@ import {
 } from './features/setup/prompts/codex-prompt-config.js';
 import { runCodexUserPromptHook } from './features/input/hooks/codex-user-prompt-hook.js';
 import { runCodexStopHook } from './features/feedback/hooks/codex-stop-hook.js';
+import { runCodexPlannotatorStopHook } from './features/feedback/hooks/codex-plannotator-stop-hook.js';
 import { createProjectTemplateStore } from './features/templates/storage/project-templates.js';
 import { createProjectAttachmentStore } from './features/attachments/project-attachments.js';
 
@@ -155,6 +156,21 @@ async function main(): Promise<void> {
     process.stdout.write(`${JSON.stringify(result)}\n`);
     return;
   }
+  if (args[0] === 'hook' && args[1] === 'plannotator-stop' && args.length === 3) {
+    const originalCommand = JSON.parse(
+      Buffer.from(args[2] ?? '', 'base64url').toString('utf8'),
+    ) as { command?: unknown; commandWindows?: unknown };
+    const command =
+      process.platform === 'win32' && typeof originalCommand.commandWindows === 'string'
+        ? originalCommand.commandWindows
+        : originalCommand.command;
+    if (typeof command !== 'string')
+      throw new Error('The original Plannotator command is invalid.');
+    const result = await runCodexPlannotatorStopHook(await readStdin(), command);
+    if (result.skipped) process.stdout.write('{"continue":true}\n');
+    else if (result.exitCode !== undefined) process.exitCode = result.exitCode;
+    return;
+  }
   if (
     args[0] === 'hook' &&
     (args[1] === 'install' || args[1] === 'setup') &&
@@ -167,6 +183,14 @@ async function main(): Promise<void> {
       dryRun,
       command: hookPromptCommand(),
       stopCommand: hookStopCommand(),
+      plannotatorStopCommand: hookPlannotatorStopCommand(),
+      ...(process.platform === 'win32'
+        ? {
+            commandWindows: hookWindowsCommand('prompt'),
+            stopCommandWindows: hookWindowsCommand('stop'),
+            plannotatorStopCommandWindows: hookWindowsCommand('plannotator-stop'),
+          }
+        : {}),
     });
     process.stdout.write(
       `${dryRun ? (result.changed ? 'Would install' : 'Already installed') : result.changed ? 'Installed' : 'Already installed'} Codex UserPromptSubmit and Stop hooks in ${result.configPath}.\n`,
@@ -268,8 +292,26 @@ function hookStopCommand(): string {
     : `${quoteShell(entrypoint)} hook stop`;
 }
 
+function hookPlannotatorStopCommand(): string {
+  const entrypoint = process.argv[1];
+  return entrypoint === undefined
+    ? 'complex-prompt hook plannotator-stop'
+    : `${quoteShell(entrypoint)} hook plannotator-stop`;
+}
+
+function hookWindowsCommand(subcommand: string): string {
+  const entrypoint = process.argv[1];
+  return entrypoint === undefined
+    ? `complex-prompt hook ${subcommand}`
+    : `${quoteWindows(process.execPath)} ${quoteWindows(entrypoint)} hook ${subcommand}`;
+}
+
 function quoteShell(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function quoteWindows(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
 }
 
 async function readStdin(): Promise<string> {
