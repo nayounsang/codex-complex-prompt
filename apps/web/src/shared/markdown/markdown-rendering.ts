@@ -74,19 +74,16 @@ function isAllowedAttachmentImage(
   const match = /^!\[[^\]]*\]\(([^)]+)\)/.exec(characters.slice(index).join(''));
   const source = match?.[1];
   if (source === undefined) return false;
+  if (getMarkdownAttachmentId(source) !== null) return true;
   const id = getConfiguredAttachmentId(source, attachment.baseUrl);
   if (id === null) return false;
-  try {
-    const url = new URL(source);
-    return (
-      url.searchParams.get('token') === attachment.token &&
-      (url.searchParams.size === 1 ||
-        (url.searchParams.size === 2 &&
-          url.searchParams.get('refresh') === String(attachment.refreshKey)))
-    );
-  } catch {
-    return getMarkdownAttachmentId(source) !== null;
-  }
+  const url = new URL(source);
+  return (
+    url.searchParams.get('token') === attachment.token &&
+    (url.searchParams.size === 1 ||
+      (url.searchParams.size === 2 &&
+        url.searchParams.get('refresh') === String(attachment.refreshKey)))
+  );
 }
 
 function isUnescapedImageStart(characters: readonly string[], index: number): boolean {

@@ -94,4 +94,22 @@ describe('Markdown source map', () => {
       String(markdown.indexOf(drawingMarkdown) + drawingMarkdown.length),
     );
   });
+
+  it('첨부 서버의 다른 경로에 있는 같은 UUID 이미지에는 선택 범위를 연결하지 않는다', () => {
+    const id = '00000000-0000-4000-8000-000000000002';
+    const attachmentUrl = 'http://127.0.0.1:8765/_complex-prompt/attachments';
+    const drawingMarkdown = `![drawing](.complex-prompt/attachments/${id}.png)`;
+    const root = document.createElement('div');
+    root.className = 'ProseMirror';
+    const wrongPathImage = document.createElement('img');
+    wrongPathImage.src = `http://127.0.0.1:8765/preview/${id}.png`;
+    root.append(wrongPathImage);
+    document.body.append(root);
+
+    decorateMarkdownRoot(root, drawingMarkdown, [], drawingMarkdown, attachmentUrl);
+
+    expect(wrongPathImage).not.toHaveAttribute('role', 'button');
+    expect(wrongPathImage.dataset['feedbackSourceStart']).toBeUndefined();
+    expect(wrongPathImage.dataset['feedbackSourceEnd']).toBeUndefined();
+  });
 });
