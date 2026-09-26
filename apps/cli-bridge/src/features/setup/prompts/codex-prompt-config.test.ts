@@ -28,11 +28,15 @@ afterEach(async () => {
 });
 
 describe('Codex 호환 prompt 설정', () => {
-  it('호환 prompt가 분석 대신 hook이 반환한 명령만 실행하도록 안내한다', () => {
+  it('호환 prompt가 AI Feedback 중 승인을 미루고 Plan Mode Submit 뒤 승인을 요청하도록 안내한다', () => {
     expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('Do not analyze or answer');
     expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('Stop hook will reopen the');
-    expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('complete revised Markdown only');
+    expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('revised Markdown only');
     expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('additionalContext');
+    expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain('Do not call ExitPlanMode during AI Feedback');
+    expect(CODEX_COMPLEX_PROMPT_CONTENT).toContain(
+      'after the user chooses Submit to end the review',
+    );
   });
 
   it('없는 prompt 파일에 package 소유 호환 prompt를 생성한다', async () => {
@@ -112,14 +116,16 @@ describe('Codex 호환 prompt 설정', () => {
 });
 
 describe('Codex skill 설정', () => {
-  it('skill이 feedback loop에서 전체 Markdown을 반환하도록 안내한다', () => {
+  it('skill이 AI Feedback 루프를 유지하고 Plan Mode Submit 뒤 승인을 요청하도록 안내한다', () => {
     expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('Do not analyze or answer');
     expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('Stop hook will reopen the');
-    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('complete revised Markdown only');
+    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('revised Markdown only');
     expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('additionalContext');
-    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('user chooses Send Feedback');
-    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('user chooses Submit');
-    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('execute its');
+    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('Do not call ExitPlanMode during AI Feedback');
+    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain(
+      'after the user chooses Submit to end the review',
+    );
+    expect(CODEX_COMPLEX_SKILL_CONTENT).toContain('call ExitPlanMode');
   });
 
   it('없는 skill 파일에 package 소유 skill을 생성한다', async () => {

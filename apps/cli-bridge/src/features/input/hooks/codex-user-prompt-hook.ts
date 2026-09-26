@@ -121,10 +121,13 @@ export async function runCodexUserPromptHook(
             ? ''
             : `Project working directory for relative attachment paths: ${input.cwd}\nRead the PNG files referenced by Markdown image paths when they are relevant to the task.\n\n`) +
           (submission.mode === 'feedback'
-            ? 'Apply the AI feedback to the complete Current Markdown document included below. Preserve all unaffected content. Return the complete updated Markdown only, without an introduction, summary, or code fence.\n\n' +
+            ? 'The user selected AI Feedback, not Submit. Apply the feedback to the complete Current Markdown document included below. Preserve all unaffected content. Return the complete updated Markdown only, without an introduction, summary, or code fence. Do not call ExitPlanMode for this feedback submission; the browser editor will reopen so the user can continue review.\n\n' +
               command
-            : 'Execute the following command supplied by the user through the Codex Complex Prompt editor:\n\n' +
-              command),
+            : input.permission_mode === 'plan'
+              ? 'Plan Mode is active and the user selected Submit. Treat the following command as a request to prepare an implementation plan only. Do not edit files or carry out the plan. Once the plan is ready, call ExitPlanMode to present it for user approval.\n\n' +
+                command
+              : 'Execute the following command supplied by the user through the Codex Complex Prompt editor:\n\n' +
+                command),
       },
     };
     resolveSubmission?.();

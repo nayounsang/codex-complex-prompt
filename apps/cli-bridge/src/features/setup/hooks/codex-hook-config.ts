@@ -6,13 +6,19 @@ import { CODEX_HOOK_TIMEOUT_SECONDS } from '../../../shared/hook-timeouts.js';
 
 export const CODEX_COMPLEX_PROMPT_HOOK_MARKER = 'Codex Complex Prompt command editor';
 export const CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER = 'Codex Complex Prompt feedback editor';
+export const CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER =
+  'Codex Complex Prompt conditional Plannotator hook';
 export const CODEX_COMPLEX_PROMPT_LEGACY_STOP_HOOK_MARKER = 'Codex Complex Prompt browser review';
 const LEGACY_STOP_HOOK_COMMAND_SUFFIX = ' hook stop';
 
 export interface CodexHookConfigOptions {
   readonly configPath?: string;
   readonly command?: string;
+  readonly commandWindows?: string;
   readonly stopCommand?: string;
+  readonly stopCommandWindows?: string;
+  readonly plannotatorStopCommand?: string;
+  readonly plannotatorStopCommandWindows?: string;
   readonly dryRun?: boolean;
 }
 
@@ -29,6 +35,9 @@ export async function installCodexUserPromptHook(
   const configPath = options.configPath ?? defaultHooksPath();
   const command = options.command ?? 'complex-prompt hook prompt';
   const stopCommand = options.stopCommand ?? 'complex-prompt hook stop';
+  const plannotatorStopCommand =
+    options.plannotatorStopCommand ?? 'complex-prompt hook plannotator-stop';
+  const plannotatorStopCommandWindows = options.plannotatorStopCommandWindows;
   const config = await readHooksConfig(configPath);
   const hooks = getHooks(config);
   removeLegacyStopHooks(hooks);
@@ -43,6 +52,7 @@ export async function installCodexUserPromptHook(
       {
         type: 'command',
         command,
+        ...(options.commandWindows === undefined ? {} : { commandWindows: options.commandWindows }),
         timeout: CODEX_HOOK_TIMEOUT_SECONDS,
         statusMessage: CODEX_COMPLEX_PROMPT_HOOK_MARKER,
       },
@@ -50,7 +60,11 @@ export async function installCodexUserPromptHook(
   });
   hooks['UserPromptSubmit'] = nextUserPromptHooks;
   const stopHooks = Array.isArray(hooks['Stop']) ? [...hooks['Stop']] : [];
-  const nextStopHooks = stopHooks.filter(
+  const wrappedStopHooks = stopHooks.map((group) =>
+    wrapPlannotatorCommands(group, plannotatorStopCommand, plannotatorStopCommandWindows),
+  );
+  hooks['Stop'] = wrappedStopHooks;
+  const nextStopHooks = wrappedStopHooks.filter(
     (group) => !containsOwnCommand(group, stopCommand, CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER),
   );
   nextStopHooks.push({
@@ -58,6 +72,9 @@ export async function installCodexUserPromptHook(
       {
         type: 'command',
         command: stopCommand,
+        ...(options.stopCommandWindows === undefined
+          ? {}
+          : { commandWindows: options.stopCommandWindows }),
         timeout: CODEX_HOOK_TIMEOUT_SECONDS,
         statusMessage: CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
       },
@@ -87,6 +104,7 @@ export async function removeCodexUserPromptHook(
   hooks['UserPromptSubmit'] = nextUserPromptHooks;
   const stopHooks = Array.isArray(hooks['Stop']) ? [...hooks['Stop']] : [];
   hooks['Stop'] = stopHooks
+    .map((group) => restorePlannotatorCommands(group))
     .map((group) => removeOwnCommands(group, stopCommand, CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER))
     .filter((group) => group !== undefined);
   removeLegacyStopHooks(hooks);
@@ -152,6 +170,283 @@ function containsOwnCommand(
       ((handler as Record<string, unknown>)['command'] === command ||
         (handler as Record<string, unknown>)['statusMessage'] === marker),
   );
+}
+
+function wrapPlannotatorCommands(
+  group: unknown,
+  wrapperCommand: string,
+  wrapperCommandWindows: string | undefined,
+): unknown {
+  if (group === null || typeof group !== 'object' || Array.isArray(group)) return group;
+  const record = group as Record<string, unknown>;
+  const handlers = record['hooks'];
+  if (!Array.isArray(handlers)) return record;
+  const typedHandlers: unknown[] = handlers;
+  let changed = false;
+  const nextHandlers = typedHandlers.map((handler) => {
+    if (handler === null || typeof handler !== 'object' || Array.isArray(handler)) return handler;
+    const item = handler as Record<string, unknown>;
+    if (item['type'] !== 'command' || typeof item['command'] !== 'string') return handler;
+    if (item['statusMessage'] === CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER) {
+      const original =
+        getPlannotatorPayload(item['command']) ??
+        (typeof item['commandWindows'] === 'string'
+          ? getPlannotatorPayload(item['commandWindows'])
+          : undefined);
+      if (original === undefined) return handler;
+      changed = true;
+      return wrapPlannotatorPayload(item, original, wrapperCommand, wrapperCommandWindows);
+    }
+    const windowsCommand = item['commandWindows'];
+    const original = {
+      command: item['command'],
+      ...(typeof windowsCommand === 'string' ? { commandWindows: windowsCommand } : {}),
+      statusMessage: item['statusMessage'],
+    };
+    const wrapsCommand = containsPlannotator(original.command);
+    const wrapsWindowsCommand =
+      wrapperCommandWindows !== undefined &&
+      containsPlannotator(original.commandWindows ?? original.command);
+    if (!wrapsCommand && !wrapsWindowsCommand) return handler;
+    changed = true;
+    return wrapPlannotatorPayload(item, original, wrapperCommand, wrapperCommandWindows);
+  });
+  return changed ? { ...record, hooks: nextHandlers } : record;
+}
+
+function wrapPlannotatorPayload(
+  item: Record<string, unknown>,
+  original: { command: string; commandWindows?: string; statusMessage?: unknown },
+  wrapperCommand: string,
+  wrapperCommandWindows: string | undefined,
+): Record<string, unknown> {
+  const payload = Buffer.from(JSON.stringify(original), 'utf8').toString('base64url');
+  const wrapsCommand = containsPlannotator(original.command);
+  const wrapsWindowsCommand =
+    wrapperCommandWindows !== undefined &&
+    containsPlannotator(original.commandWindows ?? original.command);
+  return {
+    ...item,
+    ...(wrapsCommand ? { command: `${wrapperCommand} ${payload}` } : {}),
+    ...(wrapsWindowsCommand ? { commandWindows: `${wrapperCommandWindows} ${payload}` } : {}),
+    statusMessage: CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER,
+  };
+}
+
+function getPlannotatorPayload(
+  command: string,
+): { command: string; commandWindows?: string; statusMessage?: unknown } | undefined {
+  const payloadSeparator = command.lastIndexOf(' ');
+  if (payloadSeparator < 0) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(
+      Buffer.from(command.slice(payloadSeparator + 1), 'base64url').toString('utf8'),
+    );
+    if (parsed === null || typeof parsed !== 'object' || !('command' in parsed)) return undefined;
+    const value = parsed as {
+      command?: unknown;
+      commandWindows?: unknown;
+      statusMessage?: unknown;
+    };
+    if (typeof value.command !== 'string') return undefined;
+    return {
+      command: value.command,
+      ...(typeof value.commandWindows === 'string' ? { commandWindows: value.commandWindows } : {}),
+      statusMessage: value.statusMessage,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function containsPlannotator(command: string): boolean {
+  return shellCommandContainsPlannotator(command);
+}
+
+function shellCommandContainsPlannotator(command: string): boolean {
+  const tokens = tokenizeShellCommand(command);
+  const segments: string[][] = [[]];
+  for (const token of tokens) {
+    if (token.operator && [';', '&&', '||', '|', '|&', '&', '(', ')', '\n'].includes(token.value)) {
+      segments.push([]);
+    } else if (!token.operator) {
+      segments[segments.length - 1]?.push(token.value);
+    }
+  }
+
+  return segments.some((segment) => commandSegmentContainsPlannotator(segment));
+}
+
+interface ShellToken {
+  readonly value: string;
+  readonly operator: boolean;
+}
+
+function tokenizeShellCommand(command: string): ShellToken[] {
+  const tokens: ShellToken[] = [];
+  let value = '';
+  let quote: "'" | '"' | undefined;
+  let escaped = false;
+  let tokenStarted = false;
+
+  const pushWord = (): void => {
+    if (!tokenStarted) return;
+    tokens.push({ value, operator: false });
+    value = '';
+    tokenStarted = false;
+  };
+
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index];
+    if (character === undefined) continue;
+    if (escaped) {
+      value += character;
+      tokenStarted = true;
+      escaped = false;
+      continue;
+    }
+    if (quote === "'") {
+      if (character === "'") quote = undefined;
+      else value += character;
+      tokenStarted = true;
+      continue;
+    }
+    if (character === '\\' && quote !== '"') {
+      escaped = true;
+      tokenStarted = true;
+      continue;
+    }
+    if (quote === '"') {
+      if (character === '"') quote = undefined;
+      else value += character;
+      tokenStarted = true;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      tokenStarted = true;
+      continue;
+    }
+    if (character === '#') {
+      const startsComment = !tokenStarted && (index === 0 || /\s/.test(command[index - 1] ?? ''));
+      if (startsComment) {
+        while (index < command.length && command[index] !== '\n') index += 1;
+        pushWord();
+        tokens.push({ value: '\n', operator: true });
+        continue;
+      }
+    }
+    if (/\s/.test(character)) {
+      pushWord();
+      if (character === '\n') tokens.push({ value: '\n', operator: true });
+      continue;
+    }
+    const operator = ['&&', '||', '|&', ';;', ';&', '|', '&', ';', '(', ')'].find((candidate) =>
+      command.startsWith(candidate, index),
+    );
+    if (operator !== undefined) {
+      pushWord();
+      tokens.push({ value: operator, operator: true });
+      index += operator.length - 1;
+      continue;
+    }
+    value += character;
+    tokenStarted = true;
+  }
+  if (escaped) value += '\\';
+  pushWord();
+  return tokens;
+}
+
+function commandSegmentContainsPlannotator(segment: string[]): boolean {
+  if (segment.length === 0) return false;
+  let commandIndex = 0;
+  while (segment[commandIndex] !== undefined && isShellAssignment(segment[commandIndex] ?? '')) {
+    commandIndex += 1;
+  }
+  const executable = segment[commandIndex];
+  if (executable === undefined) return false;
+  const commandName = getExecutableName(executable);
+
+  if (isPlannotatorExecutable(executable)) {
+    return segment[commandIndex + 1]?.toLowerCase() === 'hook';
+  }
+  if (commandName === 'npx') {
+    const executableIndex = getNpxExecutableIndex(segment, commandIndex + 1);
+    return (
+      executableIndex !== undefined &&
+      isPlannotatorExecutable(segment[executableIndex] ?? '') &&
+      segment[executableIndex + 1]?.toLowerCase() === 'hook'
+    );
+  }
+  if (['sh', 'bash', 'dash', 'zsh', 'ksh'].includes(commandName)) {
+    const commandFlagIndex = segment.findIndex(
+      (argument, index) => index > commandIndex && argument === '-c',
+    );
+    const script = commandFlagIndex < 0 ? undefined : segment[commandFlagIndex + 1];
+    return script !== undefined && shellCommandContainsPlannotator(script);
+  }
+  return false;
+}
+
+function getNpxExecutableIndex(segment: string[], startIndex: number): number | undefined {
+  let index = startIndex;
+  while (index < segment.length) {
+    const argument = segment[index] ?? '';
+    if (argument === '--') return index + 1;
+    if (!argument.startsWith('-')) return index;
+    if (['-p', '--package'].includes(argument)) index += 2;
+    else index += 1;
+  }
+  return undefined;
+}
+
+function isShellAssignment(token: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*=/.test(token);
+}
+
+function isPlannotatorExecutable(token: string): boolean {
+  return getExecutableName(token) === 'plannotator';
+}
+
+function getExecutableName(token: string): string {
+  const basename = token.toLowerCase().split(/[\\/]/).at(-1) ?? '';
+  return basename.replace(/\.(?:cmd|exe|bat)$/, '');
+}
+
+function restorePlannotatorCommands(group: unknown): unknown {
+  if (group === null || typeof group !== 'object' || Array.isArray(group)) return group;
+  const record = group as Record<string, unknown>;
+  const handlers = record['hooks'];
+  if (!Array.isArray(handlers)) return record;
+  const typedHandlers: unknown[] = handlers;
+  let changed = false;
+  const nextHandlers = typedHandlers.map((handler) => {
+    if (handler === null || typeof handler !== 'object' || Array.isArray(handler)) return handler;
+    const item = handler as Record<string, unknown>;
+    if (
+      item['type'] !== 'command' ||
+      item['statusMessage'] !== CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER ||
+      typeof item['command'] !== 'string'
+    )
+      return handler;
+    const decoded =
+      getPlannotatorPayload(item['command']) ??
+      (typeof item['commandWindows'] === 'string'
+        ? getPlannotatorPayload(item['commandWindows'])
+        : undefined);
+    if (decoded === undefined) return handler;
+    changed = true;
+    const restored: Record<string, unknown> = { ...item, command: decoded.command };
+    if (typeof decoded.commandWindows === 'string')
+      restored['commandWindows'] = decoded.commandWindows;
+    else delete restored['commandWindows'];
+    if (typeof decoded.statusMessage === 'string')
+      restored['statusMessage'] = decoded.statusMessage;
+    else delete restored['statusMessage'];
+    return restored;
+  });
+  return changed ? { ...record, hooks: nextHandlers } : record;
 }
 
 function removeOwnCommands(

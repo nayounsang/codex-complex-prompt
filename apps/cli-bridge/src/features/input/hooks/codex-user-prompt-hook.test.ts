@@ -264,7 +264,7 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
     ]);
   });
 
-  it('AI Feedback 제출에 편집본을 포함하고 후속 브라우저 검토를 예약한다', async () => {
+  it('Plan Mode에서 AI Feedback을 제출하면 검토 편집기를 다시 예약하고 계획 승인을 요청하지 않는다', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'codex-feedback-loop-'));
     temporaryDirectories.push(directory);
     const feedbackLoopStateStore = createFeedbackLoopStateStore(directory);
@@ -274,6 +274,7 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
       JSON.stringify({
         hook_event_name: 'UserPromptSubmit',
         session_id: sessionId,
+        permission_mode: 'plan',
         prompt: '$complex-prompt # 초안',
       }),
       {
@@ -318,7 +319,67 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
     expect(result.hookSpecificOutput?.additionalContext).toContain(
       'Return the complete updated Markdown only',
     );
+    expect(result.hookSpecificOutput?.additionalContext).toContain('not Submit');
+    expect(result.hookSpecificOutput?.additionalContext).toContain(
+      'Do not call ExitPlanMode for this feedback submission',
+    );
+    expect(result.hookSpecificOutput?.additionalContext).not.toContain(
+      'call ExitPlanMode to present the plan',
+    );
     expect(await feedbackLoopStateStore.isActive(sessionId)).toBe(true);
+  });
+
+  it('Plan Mode에서 최종 Submit하면 계획만 작성하고 승인을 요청한다', async () => {
+    let browserUrl: string | undefined;
+    const resultPromise = runCodexUserPromptHook(
+      JSON.stringify({
+        hook_event_name: 'UserPromptSubmit',
+        permission_mode: 'plan',
+        prompt: '$complex-prompt 요청',
+      }),
+      {
+        timeoutMs: 2_000,
+        bridgeOptions: {
+          openBrowser: (url) => {
+            browserUrl = url;
+            return Promise.resolve();
+          },
+        },
+      },
+    );
+
+    await waitFor(() => browserUrl !== undefined);
+    if (browserUrl === undefined) throw new Error('Browser URL was not captured.');
+    const url = new URL(browserUrl);
+    const bridgeUrl = new URL(url.searchParams.get('bridge') ?? '');
+    const socket = new WebSocket(
+      `${bridgeUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${bridgeUrl.host}/ws`,
+    );
+    sockets.push(socket);
+    await onceOpen(socket);
+    const readyMessage = collectMessages(socket, 1);
+    socket.send(
+      JSON.stringify({ type: 'session.handshake', token: url.searchParams.get('token') }),
+    );
+    await readyMessage;
+    socket.send(
+      JSON.stringify({
+        type: 'prompt.submit',
+        submissionId: '00000000-0000-4000-8000-000000000026',
+        prompt: '기능을 개선해줘',
+        mode: 'edit',
+      }),
+    );
+
+    const result = await resultPromise;
+
+    expect(result.hookSpecificOutput?.additionalContext).toContain(
+      'prepare an implementation plan only',
+    );
+    expect(result.hookSpecificOutput?.additionalContext).toContain('call ExitPlanMode');
+    expect(result.hookSpecificOutput?.additionalContext).not.toContain(
+      'Execute the following command',
+    );
   });
 
   it('브라우저를 열 수 없으면 systemMessage와 함께 계속 진행한다', async () => {

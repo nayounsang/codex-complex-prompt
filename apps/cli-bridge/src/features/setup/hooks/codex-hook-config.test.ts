@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   CODEX_COMPLEX_PROMPT_HOOK_MARKER,
   CODEX_COMPLEX_PROMPT_LEGACY_STOP_HOOK_MARKER,
+  CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER,
   CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
   defaultCodexHome,
   defaultHooksPath,
@@ -56,19 +57,27 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
 
     expect(result.changed).toBe(true);
     expect(written.description).toBe('Existing hooks');
-    expect(written.hooks['Stop']).toEqual([
-      { hooks: [{ type: 'command', command: 'plannotator hook stop' }] },
-      {
-        hooks: [
-          {
-            type: 'command',
-            command: 'complex-prompt hook stop',
-            timeout: CODEX_HOOK_TIMEOUT_SECONDS,
-            statusMessage: CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
-          },
-        ],
-      },
-    ]);
+    const plannotatorHook = written.hooks['Stop']?.[0] as {
+      hooks: Array<{ command: string; statusMessage: string }>;
+    };
+    expect(plannotatorHook.hooks[0]?.command).toMatch(/^complex-prompt hook plannotator-stop /);
+    expect(plannotatorHook.hooks[0]?.statusMessage).toBe(
+      CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER,
+    );
+    const payload = plannotatorHook.hooks[0]?.command.split(' ').at(-1) ?? '';
+    expect(JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))).toMatchObject({
+      command: 'plannotator hook stop',
+    });
+    expect(written.hooks['Stop']?.[1]).toEqual({
+      hooks: [
+        {
+          type: 'command',
+          command: 'complex-prompt hook stop',
+          timeout: CODEX_HOOK_TIMEOUT_SECONDS,
+          statusMessage: CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
+        },
+      ],
+    });
     expect(written.hooks['UserPromptSubmit']).toEqual([
       {
         hooks: [
@@ -81,6 +90,64 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
         ],
       },
     ]);
+  });
+
+  it('npx로 실행하는 Plannotator 훅을 조건부 래퍼로 감싼다', async () => {
+    const configPath = await createConfig({
+      hooks: {
+        Stop: [{ hooks: [{ type: 'command', command: 'npx --yes plannotator hook stop' }] }],
+      },
+    });
+
+    const result = await installCodexUserPromptHook({ configPath });
+    const stopHooks = (
+      result.config['hooks'] as { Stop: Array<{ hooks: Array<{ command: string }> }> }
+    ).Stop;
+
+    expect(stopHooks[0]?.hooks[0]?.command).toMatch(/^complex-prompt hook plannotator-stop /);
+  });
+
+  it('sh -c 안에서 실행하는 Plannotator 훅을 조건부 래퍼로 감싼다', async () => {
+    const configPath = await createConfig({
+      hooks: {
+        Stop: [{ hooks: [{ type: 'command', command: "sh -c 'plannotator hook stop'" }] }],
+      },
+    });
+
+    const result = await installCodexUserPromptHook({ configPath });
+    const stopHooks = (
+      result.config['hooks'] as { Stop: Array<{ hooks: Array<{ command: string }> }> }
+    ).Stop;
+
+    expect(stopHooks[0]?.hooks[0]?.command).toMatch(/^complex-prompt hook plannotator-stop /);
+  });
+
+  it('Plannotator가 포함된 파일 경로는 래핑하지 않는다', async () => {
+    const command = '~/plannotator-notes/log.sh';
+    const configPath = await createConfig({
+      hooks: { Stop: [{ hooks: [{ type: 'command', command }] }] },
+    });
+
+    const result = await installCodexUserPromptHook({ configPath });
+    const stopHooks = (
+      result.config['hooks'] as { Stop: Array<{ hooks: Array<{ command: string }> }> }
+    ).Stop;
+
+    expect(stopHooks[0]?.hooks[0]?.command).toBe(command);
+  });
+
+  it('echo 인자에 적힌 Plannotator 명령은 래핑하지 않는다', async () => {
+    const command = "echo 'plannotator hook stop'";
+    const configPath = await createConfig({
+      hooks: { Stop: [{ hooks: [{ type: 'command', command }] }] },
+    });
+
+    const result = await installCodexUserPromptHook({ configPath });
+    const stopHooks = (
+      result.config['hooks'] as { Stop: Array<{ hooks: Array<{ command: string }> }> }
+    ).Stop;
+
+    expect(stopHooks[0]?.hooks[0]?.command).toBe(command);
   });
 
   it('드라이런에서는 훅 파일을 쓰지 않는다', async () => {
@@ -142,6 +209,60 @@ describe('Codex UserPromptSubmit 훅 설정', () => {
     const result = await installCodexUserPromptHook({ configPath });
 
     expect(result.changed).toBe(false);
+  });
+
+  it('재설치해도 Plannotator 래퍼를 중복 추가하지 않는다', async () => {
+    const configPath = await createConfig({
+      hooks: {
+        Stop: [{ hooks: [{ type: 'command', command: 'plannotator hook stop' }] }],
+      },
+    });
+
+    await installCodexUserPromptHook({ configPath });
+    const result = await installCodexUserPromptHook({ configPath });
+
+    expect(result.changed).toBe(false);
+    const installed = result.config['hooks'] as {
+      Stop: Array<{ hooks: Array<{ command: string }> }>;
+    };
+    expect(installed.Stop[0]?.hooks).toHaveLength(1);
+    expect(installed.Stop[0]?.hooks[0]?.command).toMatch(/^complex-prompt hook plannotator-stop /);
+  });
+
+  it('hook remove에서 Plannotator의 원래 명령과 statusMessage를 복원한다', async () => {
+    const configPath = await createConfig({
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command: 'plannotator hook stop --flag',
+                statusMessage: 'Reviewing plan',
+              },
+            ],
+          },
+        ],
+      },
+    });
+    await installCodexUserPromptHook({ configPath });
+
+    await removeCodexUserPromptHook({ configPath });
+
+    const restored = JSON.parse(await readFile(configPath, 'utf8')) as {
+      hooks: { Stop: unknown[] };
+    };
+    expect(restored.hooks.Stop).toEqual([
+      {
+        hooks: [
+          {
+            type: 'command',
+            command: 'plannotator hook stop --flag',
+            statusMessage: 'Reviewing plan',
+          },
+        ],
+      },
+    ]);
   });
 
   it('패키지 소유 훅만 제거하고 다른 훅은 보존한다', async () => {

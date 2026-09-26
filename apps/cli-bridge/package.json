@@ -42,6 +42,7 @@
     "package:smoke": "tsx scripts/package-smoke.ts"
   },
   "dependencies": {
+    "execa": "^10.0.1",
     "open": "^10.1.0",
     "ws": "^8.18.0"
   },
