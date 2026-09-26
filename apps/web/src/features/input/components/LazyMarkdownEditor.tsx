@@ -23,13 +23,24 @@ export const LazyMarkdownEditor = forwardRef<MarkdownEditorHandle, LazyMarkdownE
 
     if (!isEditorRequested) {
       return (
-        <MarkdownEditorFallback readOnly={props.readOnly ?? false} onActivate={requestEditor} />
+        <MarkdownEditorFallback
+          readOnly={props.readOnly ?? false}
+          onActivate={requestEditor}
+          onImageFiles={props.onImageFiles}
+        />
       );
     }
 
     return (
       <MarkdownEditorErrorBoundary readOnly={props.readOnly ?? false}>
-        <Suspense fallback={<MarkdownEditorFallback readOnly={props.readOnly ?? false} />}>
+        <Suspense
+          fallback={
+            <MarkdownEditorFallback
+              readOnly={props.readOnly ?? false}
+              onImageFiles={props.onImageFiles}
+            />
+          }
+        >
           <MarkdownEditor {...props} ref={forwardedRef} />
         </Suspense>
       </MarkdownEditorErrorBoundary>
@@ -40,12 +51,14 @@ export const LazyMarkdownEditor = forwardRef<MarkdownEditorHandle, LazyMarkdownE
 interface MarkdownEditorFallbackProps extends Pick<MarkdownEditorProps, 'readOnly'> {
   readonly onActivate?: () => void;
   readonly error?: boolean;
+  readonly onImageFiles?: MarkdownEditorProps['onImageFiles'];
 }
 
 function MarkdownEditorFallback({
   readOnly = false,
   onActivate,
   error = false,
+  onImageFiles,
 }: MarkdownEditorFallbackProps): React.JSX.Element {
   const activate = onActivate ?? undefined;
   const activateOnPointer = onActivate === undefined || error ? undefined : activate;
@@ -62,10 +75,31 @@ function MarkdownEditorFallback({
       onPointerEnter={activateOnPointer}
       onPointerDown={activateOnPointer}
       onFocus={activateOnPointer}
+      onPaste={handleImageFileTransfer}
+      onDrop={handleImageFileTransfer}
     >
       {error ? 'Editor failed to load. Reload to try again.' : 'Start writing…'}
     </Button>
   );
+
+  function handleImageFileTransfer(
+    event: React.ClipboardEvent<HTMLButtonElement> | React.DragEvent<HTMLButtonElement>,
+  ): void {
+    const transfer = 'clipboardData' in event ? event.clipboardData : event.dataTransfer;
+    const files = transfer === null ? [] : Array.from(transfer.files);
+    if (files.length === 0 && 'clipboardData' in event && transfer !== null) {
+      for (const item of Array.from(transfer.items)) {
+        if (item.kind !== 'file') continue;
+        const file = item.getAsFile();
+        if (file !== null) files.push(file);
+      }
+    }
+    const images = files.filter((file) => file.type.startsWith('image/'));
+    if (images.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!readOnly) void onImageFiles?.(images);
+  }
 }
 
 interface MarkdownEditorErrorBoundaryProps {

@@ -1,7 +1,11 @@
 import { type SyntheticEvent, lazy, Suspense, useCallback, useRef, useState } from 'react';
 import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
-import { countPromptCharacters, MAX_PROMPT_LENGTH } from '@codex-complex-prompt/protocol';
+import {
+  countPromptCharacters,
+  MAX_ATTACHMENT_IMAGE_BYTES,
+  MAX_PROMPT_LENGTH,
+} from '@codex-complex-prompt/protocol';
 
 import type { BridgeSession } from '../hooks/useBridgeSession.js';
 import type { MarkdownEditorHandle } from '../../input/components/MarkdownEditor.js';
@@ -12,6 +16,7 @@ import { useFeedbackSubmission } from '../../feedback/hooks/useFeedbackSubmissio
 import { useProjectTemplates } from '../../templates/hooks/useProjectTemplates.js';
 import { removeMarkdownDrawingReferences } from '../../input/drawing-markdown.js';
 import { MARKDOWN_ATTACHMENT_DIRECTORY } from '../../../shared/markdown/attachment-path.js';
+import { identifyImageFormat } from '../../../shared/image-format.js';
 
 const DrawingDialog = lazy(async () => {
   (window as Window & { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH = '/';
@@ -58,7 +63,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
   const isConnected = bridgeSession.state === 'connected';
   const isSubmitting = bridgeSession.state === 'submitting' || feedbackSubmission.isSubmitting;
   const { attachmentUrl, attachmentToken } = bridgeSession;
-  const attachmentEndpoint = (id?: string, extension?: 'png' | 'json'): string | null => {
+  const attachmentEndpoint = (id?: string, extension?: string): string | null => {
     if (attachmentUrl === null || attachmentToken === null) return null;
     const suffix =
       id === undefined ? '' : `/${id}${extension === undefined ? '' : `.${extension}`}`;
@@ -111,6 +116,64 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     } else {
       setMarkdownOverride(editorRef.current?.getMarkdown() ?? markdown);
       setEditorResetVersion((version) => version + 1);
+    }
+  };
+
+  const saveImageFiles = async (files: readonly File[]): Promise<void> => {
+    const savedIds: string[] = [];
+    try {
+      const markdownImages: string[] = [];
+      for (const file of files) {
+        if (file.size > MAX_ATTACHMENT_IMAGE_BYTES) {
+          throw new Error('이미지 파일은 25 MB 이하여야 합니다.');
+        }
+        const format = await identifyImageFormat(file, file.name);
+        const image = await readFileAsDataUrl(file, format.mimeType);
+        const endpoint = attachmentEndpoint();
+        if (endpoint === null) throw new Error('프로젝트 첨부 저장소에 연결되지 않았습니다.');
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image,
+            extension: format.extension,
+            scene: JSON.stringify({ type: 'image' }),
+          }),
+        });
+        const responseText = await response.text();
+        let result: { id?: string; extension?: string; error?: string };
+        try {
+          result = JSON.parse(responseText) as { id?: string; error?: string };
+        } catch {
+          throw new Error(
+            responseText.trim() || `이미지를 저장하지 못했습니다. (HTTP ${response.status})`,
+          );
+        }
+        if (!response.ok || result.id === undefined)
+          throw new Error(result.error ?? '이미지를 저장하지 못했습니다.');
+        savedIds.push(result.id);
+        markdownImages.push(
+          `![${escapeMarkdownAlt(file.name)}](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.${result.extension ?? format.extension})`,
+        );
+      }
+      const currentMarkdown = editorRef.current?.getMarkdown() ?? markdown;
+      setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
+      const next = `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}${markdownImages.join('\n\n')}`;
+      setMarkdownOverride(next);
+      setEditorResetVersion((version) => version + 1);
+      setValidationError(null);
+    } catch (reason) {
+      const endpoint = attachmentEndpoint();
+      if (endpoint !== null) {
+        await Promise.allSettled(
+          savedIds.map((id) =>
+            fetch(attachmentEndpoint(id) ?? `${endpoint}/${id}`, { method: 'DELETE' }),
+          ),
+        );
+      }
+      setValidationError(
+        reason instanceof Error ? reason.message : '이미지를 저장하지 못했습니다.',
+      );
     }
   };
 
@@ -220,6 +283,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           onDelete: feedback.removeFeedback,
         }}
         drawings={{
+          onImageFiles: saveImageFiles,
           onDraw: () => {
             void openDrawing();
           },
@@ -332,4 +396,20 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       )}
     </>
   );
+}
+
+function readFileAsDataUrl(file: Blob, mimeType: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      typeof reader.result === 'string'
+        ? resolve(reader.result.replace(/^data:[^;,]+;/, `data:${mimeType};`))
+        : reject(new Error('이미지를 읽을 수 없습니다.'));
+    reader.onerror = () => reject(new Error('이미지를 읽을 수 없습니다.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function escapeMarkdownAlt(value: string): string {
+  return value.replace(/[\\\[\]]/g, '\\$&').replace(/[\r\n]+/g, ' ');
 }

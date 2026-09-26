@@ -17,10 +17,25 @@ export interface TemplateStore {
 }
 
 export interface AttachmentStore {
-  readonly save: (input: { id?: string; png: string; scene: string }) => Promise<string>;
+  readonly save: (input: {
+    id?: string;
+    image?: string;
+    png?: string;
+    extension?: string;
+    scene: string;
+  }) => Promise<string>;
   readonly read: (
     id: string,
-  ) => Promise<{ readonly png: Buffer; readonly scene: string } | undefined>;
+    extension?: string,
+  ) => Promise<{
+    readonly id?: string;
+    readonly image?: Buffer;
+    readonly png?: Buffer;
+    readonly extension?: string;
+    readonly mimeType?: string;
+    readonly scene?: string;
+  } | undefined>;
+  readonly readScene?: (id: string) => Promise<string | undefined>;
   readonly hasSceneData: (id: string) => Promise<boolean>;
   readonly delete: (id: string) => Promise<boolean>;
 }

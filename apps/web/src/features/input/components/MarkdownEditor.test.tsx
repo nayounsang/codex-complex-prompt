@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LazyMarkdownEditor } from './LazyMarkdownEditor.js';
 import { MarkdownEditor } from './MarkdownEditor.js';
 
 const crepeTest = vi.hoisted(() => {
@@ -64,16 +65,50 @@ describe('MarkdownEditor', () => {
     });
   });
 
-  it('이미지 파일 붙여넣기를 막고 언마운트 때 에디터를 정리한다', async () => {
-    const { unmount } = render(<MarkdownEditor />);
+  it('이미지를 붙여넣으면 이미지 처리 콜백에 전달한다', async () => {
+    const onImageFiles = vi.fn();
+    render(<MarkdownEditor onImageFiles={onImageFiles} />);
     const editor = await screen.findByRole('textbox', { name: 'Command' });
     const paste = new Event('paste', { bubbles: true, cancelable: true });
+    const image = new File(['image'], 'paste.png', { type: 'image/png' });
     Object.defineProperty(paste, 'clipboardData', {
-      value: { files: [new File(['image'], 'image.png', { type: 'image/png' })] },
+      value: { files: [image], items: [] },
     });
 
     editor.dispatchEvent(paste);
+
+    expect(onImageFiles).toHaveBeenCalledExactlyOnceWith([image]);
     expect(paste.defaultPrevented).toBe(true);
+  });
+
+  it('이미지 파일을 드롭하면 이미지 처리 콜백에 전달한다', async () => {
+    const onImageFiles = vi.fn();
+    render(<MarkdownEditor onImageFiles={onImageFiles} />);
+    const editor = await screen.findByRole('textbox', { name: 'Command' });
+    const image = new File(['image'], 'drop.png', { type: 'image/png' });
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: { files: [image] } });
+
+    editor.dispatchEvent(drop);
+
+    expect(onImageFiles).toHaveBeenCalledExactlyOnceWith([image]);
+    expect(drop.defaultPrevented).toBe(true);
+  });
+
+  it('아직 열지 않은 빈 편집기에 이미지를 드롭하면 이미지 처리 콜백에 전달한다', () => {
+    const onImageFiles = vi.fn();
+    render(<LazyMarkdownEditor onImageFiles={onImageFiles} />);
+    const fallback = screen.getByRole('button', { name: 'Markdown command editor' });
+    const image = new File(['image'], 'initial-drop.png', { type: 'image/png' });
+
+    fireEvent.drop(fallback, { dataTransfer: { files: [image] } });
+
+    expect(onImageFiles).toHaveBeenCalledExactlyOnceWith([image]);
+  });
+
+  it('언마운트하면 에디터 인스턴스를 정리한다', async () => {
+    const { unmount } = render(<MarkdownEditor />);
+    await screen.findByRole('textbox', { name: 'Command' });
     const instance = crepeTest.state.instance as InstanceType<typeof crepeTest.MockCrepe>;
     unmount();
     expect(instance.destroy).toHaveBeenCalledOnce();
@@ -121,7 +156,10 @@ describe('MarkdownEditor', () => {
 
   it('그림 옆 삭제 버튼이 해당 첨부 파일을 삭제한다', async () => {
     const onDeleteDrawing = vi.fn();
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true } as Response);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'X-Attachment-Editable': 'true' }),
+    } as Response);
     render(
       <MarkdownEditor
         attachmentUrl="http://127.0.0.1:8765/_complex-prompt/attachments"
