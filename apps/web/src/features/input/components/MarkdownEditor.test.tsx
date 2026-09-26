@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MarkdownEditor } from './MarkdownEditor.js';
 
@@ -85,5 +85,59 @@ describe('MarkdownEditor', () => {
       'contenteditable',
       'false',
     );
+  });
+
+  it('기존 그림이 있어도 BlockEdit 메뉴에는 Draw만 추가한다', async () => {
+    render(
+      <MarkdownEditor
+        defaultMarkdown={
+          '![Drawing](.complex-prompt/attachments/00000000-0000-4000-8000-000000000001.png)'
+        }
+        onDraw={vi.fn()}
+        onEditDrawing={vi.fn()}
+        onDeleteDrawing={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(crepeTest.state.instance).toBeDefined());
+    const instance = crepeTest.state.instance as InstanceType<typeof crepeTest.MockCrepe>;
+    const featureConfigs = instance.options['featureConfigs'] as Record<
+      string,
+      {
+        buildMenu: (builder: {
+          getGroup: (name: string) => { addItem: (id: string, item: { label: string }) => void };
+        }) => void;
+      }
+    >;
+    const items: string[] = [];
+
+    featureConfigs['block-edit']?.buildMenu({
+      getGroup: () => ({
+        addItem: (_id, item) => items.push(item.label),
+      }),
+    });
+
+    expect(items).toEqual(['Draw']);
+  });
+
+  it('그림 옆 삭제 버튼이 해당 첨부 파일을 삭제한다', async () => {
+    const onDeleteDrawing = vi.fn();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true } as Response);
+    render(
+      <MarkdownEditor
+        attachmentUrl="http://127.0.0.1:8765/_complex-prompt/attachments"
+        attachmentToken="test-token"
+        onEditDrawing={vi.fn()}
+        onDeleteDrawing={onDeleteDrawing}
+      />,
+    );
+    const editor = await screen.findByRole('textbox', { name: 'Command' });
+    const image = document.createElement('img');
+    image.src = '.complex-prompt/attachments/00000000-0000-4000-8000-000000000009.png';
+    editor.append(image);
+
+    fireEvent.pointerMove(image);
+    fireEvent.click(await screen.findByRole('button', { name: '그림 삭제' }));
+
+    expect(onDeleteDrawing).toHaveBeenCalledExactlyOnceWith('00000000-0000-4000-8000-000000000009');
   });
 });

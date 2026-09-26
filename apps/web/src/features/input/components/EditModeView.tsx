@@ -12,7 +12,6 @@ interface EditModeViewProps {
   readonly attachmentUrl: string | null;
   readonly attachmentToken: string | null;
   readonly attachmentRefreshKey: number;
-  readonly drawings: readonly { id: string; label: string }[];
   readonly onDraw: () => void;
   readonly onEditDrawing: (id: string) => void;
   readonly onDeleteDrawing: (id: string) => void;
@@ -27,7 +26,6 @@ export function EditModeView({
   attachmentUrl,
   attachmentToken,
   attachmentRefreshKey,
-  drawings,
   onDraw,
   onEditDrawing,
   onDeleteDrawing,
@@ -44,7 +42,6 @@ export function EditModeView({
           attachmentUrl={attachmentUrl}
           attachmentToken={attachmentToken}
           attachmentRefreshKey={attachmentRefreshKey}
-          drawings={drawings}
           onDraw={onDraw}
           onEditDrawing={onEditDrawing}
           onDeleteDrawing={onDeleteDrawing}

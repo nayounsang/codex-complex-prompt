@@ -10,10 +10,7 @@ import { SubmitFeedbackDialog } from '../../../app/components/SubmitFeedbackDial
 import { useFeedbackAnnotations } from '../../feedback/hooks/useFeedbackAnnotations.js';
 import { useFeedbackSubmission } from '../../feedback/hooks/useFeedbackSubmission.js';
 import { useProjectTemplates } from '../../templates/hooks/useProjectTemplates.js';
-import {
-  findMarkdownDrawingReferences,
-  removeMarkdownDrawingReferences,
-} from '../../input/drawing-markdown.js';
+import { removeMarkdownDrawingReferences } from '../../input/drawing-markdown.js';
 
 const DrawingDialog = lazy(async () => {
   (window as Window & { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH = '/';
@@ -60,8 +57,6 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
   const isConnected = bridgeSession.state === 'connected';
   const isSubmitting = bridgeSession.state === 'submitting' || feedbackSubmission.isSubmitting;
   const { attachmentUrl, attachmentToken } = bridgeSession;
-  const drawings = findMarkdownDrawingReferences(markdown);
-
   const attachmentEndpoint = (id?: string, extension?: 'png' | 'json'): string | null => {
     if (attachmentUrl === null || attachmentToken === null) return null;
     const suffix =
@@ -224,7 +219,6 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           onDelete: feedback.removeFeedback,
         }}
         drawings={{
-          items: drawings,
           onDraw: () => {
             void openDrawing();
           },

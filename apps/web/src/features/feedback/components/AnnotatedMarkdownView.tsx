@@ -8,6 +8,7 @@ import {
 } from '../../../shared/markdown/markdown-source-map.js';
 import {
   getCodeBlockSelectionAnchor,
+  getImageSelectionAnchor,
   getSelectionAnchor,
   getTableSelectionAnchor,
 } from '../../../shared/markdown/selection-anchor.js';
@@ -114,6 +115,37 @@ export function AnnotatedMarkdownView({
     });
   }, [annotations, markdown, publishSelection]);
 
+  const handleImageSelection = useCallback(
+    (image: HTMLImageElement): void => {
+      const root = rootRef.current;
+      if (root === null) return;
+      const anchor = getImageSelectionAnchor(root, markdown, image);
+      if (anchor === null) return;
+      const existing = annotations.find(
+        (annotation) =>
+          annotation.scope === 'selection' &&
+          annotation.start !== undefined &&
+          annotation.end !== undefined &&
+          annotation.start < anchor.end &&
+          annotation.end > anchor.start,
+      );
+      if (existing === undefined) {
+        publishSelection(anchor);
+        return;
+      }
+      const start = Math.min(anchor.start, existing.start as number);
+      const end = Math.max(anchor.end, existing.end as number);
+      publishSelection({
+        ...anchor,
+        annotationId: existing.id,
+        quote: markdown.slice(start, end),
+        start,
+        end,
+      });
+    },
+    [annotations, markdown, publishSelection],
+  );
+
   useEffect(
     function decorateReadOnlyMarkdown() {
       if (rendererRoot === null) return;
@@ -121,9 +153,10 @@ export function AnnotatedMarkdownView({
         rendererRoot,
         renderedMarkdown,
         JSON.parse(decorationRangeKey) as SourceFeedbackRange[],
+        markdown,
       );
     },
-    [decorationRangeKey, rendererRoot, renderedMarkdown],
+    [decorationRangeKey, markdown, rendererRoot, renderedMarkdown],
   );
 
   useEffect(
@@ -203,6 +236,25 @@ export function AnnotatedMarkdownView({
       }}
       onKeyDown={() => {
         selectionDismissedRef.current = false;
+      }}
+      onKeyDownCapture={(event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const image = target.closest<HTMLImageElement>(
+          'img[data-feedback-source-start][data-feedback-source-end]',
+        );
+        if (image === null || (event.key !== 'Enter' && event.key !== ' ')) return;
+        event.preventDefault();
+        selectionDismissedRef.current = false;
+        handleImageSelection(image);
+      }}
+      onClickCapture={(event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const image = target.closest<HTMLImageElement>(
+          'img[data-feedback-source-start][data-feedback-source-end]',
+        );
+        if (image !== null) handleImageSelection(image);
       }}
       onMouseUpCapture={() => {
         pointerSelectingRef.current = false;
