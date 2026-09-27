@@ -55,6 +55,7 @@ interface PromptSessionShellProps {
   };
   readonly drawings: {
     readonly onDraw: () => void;
+    readonly onImageFiles: (files: readonly File[]) => void | Promise<void>;
     readonly onEdit: (id: string) => void;
     readonly onDelete: (id: string) => void;
     readonly attachmentUrl: string | null;
@@ -98,6 +99,7 @@ export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.El
           attachmentToken={drawings.attachmentToken}
           attachmentRefreshKey={drawings.attachmentRefreshKey}
           onDraw={drawings.onDraw}
+          onImageFiles={drawings.onImageFiles}
           onEditDrawing={drawings.onEdit}
           onDeleteDrawing={drawings.onDelete}
         />

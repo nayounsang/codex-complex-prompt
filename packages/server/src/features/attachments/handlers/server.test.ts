@@ -87,6 +87,7 @@ describe('로컬 브리지 서버', () => {
       attachmentStore: {
         save: async () => id,
         read: async () => ({ png: Buffer.from('png'), scene: '{"elements":[]}' }),
+        readScene: async () => '{"elements":[]}',
         hasSceneData: async () => true,
         delete: async () => false,
       },
@@ -103,6 +104,7 @@ describe('로컬 브리지 서버', () => {
       );
 
       expect(response.status).toBe(200);
+      expect(response.headers.get('x-attachment-editable')).toBe('true');
       expect(await response.text()).toBe('');
     } finally {
       await server.close();
@@ -115,6 +117,7 @@ describe('로컬 브리지 서버', () => {
       attachmentStore: {
         save: async () => id,
         read: async () => undefined,
+        readScene: async () => undefined,
         hasSceneData: async () => false,
         delete: async () => false,
       },
@@ -131,6 +134,117 @@ describe('로컬 브리지 서버', () => {
       );
 
       expect(response.status).toBe(404);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('readScene을 제공하는 저장소에서 인증된 장면 요청에 JSON을 반환한다', async () => {
+    const scene = '{"type":"image"}';
+    const { server, token } = await startAttachmentTestServer({
+      readScene: async () => scene,
+    });
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments/00000000-0000-4000-8000-000000000008.json?token=${encodeURIComponent(token)}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await response.text()).toBe(scene);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('readScene에서 장면을 찾지 못하면 JSON 요청에 404를 반환한다', async () => {
+    const { server, token } = await startAttachmentTestServer({ readScene: async () => undefined });
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments/00000000-0000-4000-8000-000000000008.json?token=${encodeURIComponent(token)}`,
+      );
+
+      expect(response.status).toBe(404);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('인증된 GIF URL에서 GIF MIME 형식과 원본 바이트를 반환한다', async () => {
+    const image = Buffer.from('gif-data');
+    const { server, token } = await startAttachmentTestServer({
+      read: async () => ({ image, extension: 'gif', mimeType: 'image/gif' }),
+    });
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments/00000000-0000-4000-8000-000000000009.gif?token=${encodeURIComponent(token)}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('image/gif');
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(image);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('SVG 첨부 응답은 스크립트 실행을 제한하는 보안 헤더를 포함한다', async () => {
+    const { server, token } = await startAttachmentTestServer({
+      read: async () => ({
+        image: Buffer.from('<svg></svg>'),
+        extension: 'svg',
+        mimeType: 'image/svg+xml',
+      }),
+    });
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments/00000000-0000-4000-8000-000000000009.svg?token=${encodeURIComponent(token)}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-security-policy')).toBe(
+        "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+      );
+      expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('저장소가 MIME 형식을 주지 않으면 비PNG 이미지에 기본 MIME 형식을 사용한다', async () => {
+    const image = Buffer.from('legacy-image');
+    const { server, token } = await startAttachmentTestServer({
+      read: async () => ({ image }),
+    });
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments/00000000-0000-4000-8000-000000000009.gif?token=${encodeURIComponent(token)}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('application/octet-stream');
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(image);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('잘못된 편집 장면 JSON은 편집 불가로 표시한다', async () => {
+    const { server, token } = await startAttachmentTestServer({ readScene: async () => '{' });
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments/00000000-0000-4000-8000-000000000008.json?token=${encodeURIComponent(token)}`,
+        { method: 'HEAD' },
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('x-attachment-editable')).toBe('false');
     } finally {
       await server.close();
     }

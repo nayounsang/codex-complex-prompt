@@ -1,4 +1,5 @@
 export { AttachmentTooLargeError, AttachmentValidationError } from './attachment-errors.js';
+export { MAX_ATTACHMENT_IMAGE_BYTES } from './attachment-limits.js';
 export {
   MAX_PROMPT_LENGTH,
   countPromptCharacters,

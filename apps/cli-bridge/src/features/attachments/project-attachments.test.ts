@@ -11,6 +11,10 @@ import {
 } from './project-attachments.js';
 
 const temporaryDirectories: string[] = [];
+const PNG_DATA =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+const PNG_DATA_URL = `data:image/png;base64,${PNG_DATA}`;
+const GIF_DATA = 'R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
 
 afterEach(async () => {
   await Promise.all(
@@ -31,7 +35,7 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
     const id = await store.save({
-      png: 'data:image/png;base64,iVBORw0KGgo=',
+      png: PNG_DATA_URL,
       scene: '{"elements":[]}',
     });
 
@@ -44,7 +48,7 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
     const id = await store.save({
-      png: 'data:image/png;base64,iVBORw0KGgo=',
+      png: PNG_DATA_URL,
       scene: '{"elements":[]}',
     });
     await unlink(join(projectDirectory, '.complex-prompt', 'attachments', `${id}.excalidraw.json`));
@@ -68,18 +72,89 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const store = createProjectAttachmentStore(projectDirectory);
     const id = '00000000-0000-4000-8000-000000000031';
     const scene = '{"elements":[{"id":"shape"}]}';
-    await store.save({ id, png: 'data:image/png;base64,iVBORw0KGgo=', scene });
+    await store.save({ id, png: PNG_DATA_URL, scene });
 
     const attachment = await store.read(id);
 
-    expect(attachment).toEqual({ id, png: Buffer.from('iVBORw0KGgo=', 'base64'), scene });
+    expect(attachment).toMatchObject({
+      id,
+      image: Buffer.from(PNG_DATA, 'base64'),
+      png: Buffer.from(PNG_DATA, 'base64'),
+      extension: 'png',
+      mimeType: 'image/png',
+      scene,
+    });
+  });
+
+  it('저장한 GIF 첨부를 원본 바이트와 GIF 확장자로 다시 읽는다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const id = '00000000-0000-4000-8000-000000000036';
+    const gif = Buffer.from(GIF_DATA, 'base64');
+    await store.save({
+      id,
+      image: `data:image/gif;base64,${GIF_DATA}`,
+      extension: 'gif',
+      scene: '{"type":"image"}',
+    });
+
+    const attachment = await store.read(id, 'gif');
+
+    expect(attachment).toMatchObject({
+      id,
+      image: gif,
+      extension: 'gif',
+      mimeType: 'image/gif',
+    });
+  });
+
+  it('같은 첨부 ID의 이미지 형식을 바꾸면 이전 확장자 파일을 제거한다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const id = '00000000-0000-4000-8000-000000000037';
+    await store.save({
+      id,
+      image: `data:image/gif;base64,${GIF_DATA}`,
+      extension: 'gif',
+      scene: '{"type":"image"}',
+    });
+
+    await store.save({ id, png: PNG_DATA_URL, scene: '{"type":"image"}' });
+
+    await expect(store.read(id, 'gif')).resolves.toBeUndefined();
+  });
+
+  it('이미지 내용과 다른 확장자로 첨부를 저장하지 않는다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+
+    await expect(
+      store.save({
+        image: `data:image/gif;base64,${GIF_DATA}`,
+        extension: 'png',
+        scene: '{"type":"image"}',
+      }),
+    ).rejects.toThrow('Image extension does not match its content.');
+  });
+
+  it('경로 문자가 포함된 이미지 확장자는 저장하지 않는다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+
+    await expect(
+      store.save({
+        image: PNG_DATA_URL,
+        extension: '../png',
+        scene: '{"type":"image"}',
+      }),
+    ).rejects.toThrow('Image extension does not match its content.');
   });
 
   it('그림 삭제 후에는 첨부를 다시 읽을 수 없다', async () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
     const id = await store.save({
-      png: 'data:image/png;base64,iVBORw0KGgo=',
+      png: PNG_DATA_URL,
       scene: '{"elements":[]}',
     });
 
@@ -94,7 +169,7 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
     const id = await store.save({
-      png: 'data:image/png;base64,iVBORw0KGgo=',
+      png: PNG_DATA_URL,
       scene: '{"elements":[]}',
     });
     await store.delete(id);
@@ -108,7 +183,7 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
     const id = await store.save({
-      png: 'data:image/png;base64,iVBORw0KGgo=',
+      png: PNG_DATA_URL,
       scene: '{"elements":[]}',
     });
     await unlink(join(projectDirectory, '.complex-prompt', 'attachments', `${id}.png`));
@@ -122,9 +197,9 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
 
-    await expect(
-      store.save({ id: '../outside', png: 'data:image/png;base64,iVBORw0KGgo=', scene: '{}' }),
-    ).rejects.toThrow('Attachment ID is invalid.');
+    await expect(store.save({ id: '../outside', png: PNG_DATA_URL, scene: '{}' })).rejects.toThrow(
+      'Attachment ID is invalid.',
+    );
   });
 
   it('PNG 데이터 URI가 아닌 그림 저장 요청을 거부한다', async () => {
@@ -149,9 +224,9 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
 
-    await expect(
-      store.save({ png: 'data:image/png;base64,iVBORw0KGgo=', scene: '{' }),
-    ).rejects.toThrow('Drawing scene JSON is invalid:');
+    await expect(store.save({ png: PNG_DATA_URL, scene: '{' })).rejects.toThrow(
+      'Drawing scene JSON is invalid:',
+    );
   });
 
   it('저장되지 않은 첨부 ID의 그림을 읽으면 undefined를 반환한다', async () => {
@@ -214,9 +289,9 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
     const id = '00000000-0000-4000-8000-000000000034';
-    await store.save({ id, png: 'data:image/png;base64,iVBORw0KGgo=', scene: '{"version":1}' });
+    await store.save({ id, png: PNG_DATA_URL, scene: '{"version":1}' });
 
-    await store.save({ id, png: 'data:image/png;base64,iVBORw0KGgo=', scene: '{"version":2}' });
+    await store.save({ id, png: PNG_DATA_URL, scene: '{"version":2}' });
 
     await expect(store.read(id)).resolves.toMatchObject({ scene: '{"version":2}' });
   });
@@ -226,7 +301,7 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const store = createProjectAttachmentStore(projectDirectory);
     const id = await store.save({
       id: '00000000-0000-4000-8000-000000000035',
-      png: 'data:image/png;base64,iVBORw0KGgo=',
+      png: PNG_DATA_URL,
       scene: '{}',
     });
     const imagePath = join(projectDirectory, '.complex-prompt', 'attachments', `${id}.png`);
@@ -240,7 +315,7 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
     const id = await store.save({
-      png: 'data:image/png;base64,iVBORw0KGgo=',
+      png: PNG_DATA_URL,
       scene: '{}',
     });
     const attachmentDirectory = join(projectDirectory, '.complex-prompt', 'attachments');

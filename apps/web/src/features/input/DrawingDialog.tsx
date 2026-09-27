@@ -1,5 +1,6 @@
 import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
+import { MAX_ATTACHMENT_IMAGE_BYTES } from '@codex-complex-prompt/protocol';
 import { Excalidraw, exportToBlob, FONT_FAMILY } from '@excalidraw/excalidraw';
 import type {
   AppState,
@@ -90,7 +91,7 @@ export function DrawingDialog({
         mimeType: 'image/png',
         exportPadding: 24,
       });
-      if (blob.size > 25 * 1024 * 1024) {
+      if (blob.size > MAX_ATTACHMENT_IMAGE_BYTES) {
         setError('PNG 그림은 25MB 이하여야 합니다.');
         setSaving(false);
         return;

@@ -144,4 +144,6 @@ pnpm test:e2e
 
 브라우저 편집기의 **Advanced → Draw**에서 Excalidraw 그림을 만들 수 있습니다. 저장한 그림은 프로젝트 작업 디렉터리의 `.complex-prompt/attachments/`에 Codex가 읽을 PNG와 다시 편집할 수 있는 Excalidraw JSON으로 저장됩니다. Markdown에는 상대 이미지 경로가 남으므로 프롬프트 제출과 AI 피드백 후에도 그림을 사용할 수 있습니다.
 
-PNG 첨부 파일은 최대 25 MB입니다. 그림의 텍스트에는 Excalifont를 사용하며, Excalidraw 글꼴 파일은 웹 앱에서 제공합니다. 관련 MIT 라이선스와 글꼴 고지는 배포 패키지의 `THIRD-PARTY-NOTICES.txt`에 포함됩니다.
+편집기에 이미지를 붙여넣거나 드래그 앤 드롭하면 원본 이미지 형식과 확장자를 유지해 같은 첨부 디렉터리에 저장하고 Markdown 이미지 링크를 추가합니다.
+
+이미지 첨부 파일은 최대 25 MB입니다. 그림의 텍스트에는 Excalifont를 사용하며, Excalidraw 글꼴 파일은 웹 앱에서 제공합니다. 관련 MIT 라이선스와 글꼴 고지는 배포 패키지의 `THIRD-PARTY-NOTICES.txt`에 포함됩니다.

@@ -13,6 +13,7 @@ interface EditModeViewProps {
   readonly attachmentToken: string | null;
   readonly attachmentRefreshKey: number;
   readonly onDraw: () => void;
+  readonly onImageFiles: (files: readonly File[]) => void | Promise<void>;
   readonly onEditDrawing: (id: string) => void;
   readonly onDeleteDrawing: (id: string) => void;
 }
@@ -27,6 +28,7 @@ export function EditModeView({
   attachmentToken,
   attachmentRefreshKey,
   onDraw,
+  onImageFiles,
   onEditDrawing,
   onDeleteDrawing,
 }: EditModeViewProps): React.JSX.Element {
@@ -43,6 +45,7 @@ export function EditModeView({
           attachmentToken={attachmentToken}
           attachmentRefreshKey={attachmentRefreshKey}
           onDraw={onDraw}
+          onImageFiles={onImageFiles}
           onEditDrawing={onEditDrawing}
           onDeleteDrawing={onDeleteDrawing}
         />

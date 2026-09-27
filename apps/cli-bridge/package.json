@@ -42,21 +42,24 @@
     "package:smoke": "tsx scripts/package-smoke.ts"
   },
   "dependencies": {
+    "@file-type/xml": "^1.1.1",
     "execa": "^10.0.1",
+    "file-type": "^22.1.1",
+    "mime": "^4.1.0",
     "open": "^10.1.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@codex-complex-prompt/protocol": "workspace:*",
+    "@codex-complex-prompt/server": "workspace:*",
+    "@codex-complex-prompt/web": "workspace:*",
     "@types/node": "^22.13.4",
     "@types/ws": "^8.5.14",
     "@typescript-eslint/eslint-plugin": "^8.24.0",
     "@typescript-eslint/parser": "^8.24.0",
     "@vitest/coverage-v8": "^3.2.7",
-    "eslint": "^9.22.0",
     "esbuild": "^0.25.2",
-    "@codex-complex-prompt/server": "workspace:*",
-    "@codex-complex-prompt/protocol": "workspace:*",
-    "@codex-complex-prompt/web": "workspace:*",
+    "eslint": "^9.22.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vitest": "^3.0.8",
