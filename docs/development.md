@@ -38,7 +38,7 @@ pnpm build
 Codex CLI에서 스킬을 직접 호출해 실제 사용자 흐름을 확인합니다.
 
 ```text
-$complex-prompt 로컬 변경 사항을 확인하고 검토해줘
+$complex-prompt ## test test test
 ```
 
 ### 훅 입력을 직접 재현하기
