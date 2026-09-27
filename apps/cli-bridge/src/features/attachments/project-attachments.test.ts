@@ -124,6 +124,32 @@ describe('프로젝트 그림 첨부 저장소', () => {
     await expect(store.read(id, 'gif')).resolves.toBeUndefined();
   });
 
+  it('이미지 내용과 다른 확장자로 첨부를 저장하지 않는다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+
+    await expect(
+      store.save({
+        image: `data:image/gif;base64,${GIF_DATA}`,
+        extension: 'png',
+        scene: '{"type":"image"}',
+      }),
+    ).rejects.toThrow('Image extension does not match its content.');
+  });
+
+  it('경로 문자가 포함된 이미지 확장자는 저장하지 않는다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+
+    await expect(
+      store.save({
+        image: PNG_DATA_URL,
+        extension: '../png',
+        scene: '{"type":"image"}',
+      }),
+    ).rejects.toThrow('Image extension does not match its content.');
+  });
+
   it('그림 삭제 후에는 첨부를 다시 읽을 수 없다', async () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
@@ -171,9 +197,9 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
 
-    await expect(
-      store.save({ id: '../outside', png: PNG_DATA_URL, scene: '{}' }),
-    ).rejects.toThrow('Attachment ID is invalid.');
+    await expect(store.save({ id: '../outside', png: PNG_DATA_URL, scene: '{}' })).rejects.toThrow(
+      'Attachment ID is invalid.',
+    );
   });
 
   it('PNG 데이터 URI가 아닌 그림 저장 요청을 거부한다', async () => {
@@ -198,9 +224,9 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
 
-    await expect(
-      store.save({ png: PNG_DATA_URL, scene: '{' }),
-    ).rejects.toThrow('Drawing scene JSON is invalid:');
+    await expect(store.save({ png: PNG_DATA_URL, scene: '{' })).rejects.toThrow(
+      'Drawing scene JSON is invalid:',
+    );
   });
 
   it('저장되지 않은 첨부 ID의 그림을 읽으면 undefined를 반환한다', async () => {

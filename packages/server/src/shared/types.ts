@@ -27,14 +27,17 @@ export interface AttachmentStore {
   readonly read: (
     id: string,
     extension?: string,
-  ) => Promise<{
-    readonly id?: string;
-    readonly image?: Buffer;
-    readonly png?: Buffer;
-    readonly extension?: string;
-    readonly mimeType?: string;
-    readonly scene?: string;
-  } | undefined>;
+  ) => Promise<
+    | {
+        readonly id?: string;
+        readonly image?: Buffer;
+        readonly png?: Buffer;
+        readonly extension?: string;
+        readonly mimeType?: string;
+        readonly scene?: string;
+      }
+    | undefined
+  >;
   readonly readScene?: (id: string) => Promise<string | undefined>;
   readonly hasSceneData: (id: string) => Promise<boolean>;
   readonly delete: (id: string) => Promise<boolean>;

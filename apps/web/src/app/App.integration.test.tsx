@@ -1082,7 +1082,9 @@ describe('그림 첨부', () => {
 
     editor.dispatchEvent(paste);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('이미지 파일은 25 MB 이하여야 합니다.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '이미지 파일은 25 MB 이하여야 합니다.',
+    );
     expect(readAsDataURL).not.toHaveBeenCalled();
   });
 

@@ -17,7 +17,8 @@ export async function identifyImageFormat(file: Blob, fileName = ''): Promise<Im
 
   const namedExtension = fileName.split('.').pop()?.toLowerCase();
   const extension =
-    namedExtension !== undefined && namedExtension !== fileName.toLowerCase() &&
+    namedExtension !== undefined &&
+    namedExtension !== fileName.toLowerCase() &&
     mime.getType(namedExtension) === detected.mime
       ? namedExtension
       : detected.ext;

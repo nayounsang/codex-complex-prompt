@@ -44,17 +44,17 @@ export function createProjectAttachmentStore(projectDirectory: string): ProjectA
     save: async ({ id = randomUUID(), image: imageDataUrl, png, extension, scene }) => {
       if (!isAttachmentId(id)) throw new AttachmentValidationError('Attachment ID is invalid.');
       const encodedImage = imageDataUrl ?? png;
-      if (encodedImage === undefined) throw new AttachmentValidationError('Image data is required.');
+      if (encodedImage === undefined)
+        throw new AttachmentValidationError('Image data is required.');
       const legacyPngInput = imageDataUrl === undefined;
-      const { data: image, extension: detectedExtension, mimeType } = await decodeImage(
-        encodedImage,
-        legacyPngInput,
-      );
+      const {
+        data: image,
+        extension: detectedExtension,
+        mimeType,
+      } = await decodeImage(encodedImage, legacyPngInput);
       if (image.byteLength > MAX_ATTACHMENT_IMAGE_BYTES) {
         throw new AttachmentTooLargeError(
-          legacyPngInput
-            ? undefined
-            : 'Image attachments must be 25 MB or smaller.',
+          legacyPngInput ? undefined : 'Image attachments must be 25 MB or smaller.',
         );
       }
       const imageExtension = extension ?? detectedExtension;
@@ -128,7 +128,8 @@ export function createProjectAttachmentStore(projectDirectory: string): ProjectA
         if (!isSafeImageExtension(imageExtension)) return undefined;
         const image = await readFile(join(directory, `${id}.${imageExtension}`));
         const parsed = await identifyImageBuffer(image);
-        if (parsed === undefined || mime.getType(imageExtension) !== parsed.mimeType) return undefined;
+        if (parsed === undefined || mime.getType(imageExtension) !== parsed.mimeType)
+          return undefined;
         const scene =
           extension === undefined
             ? await readFile(join(directory, `${id}.excalidraw.json`), 'utf8')
@@ -188,7 +189,10 @@ export function isAttachmentId(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-async function decodeImage(value: string, legacyPngInput: boolean): Promise<{
+async function decodeImage(
+  value: string,
+  legacyPngInput: boolean,
+): Promise<{
   readonly data: Buffer;
   readonly extension: string;
   readonly mimeType: string;
