@@ -292,7 +292,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
               if (file !== null) files.push(file);
             }
           }
-          const imageFiles = files.filter((file) => file.type.startsWith('image/'));
+          const imageFiles = files.filter(
+            (file) => file.type === '' || file.type.startsWith('image/'),
+          );
           if (imageFiles.length === 0) return;
           event.preventDefault();
           event.stopPropagation();

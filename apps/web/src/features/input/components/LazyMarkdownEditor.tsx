@@ -94,7 +94,7 @@ function MarkdownEditorFallback({
         if (file !== null) files.push(file);
       }
     }
-    const images = files.filter((file) => file.type.startsWith('image/'));
+    const images = files.filter((file) => file.type === '' || file.type.startsWith('image/'));
     if (images.length === 0) return;
     event.preventDefault();
     event.stopPropagation();

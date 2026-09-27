@@ -81,6 +81,23 @@ describe('MarkdownEditor', () => {
     expect(paste.defaultPrevented).toBe(true);
   });
 
+  it('MIME 형식이 비어 있는 붙여넣기 파일을 이미지 검사 콜백에 전달한다', async () => {
+    const onImageFiles = vi.fn();
+    render(<MarkdownEditor onImageFiles={onImageFiles} />);
+    const editor = await screen.findByRole('textbox', { name: 'Command' });
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    const image = new File(['image'], 'paste.png');
+    Object.defineProperty(paste, 'clipboardData', {
+      value: { files: [image], items: [] },
+    });
+
+    editor.dispatchEvent(paste);
+
+    expect(image.type).toBe('');
+    expect(onImageFiles).toHaveBeenCalledExactlyOnceWith([image]);
+    expect(paste.defaultPrevented).toBe(true);
+  });
+
   it('이미지 파일을 드롭하면 이미지 처리 콜백에 전달한다', async () => {
     const onImageFiles = vi.fn();
     render(<MarkdownEditor onImageFiles={onImageFiles} />);
@@ -103,6 +120,18 @@ describe('MarkdownEditor', () => {
 
     fireEvent.drop(fallback, { dataTransfer: { files: [image] } });
 
+    expect(onImageFiles).toHaveBeenCalledExactlyOnceWith([image]);
+  });
+
+  it('MIME 형식이 비어 있는 드롭 파일을 이미지 검사 콜백에 전달한다', () => {
+    const onImageFiles = vi.fn();
+    render(<LazyMarkdownEditor onImageFiles={onImageFiles} />);
+    const fallback = screen.getByRole('button', { name: 'Markdown command editor' });
+    const image = new File(['image'], 'initial-drop.png');
+
+    fireEvent.drop(fallback, { dataTransfer: { files: [image] } });
+
+    expect(image.type).toBe('');
     expect(onImageFiles).toHaveBeenCalledExactlyOnceWith([image]);
   });
 

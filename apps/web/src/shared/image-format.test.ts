@@ -28,6 +28,18 @@ describe('이미지 형식 판별', () => {
     });
   });
 
+  it('MIME 형식이 비어 있어도 GIF 바이트를 이미지로 판별한다', async () => {
+    const file = createBlob(
+      Uint8Array.from(atob(GIF_DATA), (character) => character.charCodeAt(0)),
+      '',
+    );
+
+    await expect(identifyImageFormat(file, 'animation.gif')).resolves.toEqual({
+      extension: 'gif',
+      mimeType: 'image/gif',
+    });
+  });
+
   it('비이미지 PDF 파일은 이미지 형식으로 판별하지 않는다', async () => {
     const file = createBlob(new TextEncoder().encode('%PDF-1.4\n'), 'application/pdf');
 
