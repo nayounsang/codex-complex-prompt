@@ -1,5 +1,11 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.3.2
+
+### Patch Changes
+
+- d0044b3: Save pasted and dropped prompt images with their original format as project attachments and reference them from Markdown.
+
 ## 0.3.1
 
 ### Patch Changes
