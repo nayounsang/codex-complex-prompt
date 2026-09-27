@@ -15,7 +15,7 @@ await cp(workspaceWebDist, packagedWebDist, { recursive: true });
 await build({
   bundle: true,
   entryPoints: [entrypoint],
-  external: ['execa', 'open', 'ws'],
+  external: ['@file-type/xml', 'execa', 'file-type', 'mime', 'open', 'ws'],
   format: 'esm',
   outfile: entrypoint,
   platform: 'node',
