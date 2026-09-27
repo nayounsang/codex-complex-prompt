@@ -352,6 +352,8 @@ function serveAttachmentRequest(
             'Content-Type':
               attachment.mimeType ?? (kind === 'png' ? 'image/png' : 'application/octet-stream'),
             'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'",
           })
           .end(image);
         return;

@@ -191,6 +191,30 @@ describe('로컬 브리지 서버', () => {
     }
   });
 
+  it('SVG 첨부 응답은 스크립트 실행을 제한하는 보안 헤더를 포함한다', async () => {
+    const { server, token } = await startAttachmentTestServer({
+      read: async () => ({
+        image: Buffer.from('<svg></svg>'),
+        extension: 'svg',
+        mimeType: 'image/svg+xml',
+      }),
+    });
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments/00000000-0000-4000-8000-000000000009.svg?token=${encodeURIComponent(token)}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-security-policy')).toBe(
+        "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+      );
+      expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    } finally {
+      await server.close();
+    }
+  });
+
   it('저장소가 MIME 형식을 주지 않으면 비PNG 이미지에 기본 MIME 형식을 사용한다', async () => {
     const image = Buffer.from('legacy-image');
     const { server, token } = await startAttachmentTestServer({
