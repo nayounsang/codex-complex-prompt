@@ -20,6 +20,10 @@ flowchart LR
 
 ## 시작하기
 
+### Codex 플러그인으로 설치
+
+이 저장소는 setup 안내용 `$install-complex-prompt` skill을 포함한 Codex 플러그인 패키지도 제공합니다. `younsang-codex-plugins` marketplace에서 `codex-complex-prompt`를 설치한 뒤, 이 skill이 안내하는 CLI 명령을 사용자가 터미널에서 직접 실행해 hook과 `$complex-prompt` skill을 설정합니다.
+
 ### 설치
 
 ```bash
