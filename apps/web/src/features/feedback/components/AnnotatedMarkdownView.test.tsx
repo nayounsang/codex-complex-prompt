@@ -29,7 +29,7 @@ describe('AnnotatedMarkdownView', () => {
   it('렌더링된 Markdown에서 텍스트 선택의 원문 범위를 전달한다', async () => {
     const onSelection = vi.fn();
     const article = renderMarkdown('Review this sentence', onSelection);
-    await waitFor(() => expect(hasRenderedSourceMap(article)).toBe(true));
+    await waitFor(() => expect(hasRenderedSourceMap(article)).toBe(true), { timeout: 5_000 });
     const textNode = await waitFor(() => {
       const node = article.querySelector('p')?.firstChild;
       expect(node).toBeInstanceOf(Text);

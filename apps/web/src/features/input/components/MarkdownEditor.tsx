@@ -547,8 +547,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
                 <button
                   type="button"
                   className="drawing-edit-overlay"
-                  aria-label="그림 편집"
-                  title="그림 편집"
+                  aria-label="Edit drawing"
+                  title="Edit drawing"
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => drawingActionsRef.current.onEditDrawing?.(drawingEditTarget.id)}
                 >
@@ -572,8 +572,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
               <button
                 type="button"
                 className="drawing-edit-overlay"
-                aria-label="그림 삭제"
-                title="그림 삭제"
+                aria-label="Delete drawing"
+                title="Delete drawing"
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={() => {
                   drawingActionsRef.current.onDeleteDrawing?.(drawingEditTarget.id);

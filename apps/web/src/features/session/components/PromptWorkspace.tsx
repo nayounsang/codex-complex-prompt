@@ -79,18 +79,18 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     if (endpoint === null) return;
     try {
       const response = await fetch(endpoint);
-      if (!response.ok) throw new Error('그림 파일을 불러오지 못했습니다.');
+      if (!response.ok) throw new Error('Could not load the drawing file.');
       setDrawing({ id, scene: await response.text() });
     } catch (reason) {
       setValidationError(
-        reason instanceof Error ? reason.message : '그림 파일을 불러오지 못했습니다.',
+        reason instanceof Error ? reason.message : 'Could not load the drawing file.',
       );
     }
   };
 
   const saveDrawing = async (input: { id?: string; png: string; scene: string }): Promise<void> => {
     const endpoint = attachmentEndpoint();
-    if (endpoint === null) throw new Error('프로젝트 첨부 저장소에 연결되지 않았습니다.');
+    if (endpoint === null) throw new Error('Could not connect to the project attachment store.');
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -103,11 +103,11 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     } catch {
       throw new Error(
         responseText.trim() ||
-          `그림 저장 서버가 올바른 응답을 반환하지 않았습니다. (HTTP ${response.status})`,
+          `The drawing server returned an invalid response (HTTP ${response.status}).`,
       );
     }
     if (!response.ok || result.id === undefined)
-      throw new Error(result.error ?? '그림을 저장하지 못했습니다.');
+      throw new Error(result.error ?? 'Could not save the drawing.');
     setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
     if (input.id === undefined) {
       const next = `${markdown.trimEnd()}${markdown.trim() === '' ? '' : '\n\n'}![Drawing](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.png)`;
@@ -125,12 +125,13 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       const markdownImages: string[] = [];
       for (const file of files) {
         if (file.size > MAX_ATTACHMENT_IMAGE_BYTES) {
-          throw new Error('이미지 파일은 25 MB 이하여야 합니다.');
+          throw new Error('Image files must be 25 MB or smaller.');
         }
         const format = await identifyImageFormat(file, file.name);
         const image = await readFileAsDataUrl(file, format.mimeType);
         const endpoint = attachmentEndpoint();
-        if (endpoint === null) throw new Error('프로젝트 첨부 저장소에 연결되지 않았습니다.');
+        if (endpoint === null)
+          throw new Error('Could not connect to the project attachment store.');
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -146,11 +147,11 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           result = JSON.parse(responseText) as { id?: string; error?: string };
         } catch {
           throw new Error(
-            responseText.trim() || `이미지를 저장하지 못했습니다. (HTTP ${response.status})`,
+            responseText.trim() || `Could not save the image (HTTP ${response.status}).`,
           );
         }
         if (!response.ok || result.id === undefined)
-          throw new Error(result.error ?? '이미지를 저장하지 못했습니다.');
+          throw new Error(result.error ?? 'Could not save the image.');
         savedIds.push(result.id);
         markdownImages.push(
           `![${escapeMarkdownAlt(file.name)}](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.${result.extension ?? format.extension})`,
@@ -171,9 +172,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           ),
         );
       }
-      setValidationError(
-        reason instanceof Error ? reason.message : '이미지를 저장하지 못했습니다.',
-      );
+      setValidationError(reason instanceof Error ? reason.message : 'Could not save the image.');
     }
   };
 
@@ -183,13 +182,13 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     try {
       const response = await fetch(endpoint, { method: 'DELETE' });
       if (!response.ok && response.status !== 404)
-        throw new Error('그림 파일을 삭제하지 못했습니다.');
+        throw new Error('Could not delete the drawing file.');
       const next = removeMarkdownDrawingReferences(markdown, id);
       setMarkdownOverride(next);
       setEditorResetVersion((version) => version + 1);
     } catch (reason) {
       setValidationError(
-        reason instanceof Error ? reason.message : '그림 파일을 삭제하지 못했습니다.',
+        reason instanceof Error ? reason.message : 'Could not delete the drawing file.',
       );
     }
   };
@@ -309,7 +308,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
         <Suspense
           fallback={
             <p className="prompt-limit" role="status">
-              그림 편집기를 여는 중…
+              Opening drawing editor…
             </p>
           }
         >
@@ -385,9 +384,9 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
             <Dialog.Viewport className="dialog-viewport">
               <Dialog.Popup className="countdown-modal">
                 <p className="eyebrow">COMMAND SENT</p>
-                <Dialog.Title id="countdown-title">명령이 전송되었습니다</Dialog.Title>
+                <Dialog.Title id="countdown-title">Command sent</Dialog.Title>
                 <Dialog.Description>
-                  {bridgeSession.closeInSeconds}초 후 이 창이 닫힙니다.
+                  This window will close in {bridgeSession.closeInSeconds} seconds.
                 </Dialog.Description>
               </Dialog.Popup>
             </Dialog.Viewport>
@@ -404,8 +403,8 @@ function readFileAsDataUrl(file: Blob, mimeType: string): Promise<string> {
     reader.onload = () =>
       typeof reader.result === 'string'
         ? resolve(reader.result.replace(/^data:[^;,]+;/, `data:${mimeType};`))
-        : reject(new Error('이미지를 읽을 수 없습니다.'));
-    reader.onerror = () => reject(new Error('이미지를 읽을 수 없습니다.'));
+        : reject(new Error('Could not read the image.'));
+    reader.onerror = () => reject(new Error('Could not read the image.'));
     reader.readAsDataURL(file);
   });
 }

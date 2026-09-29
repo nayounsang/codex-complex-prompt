@@ -1,73 +1,73 @@
-# 개발 및 기여
+# Development and contribution
 
-## 저장소 구성
+## Repository layout
 
-- `apps/cli-bridge`: npm CLI, Codex CLI 훅, 로컬 브리지 서버, 설정 설치·제거
-- `apps/web`: Markdown 편집기와 AI 피드백 검토 UI
-- `packages/protocol`: CLI와 브라우저 간 메시지 및 Codex 훅 입력 스키마
-- `packages/server`: loopback HTTP/WebSocket 서버와 세션 정책
-- `packages/core`: 전송 방식과 무관한 초안·제출 이력·실행 상태 모델
-- `e2e`: CLI 훅과 브라우저 간 종단 간 흐름
+- `apps/cli-bridge`: npm CLI, Codex CLI hooks, local bridge server, and setup commands
+- `apps/web`: Markdown editor and AI feedback review UI
+- `packages/protocol`: messages between the CLI and browser, plus Codex hook input schemas
+- `packages/server`: loopback HTTP/WebSocket server and session policies
+- `packages/core`: transport-independent draft, submission history, and execution state
+- `e2e`: end-to-end flows between the CLI hook and browser
 
-## 로컬 개발
+## Local development
 
-### 최초 설정
+### Initial setup
 
-저장소 루트에서 의존성을 설치하고 CLI와 웹 UI를 빌드합니다. 로컬 Codex 설정에 훅과 스킬을 한 번 등록하고, Codex CLI를 재시작해 새 설정을 불러옵니다.
+Install dependencies and build the CLI and web UI from the repository root. Register the hook and skill in your local Codex settings once, then restart Codex CLI to load the settings.
 
 ```bash
 pnpm install
 pnpm build
 CLI_BRIDGE="$(pwd)/apps/cli-bridge/dist/index.js"
 
-# 설치 전에 설정 파일에 적용될 내용을 확인합니다. 파일은 변경하지 않습니다.
+# Preview what will be added to the settings file without changing it.
 node "$CLI_BRIDGE" hook install --dry-run
 
-# 로컬 Codex 설정에 훅과 스킬을 설치합니다. 이 단계는 최초 한 번만 필요합니다.
+# Install the hook and skill in your local Codex settings. This is only needed once.
 node "$CLI_BRIDGE" hook install
 ```
 
-Codex CLI에서 훅을 처음 실행할 때 검토 안내가 나오면 `/hooks`를 열어 확인하고 승인합니다.
+When Codex CLI asks you to review the hook the first time it runs, open `/hooks` and approve it.
 
-### 코드 변경 시
+### After changing code
 
-특히 CLI 브라우저 테스트는 `apps/web/dist`를 CLI 패키지 안에 복사한 번들을 실행하므로, CLI 패키지만 빌드하면 최신 웹 코드가 반영되지 않을 수 있습니다.
+The CLI browser tests run the web bundle copied into the CLI package at `apps/web/dist`. Building only the CLI package may leave the bundled UI out of date, so rebuild the workspace after changing code:
 
 ```bash
 pnpm build
 ```
 
-Codex CLI에서 스킬을 직접 호출해 실제 사용자 흐름을 확인합니다.
+Invoke the skill from Codex CLI to check the real user flow:
 
 ```text
 $complex-prompt ## test test test
 ```
 
-### 훅 입력을 직접 재현하기
+### Reproduce hook input directly
 
-스킬 호출 대신 Codex가 전달하는 `UserPromptSubmit` 입력만 따로 재현할 수도 있습니다. 이 명령은 브라우저 편집기를 열며, 편집기에서 제출할 때까지 대기합니다.
+You can reproduce the `UserPromptSubmit` input sent by Codex instead of invoking the skill. This command opens the browser editor and waits for you to submit from the editor.
 
 ```bash
 CLI_BRIDGE="$(pwd)/apps/cli-bridge/dist/index.js"
 
-# Codex UserPromptSubmit 입력을 재현해 브라우저 편집기를 엽니다.
-printf '%s\n' '{"hook_event_name":"UserPromptSubmit","prompt":"$complex-prompt 로컬 명령"}' | node "$CLI_BRIDGE" hook prompt
+# Reproduce a Codex UserPromptSubmit event and open the browser editor.
+printf '%s\n' '{"hook_event_name":"UserPromptSubmit","prompt":"$complex-prompt local command"}' | node "$CLI_BRIDGE" hook prompt
 ```
 
-### 로컬 훅 제거
+### Remove the local hook
 
-개발용 훅과 스킬이 더 이상 필요하지 않으면, 설치할 때와 같은 저장소 루트에서 제거합니다.
+When you no longer need the development hook and skill, remove them from the same repository root where you installed them.
 
 ```bash
 CLI_BRIDGE="$(pwd)/apps/cli-bridge/dist/index.js"
 
-# 이 패키지가 설치한 항목을 제거합니다.
+# Remove the items installed by this package.
 node "$CLI_BRIDGE" hook remove
 ```
 
-## 품질 확인
+## Quality checks
 
-Git commit 시 스테이징한 파일에 포맷을 적용합니다. Git push 이전에는 포맷 검사, 린트, 타입 검사, 테스트를 수행하며, 실패 시 push가 중단됩니다.
+The Git commit hook formats staged files. Before `git push`, the pre-push hook checks formatting, lint, types, and tests. A failed check stops the push.
 
 ```bash
 pnpm format:check
@@ -76,17 +76,17 @@ pnpm typecheck
 pnpm test
 ```
 
-E2E 테스트는 빌드한 웹 UI와 모의 Codex 프로세스를 사용하며 실제 모델은 호출하지 않습니다. Chromium을 설치한 뒤 실행합니다.
+End-to-end tests use the built web UI and a mock Codex process; they do not call a real model. Install Chromium before running them.
 
 ```bash
 pnpm --filter @codex-complex-prompt/e2e exec playwright install chromium
 pnpm test:e2e
 ```
 
-## 릴리스
+## Releases
 
-1. 배포 패키지에 영향을 주는 변경에는 `pnpm changeset`으로 changeset을 추가합니다.
-2. 작업 PR이 병합되면 변경 기록을 반영하는 버전 PR이 생성됩니다.
-3. 버전 PR을 병합하면 릴리스합니다.
+1. Add a changeset with `pnpm changeset` for changes that affect published packages.
+2. After the pull request is merged, a version pull request is created to update the changelog.
+3. Merge the version pull request to publish the release.
 
-이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
+This project follows [Semantic Versioning](https://semver.org/).

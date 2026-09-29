@@ -135,7 +135,7 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
       expect.objectContaining({
         type: 'session.ready',
         templates: expect.arrayContaining([
-          expect.objectContaining({ name: 'PRD/기능 요구사항 초안' }),
+          expect.objectContaining({ name: 'PRD / Feature Requirements' }),
         ]),
       }),
     ]);

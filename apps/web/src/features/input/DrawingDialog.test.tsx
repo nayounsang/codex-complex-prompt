@@ -23,8 +23,8 @@ describe('그림 편집 대화상자', () => {
       />,
     );
 
-    expect(screen.getByRole('alert')).toHaveTextContent('그림 편집 데이터를 열지 못했습니다');
-    expect(screen.getByRole('button', { name: '삽입' })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not open the drawing data');
+    expect(screen.getByRole('button', { name: 'Insert' })).toBeDisabled();
     expect(onSave).not.toHaveBeenCalled();
   });
 });

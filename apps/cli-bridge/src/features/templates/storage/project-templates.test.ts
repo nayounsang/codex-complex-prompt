@@ -24,7 +24,7 @@ describe('프로젝트 템플릿 저장소', () => {
     const templates = await store.list();
 
     expect(templates).toHaveLength(6);
-    expect(templates.map((template) => template.name)).toContain('PRD/기능 요구사항 초안');
+    expect(templates.map((template) => template.name)).toContain('PRD / Feature Requirements');
     expect(templates.every((template) => template.id.length === 36)).toBe(true);
   });
 
@@ -144,8 +144,8 @@ describe('프로젝트 템플릿 저장소', () => {
     const templates = await store.list();
 
     expect(templates.find((template) => template.id === defaultId)).toMatchObject({
-      name: 'PRD/기능 요구사항 초안',
-      body: expect.stringContaining('제품 요구사항을 구현해줘'),
+      name: 'PRD / Feature Requirements',
+      body: expect.stringContaining('Implement the product requirements below.'),
     });
   });
 

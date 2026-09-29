@@ -25,8 +25,8 @@ describe('feedback 직렬화', () => {
         '문서의 톤을 더 간결하게 바꿔주세요.\n\n' +
         '### Selected feedback\n\n' +
         '> Fix this paragraph.\n\n' +
-        '- 위치: line 3–3\n' +
-        '- 피드백: 이 문장을 다시 작성해주세요.\n\n' +
+        '- Location: line 3–3\n' +
+        '- Feedback: 이 문장을 다시 작성해주세요.\n\n' +
         '### Current Markdown\n\n' +
         markdown +
         '\n',

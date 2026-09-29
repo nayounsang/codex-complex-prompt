@@ -55,14 +55,14 @@ export function DrawingDialog({
         !('elements' in parsed) ||
         !Array.isArray(parsed.elements)
       ) {
-        throw new Error('그림 편집 데이터 형식이 올바르지 않습니다.');
+        throw new Error('The drawing data has an invalid format.');
       }
       scene = parsed as typeof scene;
     } catch (reason) {
       initialSceneError =
         reason instanceof Error
-          ? `그림 편집 데이터를 열지 못했습니다: ${reason.message}`
-          : '그림 편집 데이터를 열지 못했습니다.';
+          ? `Could not open the drawing data: ${reason.message}`
+          : 'Could not open the drawing data.';
     }
   }
   const initialData: ExcalidrawInitialDataState =
@@ -92,7 +92,7 @@ export function DrawingDialog({
         exportPadding: 24,
       });
       if (blob.size > MAX_ATTACHMENT_IMAGE_BYTES) {
-        setError('PNG 그림은 25MB 이하여야 합니다.');
+        setError('PNG drawings must be 25 MB or smaller.');
         setSaving(false);
         return;
       }
@@ -101,8 +101,8 @@ export function DrawingDialog({
         reader.onload = () =>
           typeof reader.result === 'string'
             ? resolve(reader.result)
-            : reject(new Error('PNG를 읽을 수 없습니다.'));
-        reader.onerror = () => reject(new Error('PNG를 읽을 수 없습니다.'));
+            : reject(new Error('Could not read the PNG.'));
+        reader.onerror = () => reject(new Error('Could not read the PNG.'));
         reader.readAsDataURL(blob);
       });
       const savedScene = JSON.stringify({
@@ -118,9 +118,7 @@ export function DrawingDialog({
       onClose();
     } catch (reason) {
       setError(
-        reason instanceof Error
-          ? reason.message
-          : '그림을 저장하지 못했습니다. 다시 시도해 주세요.',
+        reason instanceof Error ? reason.message : 'Could not save the drawing. Please try again.',
       );
     } finally {
       setSaving(false);
@@ -148,8 +146,8 @@ export function DrawingDialog({
               <Button
                 type="button"
                 className="button-quiet"
-                aria-label="닫기"
-                title="닫기"
+                aria-label="Close"
+                title="Close"
                 disabled={saving}
                 onClick={onClose}
               >
@@ -188,7 +186,7 @@ export function DrawingDialog({
                 disabled={saving || initialSceneError !== null}
                 onClick={() => void saveDrawing()}
               >
-                {saving ? '저장 중…' : '삽입'}
+                {saving ? 'Saving…' : 'Insert'}
               </Button>
             </div>
           </Dialog.Popup>
