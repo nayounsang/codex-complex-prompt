@@ -1,0 +1,93 @@
+name: Update Younsang Codex plugin pin
+
+on:
+  schedule:
+    - cron: '23 9 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: update-younsang-codex-plugin
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-plugin-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+
+      - name: Open an update pull request when upstream changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          marketplace_file=".agents/plugins/marketplace.json"
+          upstream_sha="$(git ls-remote https://github.com/nayounsang/younsang-codex-plugin.git refs/heads/main | awk '{print $1}')"
+          if [[ ! "$upstream_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Could not read the upstream main commit SHA."
+            exit 1
+          fi
+
+          current_sha="$(jq -r '.plugins[] | select(.name == "younsang-codex-plugin") | .source.sha // empty' "$marketplace_file")"
+          if [[ ! "$current_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "The marketplace plugin source must have a pinned 40-character SHA."
+            exit 1
+          fi
+
+          if [[ "$upstream_sha" == "$current_sha" ]]; then
+            echo "The project already pins the latest upstream commit."
+            exit 0
+          fi
+
+          short_sha="${upstream_sha:0:12}"
+          branch="automation/update-younsang-codex-plugin-${short_sha}"
+
+          create_pr() {
+            gh pr create \
+              --base main \
+              --head "$branch" \
+              --title "chore: update Younsang Codex plugin to ${short_sha}" \
+              --body "Updates the project plugin pin from ${current_sha} to ${upstream_sha}. Review the upstream changes: https://github.com/nayounsang/younsang-codex-plugin/compare/${current_sha}...${upstream_sha}"
+          }
+
+          existing_pr="$(gh pr list --state all --head "$branch" --json number,state --jq '.[0] // empty')"
+          if [[ -n "$existing_pr" ]]; then
+            existing_pr_state="$(jq -r '.state' <<< "$existing_pr")"
+            if [[ "$existing_pr_state" == "OPEN" ]]; then
+              echo "An update pull request for $upstream_sha is already open."
+            else
+              echo "An update pull request for $upstream_sha was already closed; leaving that decision in place."
+            fi
+            exit 0
+          fi
+
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git fetch origin "$branch"
+            branch_sha="$(git show "FETCH_HEAD:${marketplace_file}" | jq -r '.plugins[] | select(.name == "younsang-codex-plugin") | .source.sha // empty')"
+            if [[ "$branch_sha" != "$upstream_sha" ]]; then
+              echo "The existing branch $branch does not pin $upstream_sha; refusing to reuse it."
+              exit 1
+            fi
+            echo "Retrying pull request creation for the existing update branch."
+            create_pr
+            exit 0
+          fi
+
+          jq --arg sha "$upstream_sha" \
+            '(.plugins[] | select(.name == "younsang-codex-plugin").source) |= (del(.ref) | .sha = $sha)' \
+            "$marketplace_file" > "$RUNNER_TEMP/marketplace.json"
+          mv "$RUNNER_TEMP/marketplace.json" "$marketplace_file"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$marketplace_file"
+          git commit -m "chore: update Younsang Codex plugin to ${short_sha}"
+          git push origin "HEAD:refs/heads/${branch}"
+          create_pr
