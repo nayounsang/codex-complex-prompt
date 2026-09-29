@@ -1,3 +1,5 @@
+# AGENT Instructions
+
 - Before pushing any changes, run the same validation steps used by CI and ensure they pass in the local.
 
 - For development and validation workflows, read and follow `docs/development.md`.

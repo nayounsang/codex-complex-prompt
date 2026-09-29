@@ -67,17 +67,16 @@ node "$CLI_BRIDGE" hook remove
 
 ## 품질 확인
 
+Git commit 시 스테이징한 파일에 포맷을 적용합니다. Git push 이전에는 포맷 검사, 린트, 타입 검사, 테스트를 수행하며, 실패 시 push가 중단됩니다.
+
 ```bash
+pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
-pnpm test:coverage
-pnpm build
-pnpm format:check
-pnpm package:smoke
 ```
 
-종단 간 테스트는 빌드한 웹 UI와 모의 Codex 프로세스를 사용하며 실제 모델은 호출하지 않습니다. Chromium을 설치한 뒤 실행합니다.
+E2E 테스트는 빌드한 웹 UI와 모의 Codex 프로세스를 사용하며 실제 모델은 호출하지 않습니다. Chromium을 설치한 뒤 실행합니다.
 
 ```bash
 pnpm --filter @codex-complex-prompt/e2e exec playwright install chromium
