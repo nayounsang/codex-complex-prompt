@@ -1,5 +1,7 @@
 - Before pushing any changes, run the same validation steps used by CI and ensure they pass in the local.
 
+- For development and validation workflows, read and follow `docs/development.md`.
+
 - When modifying or adding a user-facing feature, verify the resulting behavior through `computer use`. Follow the setup instructions in `README.md`. If `computer use` is unavailable, use either `chrome devtool MCP` or `playwright MCP` instead. At least one of these verification methods must be used.
 
 - When a change affects behavior that is shipped to production, add a changeset describing the change.

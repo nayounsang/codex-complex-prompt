@@ -13,3 +13,4 @@ complex-prompt/
 .env
 .env.*
 !.env.example
+.playwright-mcp

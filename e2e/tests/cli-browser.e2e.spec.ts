@@ -113,7 +113,6 @@ test('입력한 Markdown을 Codex에 전달하고 3초 뒤 브라우저 종료�
     codexHome,
     browserUrlFile,
   );
-
   try {
     await openFakeCodexBrowser(page, fakeCodex);
     const editor = page.getByRole('textbox', { name: 'Command' });
@@ -130,6 +129,115 @@ test('입력한 Markdown을 Codex에 전달하고 3초 뒤 브라우저 종료�
     expect(response.hookSpecificOutput.additionalContext).toContain(submittedMarkdown);
     await expectBrowserCloseAfterThreeSeconds(page, submittedAt);
   } finally {
+    await rm(codexHome, { recursive: true, force: true });
+  }
+});
+
+test('Mermaid 코드블록을 클릭하면 다이어그램 편집 다이얼로그를 표시한다', async ({ page }) => {
+  const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-mermaid-'));
+  const browserUrlFile = join(codexHome, 'browser-url.txt');
+  const markdown =
+    '```mermaid\ngraph TD\n  A-->B\n```\n\n```mermaid\nsequenceDiagram\n  A->>B: Hello\n```';
+  const fakeCodex = startFakeCodex(
+    'prompt',
+    {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'e2e-mermaid-session',
+      cwd: repositoryRoot,
+      prompt: `$complex-prompt ${markdown}`,
+    },
+    codexHome,
+    browserUrlFile,
+  );
+  let submitted = false;
+  const nestedButtonErrors: string[] = [];
+
+  try {
+    page.on('console', (message) => {
+      if (message.type() === 'error' && message.text().includes('cannot be a descendant of'))
+        nestedButtonErrors.push(message.text());
+    });
+    await openFakeCodexBrowser(page, fakeCodex);
+    const commandEditor = page.getByRole('textbox', { name: 'Command' });
+    await expect(commandEditor).toContainText('graph TD');
+    await expect(page.locator('.markdown-editor .mermaid-preview-mount')).toHaveCount(2);
+    const editButton = page.getByRole('button', { name: 'Edit diagram' });
+    await expect(editButton).toHaveCount(2, { timeout: 5_000 });
+    await editButton.first().click();
+
+    const diagramDialog = page.getByRole('dialog');
+    await expect(diagramDialog).toBeVisible();
+    await expect(diagramDialog.getByRole('combobox', { name: 'Diagram type' })).toBeVisible();
+    expect(nestedButtonErrors).toEqual([]);
+    await diagramDialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('.markdown-editor .mermaid-preview-card')).toHaveCount(2);
+    await expect(editButton).toHaveCount(2);
+
+    await page.getByRole('button', { name: 'Send to Codex' }).click();
+    submitted = true;
+    await fakeCodex.result;
+  } finally {
+    if (!submitted) {
+      await page
+        .getByRole('button', { name: 'Send to Codex' })
+        .click({ timeout: 1_000 })
+        .catch(() => undefined);
+      await Promise.race([fakeCodex.result, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    }
+    await rm(codexHome, { recursive: true, force: true });
+  }
+});
+
+test('슬래시 메뉴에서 추가한 빈 다이어그램 블록을 클릭하면 편집 다이얼로그를 표시한다', async ({
+  page,
+}) => {
+  const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-mermaid-empty-'));
+  const browserUrlFile = join(codexHome, 'browser-url.txt');
+  const fakeCodex = startFakeCodex(
+    'prompt',
+    {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'e2e-mermaid-empty-session',
+      cwd: repositoryRoot,
+      prompt: '$complex-prompt Add a diagram.',
+    },
+    codexHome,
+    browserUrlFile,
+  );
+  let submitted = false;
+
+  try {
+    await openFakeCodexBrowser(page, fakeCodex);
+    const commandEditor = page.getByRole('textbox', { name: 'Command' });
+    await expect(commandEditor).toContainText('Add a diagram.');
+    await commandEditor.click();
+    await commandEditor.press('Control+End');
+    await commandEditor.press('Enter');
+    await commandEditor.type('/');
+    await page.getByText('Diagram', { exact: true }).click();
+
+    const editButton = page.getByRole('button', { name: 'Edit Your Diagram' });
+    await expect(editButton).toBeVisible();
+    await editButton.click();
+
+    const diagramDialog = page.getByRole('dialog');
+    await expect(diagramDialog).toBeVisible();
+    await expect(diagramDialog.getByRole('heading', { name: 'Edit diagram' })).toBeVisible();
+    await diagramDialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('.markdown-editor .mermaid-preview-card')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Edit Your Diagram' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Send to Codex' }).click();
+    submitted = true;
+    await fakeCodex.result;
+  } finally {
+    if (!submitted) {
+      await page
+        .getByRole('button', { name: 'Send to Codex' })
+        .click({ timeout: 1_000 })
+        .catch(() => undefined);
+      await Promise.race([fakeCodex.result, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    }
     await rm(codexHome, { recursive: true, force: true });
   }
 });

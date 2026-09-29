@@ -106,6 +106,36 @@ describe('AnnotatedMarkdownView', () => {
     );
   });
 
+  it('기존 피드백이 있는 다이어그램을 클릭하면 해당 피드백을 선택한다', async () => {
+    const onSelection = vi.fn();
+    const markdown = '```mermaid\nflowchart LR\n```';
+    const article = renderMarkdown(markdown, onSelection, [
+      {
+        id: 'diagram-feedback',
+        scope: 'selection',
+        quote: markdown,
+        start: 0,
+        end: markdown.length,
+        feedback: '이 다이어그램을 검토해 주세요.',
+      },
+    ]);
+    await waitFor(() => expect(hasRenderedSourceMap(article)).toBe(true));
+    const codeBlock = article.querySelector<HTMLElement>('.milkdown-code-block');
+    expect(codeBlock).not.toBeNull();
+    codeBlock?.classList.add('mermaid-preview-open');
+
+    fireEvent.click(codeBlock as HTMLElement);
+
+    expect(onSelection).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        annotationId: 'diagram-feedback',
+        quote: markdown,
+        start: 0,
+        end: markdown.length,
+      }),
+    );
+  });
+
   it('그림의 Markdown 원문 범위와 겹치는 기존 피드백을 강조한다', async () => {
     const markdown =
       '![와이어프레임](.complex-prompt/attachments/00000000-0000-4000-8000-000000000003.png)';

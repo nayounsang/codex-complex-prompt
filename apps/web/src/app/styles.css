@@ -325,6 +325,236 @@ button:focus-visible,
   background: #fafafa;
 }
 
+.markdown-editor .milkdown .milkdown-code-block:has(> .mermaid-preview-mount) {
+  position: relative;
+  min-height: 220px;
+  overflow: hidden;
+}
+.markdown-editor .milkdown .milkdown-code-block:has(> .mermaid-preview-mount) > .tools,
+.markdown-editor .milkdown .milkdown-code-block:has(> .mermaid-preview-mount) .codemirror-host {
+  display: none;
+}
+.mermaid-preview-mount {
+  position: relative;
+  min-height: 220px;
+  color: #1f1f1f;
+  font-size: 14px;
+}
+.mermaid-preview-card {
+  position: relative;
+  display: grid;
+  min-height: 220px;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #fff;
+}
+.mermaid-preview-open {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 220px;
+  place-items: center;
+}
+.mermaid-preview-content {
+  display: grid;
+  width: 100%;
+  min-height: 220px;
+  place-items: center;
+  padding: 18px;
+  pointer-events: none;
+}
+.mermaid-preview-trigger {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.mermaid-preview-content .mve-root {
+  width: 100%;
+  height: 220px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+.mermaid-preview-content .mermaid-preview-editor .mve-header,
+.mermaid-preview-content .mermaid-preview-editor .mve-status {
+  display: none;
+}
+.mermaid-preview-content .mermaid-preview-editor .mve-workspace {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.mermaid-preview-content .mermaid-preview-editor .mve-work-column {
+  height: 100%;
+  max-height: none;
+  grid-template-rows: minmax(0, 1fr);
+}
+.mermaid-preview-content .mermaid-preview-editor .mve-preview-stage {
+  min-height: 0;
+}
+.mermaid-preview-content .mermaid-preview-editor .mve-canvas-heading {
+  display: none;
+}
+.mermaid-preview-placeholder {
+  color: #737373;
+  font-style: italic;
+}
+.mermaid-preview-actions-overlay {
+  position: absolute;
+  z-index: 30;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  pointer-events: none;
+}
+.mermaid-preview-card:hover .mermaid-preview-actions-overlay,
+.mermaid-preview-card:focus-within .mermaid-preview-actions-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+.mermaid-editor-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(1200px, calc(100vw - 32px));
+  height: min(820px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+  transform: translate(-50%, -50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  padding: 14px;
+  border: 1px solid #e5e5e5;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 20px 70px #11182740;
+}
+.mermaid-editor-dialog-header {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+.mermaid-editor-dialog-header [data-slot='title'] {
+  margin-right: auto;
+  white-space: nowrap;
+}
+.mermaid-editor-dialog-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #e5e7eb;
+  border-radius: 9px;
+  background: #f5f6f8;
+}
+.mermaid-editor-dialog-tabs button {
+  min-height: 34px;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #4b5563;
+  cursor: pointer;
+  font: inherit;
+}
+.mermaid-editor-dialog-tabs button[aria-selected='true'] {
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 1px 3px #11182722;
+}
+.mermaid-editor-dialog-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.mermaid-dialog-sdk {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+.mermaid-dialog-sdk > .mve-status {
+  display: none;
+}
+.mermaid-dialog-sdk > .mve-header {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+}
+.mermaid-dialog-sdk > .mve-header > strong,
+.mermaid-dialog-sdk > .mve-header .mve-header-actions {
+  display: none;
+}
+.mermaid-dialog-sdk .mve-header-controls {
+  margin: 0;
+}
+.mermaid-dialog-sdk-code > .mve-header {
+  display: none;
+}
+.mermaid-dialog-sdk-canvas > .mve-header {
+  flex: 0 0 auto;
+  min-height: 42px;
+}
+.mermaid-dialog-sdk .mve-workspace {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+}
+.mermaid-dialog-sdk .mve-work-column {
+  height: 100%;
+  max-height: none;
+  grid-template-rows: minmax(0, 1fr);
+}
+.mermaid-dialog-sdk .mve-tool-sidebar {
+  max-height: none;
+}
+.mermaid-dialog-sdk-canvas .mve-workspace {
+  grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr);
+}
+.mermaid-dialog-sdk-code .mve-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+.mermaid-dialog-sdk .mve-preview-stage {
+  min-height: 0;
+}
+.mermaid-dialog-sdk-code .mve-source-panel {
+  min-height: 0;
+  height: 100%;
+}
+/* The SDK portals its select to body; keep the menu above the host dialog layer. */
+.mve-select-positioner {
+  z-index: 110 !important;
+}
+@media (max-width: 700px) {
+  .mermaid-editor-dialog-header {
+    flex-wrap: wrap;
+  }
+  .mermaid-editor-dialog-tabs {
+    order: 3;
+    flex: 1 0 100%;
+  }
+  .mermaid-editor-dialog-tabs button {
+    flex: 1;
+  }
+  .mermaid-dialog-sdk-canvas .mve-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .feedback-markdown-renderer {
   min-height: 0;
   padding: 0;
