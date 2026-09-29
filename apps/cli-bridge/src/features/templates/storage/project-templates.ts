@@ -8,40 +8,43 @@ import { PromptTemplateSchema, type PromptTemplate } from '@codex-complex-prompt
 const templateDefinitions = [
   {
     id: '00000000-0000-4000-8000-000000000101',
-    name: 'PRD/기능 요구사항 초안',
-    description: '사용자 문제와 목표부터 수용 기준까지 기능 요구사항을 정리합니다.',
-    body: '다음 내용을 바탕으로 제품 요구사항을 구현해줘. 정보가 부족하면 먼저 질문하고, 사실과 가정은 구분해줘.\n\n## 사용자 문제\n## 목표와 비목표\n## 대상 사용자와 사용자 흐름\n## 기능 요구사항\n## 수용 기준\n## 미해결 질문\n',
+    name: 'PRD / Feature Requirements',
+    description: 'Define the user problem, product goals, requirements, and acceptance criteria.',
+    body: 'Implement the product requirements below. Ask questions first when information is missing, and distinguish facts from assumptions.\n\n## User problem\n## Goals and non-goals\n## Target users and user flows\n## Functional requirements\n## Acceptance criteria\n## Open questions\n',
   },
   {
     id: '00000000-0000-4000-8000-000000000102',
-    name: 'RFC/기술 제안서 초안',
-    description: '배경, 제안, 대안, 절충점, 운영 영향과 도입 단계를 문서화합니다.',
-    body: '다음 내용을 바탕으로 검토 가능한 기술 제안서를 작성해줘. 불확실한 정보는 표시하고 대안을 공정하게 비교해줘.\n\n## 배경과 문제\n## 제안\n## 검토한 대안\n## 절충점과 위험\n## 운영 및 보안 영향\n## 단계적 도입과 롤백\n## 미해결 질문\n',
+    name: 'RFC / Technical Proposal',
+    description:
+      'Document the context, proposal, alternatives, trade-offs, operational impact, and rollout plan.',
+    body: 'Write a reviewable technical proposal based on the information below. Mark uncertain details and compare alternatives fairly.\n\n## Context and problem\n## Proposal\n## Alternatives considered\n## Trade-offs and risks\n## Operational and security impact\n## Phased rollout and rollback\n## Open questions\n',
   },
   {
     id: '00000000-0000-4000-8000-000000000103',
-    name: 'ADR 작성',
-    description: '기술 결정의 맥락, 대안, 결정과 결과를 기록합니다.',
-    body: '다음 정보를 바탕으로 간결한 Architecture Decision Record를 작성해줘. 결정이 이미 확정되지 않았다면 확정된 것처럼 쓰지 마.\n\n## 제목\n## 상태\n## 맥락과 결정 동인\n## 검토한 대안\n## 결정\n## 결과와 후속 영향\n',
+    name: 'Write an ADR',
+    description:
+      'Record the context, alternatives, decision, and consequences of a technical choice.',
+    body: 'Write a concise Architecture Decision Record using the information below. Do not present a decision as final unless it has been approved.\n\n## Title\n## Status\n## Context and decision drivers\n## Alternatives considered\n## Decision\n## Consequences and follow-up\n',
   },
   {
     id: '00000000-0000-4000-8000-000000000104',
-    name: 'CO-STAR 작업 브리프',
-    description:
-      'Context, Objective, Style, Tone, Audience, Response 슬롯으로 작업을 구체화합니다.',
-    body: 'CO-STAR 구조를 활용해 다음 작업을 수행해줘. 모르는 항목은 임의로 지어내지 말고 질문으로 남겨줘.\n\n## Context\n## Objective\n## Style\n## Tone\n## Audience\n## Response\n',
+    name: 'CO-STAR Task Brief',
+    description: 'Shape a task around its context, objective, style, tone, audience, and response.',
+    body: 'Use the CO-STAR structure for the task below. Do not invent missing details; ask questions instead.\n\n## Context\n## Objective\n## Style\n## Tone\n## Audience\n## Response\n',
   },
   {
     id: '00000000-0000-4000-8000-000000000105',
-    name: 'RISEN 작업 지시',
-    description: 'Role, Instruction, Steps, End goal, Narrowing 구조로 복합 작업을 지시합니다.',
-    body: 'RISEN 구조를 활용해 다음 작업을 수행해줘. 실행 순서와 완료 조건을 구체화해줘.\n\n## Role\n## Instruction\n## Steps\n## End goal\n## Narrowing constraints\n',
+    name: 'RISEN Task Instructions',
+    description:
+      'Structure a complex task around its role, instructions, steps, end goal, and constraints.',
+    body: 'Use the RISEN structure for the task below. Specify the order of work and completion criteria.\n\n## Role\n## Instructions\n## Steps\n## End goal\n## Narrowing constraints\n',
   },
   {
     id: '00000000-0000-4000-8000-000000000106',
-    name: '회의 후 후속 액션',
-    description: '회의 결정, 미해결 안건, 추가 질문과 후속 작업을 정리합니다.',
-    body: '아래 회의 내용을 바탕으로 후속 작업을 수행해줘. 결정과 제안을 구분하고, 담당자나 기한이 없으면 만들어내지 마.\n\n## 결정 사항\n## 미해결 안건\n## 추가로 필요한 질문과 자료\n## 후속 작업 (작업, 담당자, 기한)\n',
+    name: 'Meeting Follow-up Actions',
+    description:
+      'Summarize meeting decisions, open questions, additional information needed, and follow-up tasks.',
+    body: 'Create follow-up actions from the meeting notes below. Distinguish decisions from proposals. Do not invent owners or due dates.\n\n## Decisions\n## Open questions\n## Additional questions and materials needed\n## Follow-up tasks (task, owner, due date)\n',
   },
 ] as const;
 

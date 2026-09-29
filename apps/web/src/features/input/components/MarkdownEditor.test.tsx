@@ -210,7 +210,7 @@ describe('MarkdownEditor', () => {
     editor.append(image);
 
     fireEvent.pointerMove(image);
-    fireEvent.click(await screen.findByRole('button', { name: '그림 삭제' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete drawing' }));
 
     expect(onDeleteDrawing).toHaveBeenCalledExactlyOnceWith('00000000-0000-4000-8000-000000000009');
   });

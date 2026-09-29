@@ -26,8 +26,8 @@ export function serializeFeedback(
         '',
         `> ${quote.replaceAll('\n', '\n> ')}`,
         '',
-        `- 위치: line ${startLine}–${endLine}`,
-        `- 피드백: ${annotation.feedback}`,
+        `- Location: line ${startLine}–${endLine}`,
+        `- Feedback: ${annotation.feedback}`,
       );
     }
   }

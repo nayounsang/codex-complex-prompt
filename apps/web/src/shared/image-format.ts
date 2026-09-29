@@ -12,7 +12,7 @@ export async function identifyImageFormat(file: Blob, fileName = ''): Promise<Im
   const parser = new FileTypeParser({ customDetectors: [detectXml] });
   const detected = await parser.fromBlob(file);
   if (detected === undefined || !detected.mime.startsWith('image/')) {
-    throw new Error('지원하는 이미지 형식을 확인할 수 없습니다.');
+    throw new Error('Could not identify a supported image format.');
   }
 
   const namedExtension = fileName.split('.').pop()?.toLowerCase();
@@ -23,7 +23,7 @@ export async function identifyImageFormat(file: Blob, fileName = ''): Promise<Im
       ? namedExtension
       : detected.ext;
   if (mime.getType(extension) !== detected.mime) {
-    throw new Error('지원하는 이미지 형식을 확인할 수 없습니다.');
+    throw new Error('Could not identify a supported image format.');
   }
   return { extension, mimeType: detected.mime };
 }

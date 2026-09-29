@@ -44,7 +44,7 @@ describe('이미지 형식 판별', () => {
     const file = createBlob(new TextEncoder().encode('%PDF-1.4\n'), 'application/pdf');
 
     await expect(identifyImageFormat(file, 'document.pdf')).rejects.toThrow(
-      '지원하는 이미지 형식을 확인할 수 없습니다.',
+      'Could not identify a supported image format.',
     );
   });
 
@@ -52,7 +52,7 @@ describe('이미지 형식 판별', () => {
     const file = createBlob(new TextEncoder().encode('plain text'), 'text/plain');
 
     await expect(identifyImageFormat(file, 'note.txt')).rejects.toThrow(
-      '지원하는 이미지 형식을 확인할 수 없습니다.',
+      'Could not identify a supported image format.',
     );
   });
 });

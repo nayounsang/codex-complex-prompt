@@ -466,11 +466,11 @@ describe('App integration', () => {
       );
     });
 
-    expect(screen.getByRole('dialog')).toHaveTextContent('3초 후 이 창이 닫힙니다.');
+    expect(screen.getByRole('dialog')).toHaveTextContent('This window will close in 3 seconds.');
     await act(async () => vi.advanceTimersByTime(999));
     expect(closeSpy).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTime(1_000));
-    expect(screen.getByRole('dialog')).toHaveTextContent('2초 후 이 창이 닫힙니다.');
+    expect(screen.getByRole('dialog')).toHaveTextContent('This window will close in 2 seconds.');
     await act(async () => vi.advanceTimersByTime(2_000));
     expect(closeSpy).toHaveBeenCalledOnce();
   });
@@ -944,7 +944,7 @@ describe('App integration', () => {
     });
 
     expect(screen.getByText('Sent')).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toHaveTextContent('3초 후 이 창이 닫힙니다.');
+    expect(screen.getByRole('dialog')).toHaveTextContent('This window will close in 3 seconds.');
     expect(openSpy).not.toHaveBeenCalled();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_999);
@@ -1083,7 +1083,7 @@ describe('그림 첨부', () => {
     editor.dispatchEvent(paste);
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '이미지 파일은 25 MB 이하여야 합니다.',
+      'Image files must be 25 MB or smaller.',
     );
     expect(readAsDataURL).not.toHaveBeenCalled();
   });
@@ -1099,7 +1099,7 @@ describe('그림 첨부', () => {
 
     fireEvent.pointerMove(image);
 
-    expect(screen.queryByRole('button', { name: '그림 편집' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit drawing' })).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -1130,7 +1130,7 @@ describe('그림 첨부', () => {
       `${attachment.url}/${id}.json?token=${attachment.token}`,
       { method: 'HEAD' },
     );
-    expect(screen.queryByRole('button', { name: '그림 편집' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit drawing' })).not.toBeInTheDocument();
   });
 
   it('연필 버튼을 누르면 불러온 편집 데이터를 그림 편집기에 표시한다', async () => {
@@ -1158,7 +1158,7 @@ describe('그림 첨부', () => {
     const image = await screen.findByAltText('그림');
     fireEvent.pointerMove(image);
 
-    const editButton = await screen.findByRole('button', { name: '그림 편집' });
+    const editButton = await screen.findByRole('button', { name: 'Edit drawing' });
     fireEvent.click(editButton);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
@@ -1198,7 +1198,7 @@ describe('그림 첨부', () => {
     const image = await screen.findByAltText('그림');
 
     fireEvent.pointerMove(image);
-    fireEvent.click(await screen.findByRole('button', { name: '그림 편집' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit drawing' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Save mocked drawing' }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
