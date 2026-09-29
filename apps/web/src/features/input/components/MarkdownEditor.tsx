@@ -7,11 +7,21 @@ import {
   useRef,
   useState,
 } from 'react';
-
 import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
 import { Crepe } from '@milkdown/crepe';
 import type { BlockEditFeatureConfig } from '@milkdown/crepe/feature/block-edit';
+import { editorViewCtx, schemaCtx } from '@milkdown/kit/core';
 import { createAttachmentImageUrl } from '../../../attachment-image-url.js';
+import {
+  hasMermaidRelevantMutations,
+  hasRemovedMermaidPreviewCard,
+} from './mermaid-preview-observer.js';
+import {
+  createMermaidPreviewTargets,
+  haveSameMermaidPreviewTargets,
+} from './mermaid-preview-targets.js';
+import { MermaidDiagramCard, MermaidDiagramDialog } from './MermaidDiagramCard.js';
+import type { MermaidDiagramTarget } from './MermaidDiagramCard.js';
 import {
   getConfiguredAttachmentId,
   getMarkdownAttachmentId,
@@ -47,6 +57,14 @@ const crepeFeatures = {
 
 const drawingIcon =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 16.5 9.8-9.8a2.1 2.1 0 0 1 3 3L7 19.5 3.5 20.5 4 16.5Z"/><path d="m12.5 8 3 3"/></svg>';
+const diagramIcon =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="6" rx="1"/><rect x="14" y="15" width="7" height="6" rx="1"/><path d="M10 6h4a3 3 0 0 1 3 3v6M7 9v6h7"/></svg>';
+type BlockEditBuilder = Parameters<NonNullable<BlockEditFeatureConfig['buildMenu']>>[0];
+type AdvancedMenuItem = Parameters<ReturnType<BlockEditBuilder['getGroup']>['addItem']>[1];
+function addAdvancedMenuItem(builder: BlockEditBuilder, id: string, item: AdvancedMenuItem): void {
+  builder.getGroup('advanced').addItem(id, item);
+}
+
 interface DrawingEditTarget {
   readonly id: string;
   readonly image: HTMLImageElement;
@@ -102,6 +120,10 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       new Map<string, Promise<{ readonly exists: boolean; readonly editable: boolean }>>(),
     );
     const [drawingEditTarget, setDrawingEditTarget] = useState<DrawingEditTarget | null>(null);
+    const [mermaidTargets, setMermaidTargets] = useState<MermaidDiagramTarget[]>([]);
+    const [mermaidDialogTarget, setMermaidDialogTarget] = useState<MermaidDiagramTarget | null>(
+      null,
+    );
     const [drawingEditPosition, setDrawingEditPosition] = useState({ top: 0, left: 0 });
     const drawingActionsOverlayRef = useRef<HTMLDivElement>(null);
     const [initializationError, setInitializationError] = useState<Error | null>(null);
@@ -122,6 +144,68 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       hoverRequestIdRef.current += 1;
       hoveredImageRef.current = null;
       setDrawingEditTarget(null);
+    };
+    const syncMermaidPreviews = (
+      editorRoot: HTMLDivElement,
+      recoverRemovedPreview = false,
+    ): void => {
+      const editor = crepeRef.current?.editor;
+      if (editor === undefined) return;
+      const contents: Array<{
+        readonly language: string;
+        readonly source: string;
+        readonly position: number;
+      }> = [];
+      editor.action((ctx) => {
+        ctx.get(editorViewCtx).state.doc.descendants((node, position) => {
+          if (node.type.name === 'code_block') {
+            contents.push({
+              language: String(node.attrs['language'] ?? '').toLowerCase(),
+              source: node.textContent,
+              position,
+            });
+          }
+        });
+      });
+      const blockElements = editorRoot.querySelectorAll<HTMLElement>('.milkdown-code-block');
+      if (recoverRemovedPreview) {
+        blockElements.forEach((block) => {
+          const mount = block.querySelector<HTMLDivElement>(':scope > .mermaid-preview-mount');
+          if (mount?.childElementCount === 0) mount.remove();
+        });
+      }
+      const targets = createMermaidPreviewTargets(contents, Array.from(blockElements));
+      setMermaidTargets((current) => {
+        if (haveSameMermaidPreviewTargets(current, targets)) return current;
+        return targets;
+      });
+    };
+    const replaceMermaidBlock = (target: MermaidDiagramTarget, source?: string): void => {
+      const editor = crepeRef.current?.editor;
+      if (editor === undefined) return;
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const schema = ctx.get(schemaCtx);
+        const node = view.state.doc.nodeAt(target.position);
+        if (
+          node === null ||
+          node.type.name !== 'code_block' ||
+          String(node.attrs['language']).toLowerCase() !== 'mermaid' ||
+          node.textContent !== target.source
+        )
+          return;
+        const pos = target.position;
+        const replacement =
+          source === undefined
+            ? schema.nodes['paragraph']?.create()
+            : schema.nodes['code_block']?.create(
+                { ...node.attrs, language: 'mermaid' },
+                source === '' ? undefined : schema.text(source),
+              );
+        if (replacement === undefined) return;
+        view.dispatch(view.state.tr.replaceWith(pos, pos + node.nodeSize, replacement));
+        view.focus();
+      });
     };
     const handleDrawingImageHover = (image: HTMLImageElement): void => {
       const actions = drawingActionsRef.current;
@@ -264,11 +348,28 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           buildMenu: (builder) => {
             const actions = drawingActionsRef.current;
             if (!actions.enabled) return;
-            const advanced = builder.getGroup('advanced');
-            advanced.addItem('draw', {
+            addAdvancedMenuItem(builder, 'draw', {
               label: 'Draw',
               icon: drawingIcon,
               onRun: () => actions.onDraw?.(),
+            });
+            addAdvancedMenuItem(builder, 'diagram', {
+              label: 'Diagram',
+              icon: diagramIcon,
+              onRun: () => {
+                const editor = crepeRef.current?.editor;
+                if (editor === undefined) return;
+                editor.action((ctx) => {
+                  const view = ctx.get(editorViewCtx);
+                  const schema = ctx.get(schemaCtx);
+                  const codeBlock = schema.nodes['code_block'];
+                  if (codeBlock === undefined) return;
+                  const block = codeBlock.create({ language: 'mermaid' });
+                  const transaction = view.state.tr.replaceSelectionWith(block);
+                  view.dispatch(transaction);
+                  view.focus();
+                });
+              },
             });
           },
         };
@@ -320,6 +421,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
 
         let readyTimer: number | undefined;
         let attachmentObserver: MutationObserver | undefined;
+        let mermaidObserver: MutationObserver | undefined;
         const syncInitialMarkdown = (): void => {
           if (disposed) return;
           replaceAttachmentImageUrls(
@@ -347,6 +449,19 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             attachmentObserver.observe(editorRoot, { childList: true, subtree: true });
             stableProseMirror.setAttribute('aria-label', getEditorAriaLabel());
             notifyReady(editorRoot);
+            syncMermaidPreviews(editorRoot);
+            mermaidObserver = new MutationObserver((records) => {
+              if (hasMermaidRelevantMutations(records)) {
+                syncMermaidPreviews(editorRoot, hasRemovedMermaidPreviewCard(records));
+              }
+            });
+            mermaidObserver.observe(stableProseMirror, {
+              childList: true,
+              subtree: true,
+              characterData: true,
+              attributes: true,
+              attributeFilter: ['class'],
+            });
             markdownRef.current = crepe?.getMarkdown() ?? defaultMarkdown;
             notifyMarkdownChange(markdownRef.current);
           }, 50);
@@ -372,6 +487,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           if (readyTimer !== undefined) window.clearTimeout(readyTimer);
           editorObserver.disconnect();
           attachmentObserver?.disconnect();
+          mermaidObserver?.disconnect();
           editorRoot.removeEventListener('paste', blockFileTransfer, true);
           editorRoot.removeEventListener('drop', blockFileTransfer, true);
           crepeRef.current = null;
@@ -475,6 +591,23 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
               </button>
             )}
           </div>
+        )}
+        {mermaidTargets.map((target) => (
+          <MermaidDiagramCard
+            key={target.id}
+            target={target}
+            readOnly={readOnly}
+            onEdit={setMermaidDialogTarget}
+            onReplace={replaceMermaidBlock}
+          />
+        ))}
+        {mermaidDialogTarget !== null && (
+          <MermaidDiagramDialog
+            key={mermaidDialogTarget.id}
+            target={mermaidDialogTarget}
+            onClose={() => setMermaidDialogTarget(null)}
+            onReplace={replaceMermaidBlock}
+          />
         )}
       </div>
     );

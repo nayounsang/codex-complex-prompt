@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LazyMarkdownEditor } from './LazyMarkdownEditor.js';
 import { MarkdownEditor } from './MarkdownEditor.js';
+import type { MarkdownEditorProps } from './MarkdownEditor.js';
 
 const crepeTest = vi.hoisted(() => {
   const state: { instance: unknown } = { instance: undefined };
@@ -52,6 +53,31 @@ afterEach(() => {
   crepeTest.state.instance = undefined;
   vi.restoreAllMocks();
 });
+
+async function getBlockEditMenuLabels(
+  props: Pick<MarkdownEditorProps, 'onDraw'> = {},
+): Promise<string[]> {
+  render(<MarkdownEditor {...props} />);
+  await waitFor(() => expect(crepeTest.state.instance).toBeDefined());
+  const instance = crepeTest.state.instance as InstanceType<typeof crepeTest.MockCrepe>;
+  const featureConfigs = instance.options['featureConfigs'] as Record<
+    string,
+    {
+      buildMenu: (builder: {
+        getGroup: (name: string) => { addItem: (id: string, item: { label: string }) => void };
+      }) => void;
+    }
+  >;
+  const labels: string[] = [];
+
+  featureConfigs['block-edit']?.buildMenu({
+    getGroup: () => ({
+      addItem: (_id, item) => labels.push(item.label),
+    }),
+  });
+
+  return labels;
+}
 
 describe('MarkdownEditor', () => {
   it('Crepe에 파일 이미지 기능을 끄고 기본 Markdown을 전달한다', async () => {
@@ -151,36 +177,16 @@ describe('MarkdownEditor', () => {
     );
   });
 
-  it('기존 그림이 있어도 BlockEdit 메뉴에는 Draw만 추가한다', async () => {
-    render(
-      <MarkdownEditor
-        defaultMarkdown={
-          '![Drawing](.complex-prompt/attachments/00000000-0000-4000-8000-000000000001.png)'
-        }
-        onDraw={vi.fn()}
-        onEditDrawing={vi.fn()}
-        onDeleteDrawing={vi.fn()}
-      />,
-    );
-    await waitFor(() => expect(crepeTest.state.instance).toBeDefined());
-    const instance = crepeTest.state.instance as InstanceType<typeof crepeTest.MockCrepe>;
-    const featureConfigs = instance.options['featureConfigs'] as Record<
-      string,
-      {
-        buildMenu: (builder: {
-          getGroup: (name: string) => { addItem: (id: string, item: { label: string }) => void };
-        }) => void;
-      }
-    >;
-    const items: string[] = [];
+  it('Draw 액션이 있으면 BlockEdit 메뉴에 Draw를 추가한다', async () => {
+    const labels = await getBlockEditMenuLabels({ onDraw: vi.fn() });
 
-    featureConfigs['block-edit']?.buildMenu({
-      getGroup: () => ({
-        addItem: (_id, item) => items.push(item.label),
-      }),
-    });
+    expect(labels).toContain('Draw');
+  });
 
-    expect(items).toEqual(['Draw']);
+  it('BlockEdit 메뉴에 Diagram을 추가한다', async () => {
+    const labels = await getBlockEditMenuLabels();
+
+    expect(labels).toContain('Diagram');
   });
 
   it('그림 옆 삭제 버튼이 해당 첨부 파일을 삭제한다', async () => {
