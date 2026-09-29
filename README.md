@@ -20,11 +20,11 @@ flowchart LR
 
 ## 시작하기
 
-### Codex CLI에 설치
+### Codex 플러그인으로 찾고 설치
 
-Node.js 24 이상이 필요합니다. 터미널에서 아래 명령을 직접 실행해 Codex CLI 훅과 `$complex-prompt` 스킬을 설치하세요.
+Codex 플러그인 marketplace에서 **Codex Complex Prompt**를 찾아 설치한 다음, Node.js 24 이상이 설치된 터미널에서 아래 명령을 직접 실행해 Codex CLI 훅과 `$complex-prompt` 스킬을 설정하세요. 플러그인은 marketplace에서 프로젝트를 찾고 설명을 제공하며, CLI 설정은 사용자가 명령을 실행해 완료합니다.
 
-### 설치 및 업데이트
+### CLI 설치 및 업데이트
 
 ```bash
 npx --yes --package @codex-complex-prompt/cli-bridge complex-prompt hook install

@@ -1,0 +1,17 @@
+{
+  "name": "codex-complex-prompt",
+  "version": "0.1.0",
+  "description": "Install and use the Codex Complex Prompt browser editor from Codex CLI.",
+  "author": {
+    "name": "Younsang"
+  },
+  "interface": {
+    "displayName": "Codex Complex Prompt",
+    "shortDescription": "Review complex task prompts in a browser editor.",
+    "longDescription": "Find Codex Complex Prompt in the marketplace, then run the documented npx command in your terminal to install its Codex CLI integration.",
+    "developerName": "Younsang",
+    "category": "Developer Tools",
+    "capabilities": ["Prompt editing", "Browser workflow", "CLI setup"],
+    "defaultPrompt": "Install Codex Complex Prompt by running the npx command documented in the project README."
+  }
+}

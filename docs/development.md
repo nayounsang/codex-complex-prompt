@@ -9,6 +9,10 @@
 - `packages/core`: 전송 방식과 무관한 초안·제출 이력·실행 상태 모델
 - `e2e`: CLI 훅과 브라우저 간 종단 간 흐름
 
+## Codex 플러그인 패키지
+
+`.codex-plugin/plugin.json`은 marketplace에서 프로젝트를 표시하는 플러그인 메타데이터를 제공합니다. 플러그인은 별도 설치 안내 스킬을 포함하지 않습니다. 사용자는 README의 `npx` 명령으로 npm CLI를 직접 실행해 Codex CLI 설정을 설치하거나 제거합니다.
+
 ## 로컬 개발
 
 ### 최초 설정
