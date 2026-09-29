@@ -19,10 +19,7 @@ export class MermaidPreviewErrorBoundary extends Component<
     resetKey: this.props.resetKey,
   };
 
-  public static getDerivedStateFromError(): Pick<
-    MermaidPreviewErrorBoundaryState,
-    'hasError'
-  > {
+  public static getDerivedStateFromError(): Pick<MermaidPreviewErrorBoundaryState, 'hasError'> {
     return { hasError: true };
   }
 
@@ -30,9 +27,7 @@ export class MermaidPreviewErrorBoundary extends Component<
     props: MermaidPreviewErrorBoundaryProps,
     state: MermaidPreviewErrorBoundaryState,
   ): MermaidPreviewErrorBoundaryState | null {
-    return props.resetKey === state.resetKey
-      ? null
-      : { hasError: false, resetKey: props.resetKey };
+    return props.resetKey === state.resetKey ? null : { hasError: false, resetKey: props.resetKey };
   }
 
   public override render(): React.ReactNode {

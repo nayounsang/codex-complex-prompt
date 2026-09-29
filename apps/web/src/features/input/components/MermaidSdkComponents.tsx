@@ -49,7 +49,9 @@ export function MermaidDialogEditor({
   );
 }
 
-function MermaidDialogComposition({ view }: Pick<MermaidDialogEditorProps, 'view'>): React.JSX.Element {
+function MermaidDialogComposition({
+  view,
+}: Pick<MermaidDialogEditorProps, 'view'>): React.JSX.Element {
   const parts = useMermaidEditorParts();
   return (
     <EditorShell {...parts.shell}>

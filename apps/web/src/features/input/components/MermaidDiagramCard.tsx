@@ -21,7 +21,7 @@ interface MermaidDiagramCardProps {
   readonly target: MermaidDiagramTarget;
   readonly readOnly: boolean;
   readonly onEdit: (target: MermaidDiagramTarget) => void;
-  readonly onReplace: (target: MermaidDiagramTarget, source?: string) => void;
+  readonly onReplace: (target: MermaidDiagramTarget, source?: string) => boolean;
 }
 
 export function MermaidDiagramCard({
@@ -100,7 +100,7 @@ export function MermaidDiagramCard({
 interface MermaidDiagramDialogProps {
   readonly target: MermaidDiagramTarget;
   readonly onClose: () => void;
-  readonly onReplace: (target: MermaidDiagramTarget, source?: string) => void;
+  readonly onReplace: (target: MermaidDiagramTarget, source?: string) => boolean;
 }
 
 export function MermaidDiagramDialog({
@@ -108,8 +108,20 @@ export function MermaidDiagramDialog({
   onClose,
   onReplace,
 }: MermaidDiagramDialogProps): React.JSX.Element {
-  const [editSource, setEditSource] = useState(target.source.trim() === '' ? 'flowchart TD\n' : target.source);
+  const [editSource, setEditSource] = useState(
+    target.source.trim() === '' ? 'flowchart TD\n' : target.source,
+  );
   const [view, setView] = useState<'canvas' | 'code'>('canvas');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const save = (source: string): void => {
+    if (onReplace(target, source)) {
+      onClose();
+      return;
+    }
+    setSaveError(
+      'This diagram changed while the editor was open. Close and reopen it before saving.',
+    );
+  };
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
@@ -118,7 +130,11 @@ export function MermaidDiagramDialog({
         <Dialog.Popup className="mermaid-editor-dialog">
           <div className="mermaid-editor-dialog-header">
             <Dialog.Title>Edit diagram</Dialog.Title>
-            <div className="mermaid-editor-dialog-tabs" role="tablist" aria-label="Diagram editor view">
+            <div
+              className="mermaid-editor-dialog-tabs"
+              role="tablist"
+              aria-label="Diagram editor view"
+            >
               <button
                 type="button"
                 role="tab"
@@ -141,14 +157,7 @@ export function MermaidDiagramDialog({
               </button>
             </div>
             {view === 'code' && (
-              <Button
-                type="button"
-                className="button-primary"
-                onClick={() => {
-                  onReplace(target, editSource);
-                  onClose();
-                }}
-              >
+              <Button type="button" className="button-primary" onClick={() => save(editSource)}>
                 Save
               </Button>
             )}
@@ -156,21 +165,21 @@ export function MermaidDiagramDialog({
               Cancel
             </Button>
           </div>
+          {saveError !== null && <p role="alert">{saveError}</p>}
           <div
             id="mermaid-editor-panel"
             className="mermaid-editor-dialog-panel"
             role="tabpanel"
-            aria-labelledby={view === 'canvas' ? 'mermaid-editor-canvas-tab' : 'mermaid-editor-code-tab'}
+            aria-labelledby={
+              view === 'canvas' ? 'mermaid-editor-canvas-tab' : 'mermaid-editor-code-tab'
+            }
           >
             <Suspense fallback={<p>Loading diagram editor…</p>}>
               <MermaidDialogEditor
                 source={editSource}
                 view={view}
                 onChange={setEditSource}
-                onSave={(source) => {
-                  onReplace(target, source);
-                  onClose();
-                }}
+                onSave={save}
               />
             </Suspense>
           </div>

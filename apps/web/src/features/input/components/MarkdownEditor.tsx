@@ -180,9 +180,10 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         return targets;
       });
     };
-    const replaceMermaidBlock = (target: MermaidDiagramTarget, source?: string): void => {
+    const replaceMermaidBlock = (target: MermaidDiagramTarget, source?: string): boolean => {
       const editor = crepeRef.current?.editor;
-      if (editor === undefined) return;
+      if (editor === undefined) return false;
+      let replaced = false;
       editor.action((ctx) => {
         const view = ctx.get(editorViewCtx);
         const schema = ctx.get(schemaCtx);
@@ -205,7 +206,14 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         if (replacement === undefined) return;
         view.dispatch(view.state.tr.replaceWith(pos, pos + node.nodeSize, replacement));
         view.focus();
+        replaced = true;
       });
+      return replaced;
+    };
+    const replaceCurrentMermaidBlock = (target: MermaidDiagramTarget, source?: string): boolean => {
+      const current = mermaidTargets.find((candidate) => candidate.id === target.id);
+      if (current === undefined || current.source !== target.source) return false;
+      return replaceMermaidBlock({ ...current, source: target.source }, source);
     };
     const handleDrawingImageHover = (image: HTMLImageElement): void => {
       const actions = drawingActionsRef.current;
@@ -598,7 +606,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             target={target}
             readOnly={readOnly}
             onEdit={setMermaidDialogTarget}
-            onReplace={replaceMermaidBlock}
+            onReplace={replaceCurrentMermaidBlock}
           />
         ))}
         {mermaidDialogTarget !== null && (
@@ -606,7 +614,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             key={mermaidDialogTarget.id}
             target={mermaidDialogTarget}
             onClose={() => setMermaidDialogTarget(null)}
-            onReplace={replaceMermaidBlock}
+            onReplace={replaceCurrentMermaidBlock}
           />
         )}
       </div>

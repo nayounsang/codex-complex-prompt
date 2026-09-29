@@ -13,6 +13,7 @@ import {
   getTableSelectionAnchor,
 } from '../../../shared/markdown/selection-anchor.js';
 import type { FeedbackAnnotation, SelectionAnchor } from '../model/feedback-types.js';
+import { mergeSelectionWithExistingFeedback } from './selection-feedback.js';
 
 interface AnnotatedMarkdownViewProps {
   readonly markdown: string;
@@ -92,27 +93,7 @@ export function AnnotatedMarkdownView({
       publishSelection(null);
       return;
     }
-    const existing = annotations.find(
-      (annotation) =>
-        annotation.scope === 'selection' &&
-        annotation.start !== undefined &&
-        annotation.end !== undefined &&
-        annotation.start < anchor.end &&
-        annotation.end > anchor.start,
-    );
-    if (existing === undefined) {
-      publishSelection(anchor);
-      return;
-    }
-    const start = Math.min(anchor.start, existing.start as number);
-    const end = Math.max(anchor.end, existing.end as number);
-    publishSelection({
-      ...anchor,
-      annotationId: existing.id,
-      quote: markdown.slice(start, end),
-      start,
-      end,
-    });
+    publishSelection(mergeSelectionWithExistingFeedback(anchor, annotations, markdown));
   }, [annotations, markdown, publishSelection]);
 
   const handleImageSelection = useCallback(
@@ -121,27 +102,7 @@ export function AnnotatedMarkdownView({
       if (root === null) return;
       const anchor = getImageSelectionAnchor(root, markdown, image);
       if (anchor === null) return;
-      const existing = annotations.find(
-        (annotation) =>
-          annotation.scope === 'selection' &&
-          annotation.start !== undefined &&
-          annotation.end !== undefined &&
-          annotation.start < anchor.end &&
-          annotation.end > anchor.start,
-      );
-      if (existing === undefined) {
-        publishSelection(anchor);
-        return;
-      }
-      const start = Math.min(anchor.start, existing.start as number);
-      const end = Math.max(anchor.end, existing.end as number);
-      publishSelection({
-        ...anchor,
-        annotationId: existing.id,
-        quote: markdown.slice(start, end),
-        start,
-        end,
-      });
+      publishSelection(mergeSelectionWithExistingFeedback(anchor, annotations, markdown));
     },
     [annotations, markdown, publishSelection],
   );
@@ -234,8 +195,9 @@ export function AnnotatedMarkdownView({
       onMouseDownCapture={(event) => {
         selectionDismissedRef.current = false;
         const target = event.target;
-        pointerSelectingRef.current =
-          !(target instanceof Element && target.closest('.mermaid-preview-open') !== null);
+        pointerSelectingRef.current = !(
+          target instanceof Element && target.closest('.mermaid-preview-open') !== null
+        );
       }}
       onKeyDown={() => {
         selectionDismissedRef.current = false;
@@ -261,12 +223,13 @@ export function AnnotatedMarkdownView({
           const start = Number(codeBlock.dataset['codeSourceStart']);
           const end = Number(codeBlock.dataset['codeSourceEnd']);
           if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return;
-          publishSelection({
+          const anchor: SelectionAnchor = {
             quote: markdown.slice(start, end),
             start,
             end,
             rect: codeBlock.getBoundingClientRect(),
-          });
+          };
+          publishSelection(mergeSelectionWithExistingFeedback(anchor, annotations, markdown));
           return;
         }
         const image = target.closest<HTMLImageElement>(

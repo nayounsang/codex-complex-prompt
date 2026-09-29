@@ -29,7 +29,11 @@ vi.mock('./MermaidSdkComponents.js', () => ({
     <div data-testid="sdk-editor" data-view={view}>
       <output>{source}</output>
       {view === 'code' && (
-        <textarea aria-label="Mermaid code" value={source} onChange={(event) => onChange(event.currentTarget.value)} />
+        <textarea
+          aria-label="Mermaid code"
+          value={source}
+          onChange={(event) => onChange(event.currentTarget.value)}
+        />
       )}
       <button type="button" onClick={() => onSave(source)}>
         SDK Save
@@ -80,7 +84,7 @@ describe('MermaidDiagramCard', () => {
 
   it('빈 Mermaid 블록을 flowchart 기본값으로 편집한다', async () => {
     const target = createTarget('diagram-a', '');
-    const onReplace = vi.fn();
+    const onReplace = vi.fn(() => true);
     const onClose = vi.fn();
     render(<MermaidDiagramDialog target={target} onClose={onClose} onReplace={onReplace} />);
 
@@ -111,7 +115,7 @@ describe('MermaidDiagramCard', () => {
 
   it('Mermaid code 탭에서 수정한 소스를 저장한다', async () => {
     const target = createTarget('diagram-code-tab', 'flowchart TD\n  A-->B');
-    const onReplace = vi.fn();
+    const onReplace = vi.fn(() => true);
     const onClose = vi.fn();
     render(<MermaidDiagramDialog target={target} onClose={onClose} onReplace={onReplace} />);
 
@@ -125,6 +129,22 @@ describe('MermaidDiagramCard', () => {
 
     expect(onReplace).toHaveBeenCalledExactlyOnceWith(target, 'flowchart TD\n  A-->C');
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('대상 변경으로 저장에 실패하면 다이얼로그를 열어 두고 안내를 표시한다', async () => {
+    const target = createTarget('diagram-stale', 'flowchart TD\n  A-->B');
+    const onReplace = vi.fn(() => false);
+    const onClose = vi.fn();
+    render(<MermaidDiagramDialog target={target} onClose={onClose} onReplace={onReplace} />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Mermaid code' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This diagram changed while the editor was open.',
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('Cancel 후 편집 버튼을 다시 누르면 다이얼로그를 다시 연다', async () => {
