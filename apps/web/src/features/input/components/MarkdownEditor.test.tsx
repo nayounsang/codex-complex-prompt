@@ -14,15 +14,16 @@ const crepeTest = vi.hoisted(() => {
     } as const;
     public readonly options: Record<string, unknown>;
     public readonly destroy = vi.fn(async () => undefined);
+    public readonly editor = { action: vi.fn() };
     private readOnly = false;
-    private editor: HTMLElement | undefined;
+    private editorElement: HTMLElement | undefined;
     public constructor(options: Record<string, unknown>) {
       this.options = options;
       state.instance = this;
     }
     public setReadonly(value: boolean): this {
       this.readOnly = value;
-      this.editor?.setAttribute('contenteditable', String(!value));
+      this.editorElement?.setAttribute('contenteditable', String(!value));
       return this;
     }
     public on(): this {
@@ -31,12 +32,12 @@ const crepeTest = vi.hoisted(() => {
     public async create(): Promise<this> {
       const root = this.options['root'];
       if (!(root instanceof HTMLElement)) throw new Error('Missing editor root');
-      this.editor = document.createElement('div');
-      this.editor.className = 'ProseMirror';
-      this.editor.setAttribute('role', 'textbox');
-      this.editor.setAttribute('aria-label', 'Command');
-      this.editor.setAttribute('contenteditable', String(!this.readOnly));
-      root.append(this.editor);
+      this.editorElement = document.createElement('div');
+      this.editorElement.className = 'ProseMirror';
+      this.editorElement.setAttribute('role', 'textbox');
+      this.editorElement.setAttribute('aria-label', 'Command');
+      this.editorElement.setAttribute('contenteditable', String(!this.readOnly));
+      root.append(this.editorElement);
       return this;
     }
     public getMarkdown(): string {
