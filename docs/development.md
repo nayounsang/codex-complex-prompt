@@ -67,17 +67,16 @@ node "$CLI_BRIDGE" hook remove
 
 ## 품질 확인
 
+Git push 이전에 포맷을 적용하고, 린트·타입 검사·테스트를 수행합니다. 실패 시 push가 중단됩니다.
+
 ```bash
+pnpm format
 pnpm lint
 pnpm typecheck
 pnpm test
-pnpm test:coverage
-pnpm build
-pnpm format:check
-pnpm package:smoke
 ```
 
-종단 간 테스트는 빌드한 웹 UI와 모의 Codex 프로세스를 사용하며 실제 모델은 호출하지 않습니다. Chromium을 설치한 뒤 실행합니다.
+E2E 테스트는 빌드한 웹 UI와 모의 Codex 프로세스를 사용하며 실제 모델은 호출하지 않습니다. Chromium을 설치한 뒤 실행합니다.
 
 ```bash
 pnpm --filter @codex-complex-prompt/e2e exec playwright install chromium
