@@ -1,5 +1,11 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.3.3
+
+### Patch Changes
+
+- 4d1325c: Fix Mermaid preview actions and the diagram type selector in the editor dialog.
+
 ## 0.3.2
 
 ### Patch Changes
