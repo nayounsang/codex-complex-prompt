@@ -19,13 +19,17 @@
     "changeset:status": "changeset status",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
-    "verify:pre-push": "pnpm format && pnpm lint && pnpm typecheck && pnpm test",
+    "verify:pre-push": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
     "test:e2e": "pnpm --filter @codex-complex-prompt/e2e test:e2e"
+  },
+  "lint-staged": {
+    "*": "prettier --write --ignore-unknown"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.7",
     "@vitest/eslint-plugin": "^1.6.18",
     "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
     "prettier": "^3.5.3",
     "turbo": "^2.5.6"
   }

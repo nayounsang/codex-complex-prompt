@@ -67,10 +67,10 @@ node "$CLI_BRIDGE" hook remove
 
 ## 품질 확인
 
-Git push 이전에 포맷을 적용하고, 린트·타입 검사·테스트를 수행합니다. 실패 시 push가 중단됩니다.
+Git commit 시 스테이징한 파일에 포맷을 적용합니다. Git push 이전에는 포맷 검사, 린트, 타입 검사, 테스트를 수행하며, 실패 시 push가 중단됩니다.
 
 ```bash
-pnpm format
+pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
