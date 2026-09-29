@@ -20,17 +20,19 @@ flowchart LR
 
 ## 시작하기
 
-### Codex 플러그인으로 설치
+### Codex CLI에 설치
 
-이 저장소는 setup 안내용 `$install-complex-prompt` skill을 포함한 Codex 플러그인 패키지도 제공합니다. `younsang-codex-plugins` marketplace에서 `codex-complex-prompt`를 설치한 뒤, 이 skill이 안내하는 CLI 명령을 사용자가 터미널에서 직접 실행해 hook과 `$complex-prompt` skill을 설정합니다.
+Node.js 24 이상이 필요합니다. 터미널에서 아래 명령을 직접 실행해 Codex CLI 훅과 `$complex-prompt` 스킬을 설치하세요.
 
-### 설치
+### 설치 및 업데이트
 
 ```bash
-npx @codex-complex-prompt/cli-bridge hook install
+npx --yes --package @codex-complex-prompt/cli-bridge complex-prompt hook install
 ```
 
 설치가 끝나면 Codex CLI를 재시작합니다. 처음 등록한 훅을 검토하라는 안내가 나오면 Codex 입력창에서 `/hooks`를 열어 확인하고 승인하세요. 설치기는 기존 Codex 훅을 지우지 않고 새 훅을 함께 등록합니다.
+
+같은 명령을 다시 실행하면 설치 파일을 최신 npm 패키지 버전으로 업데이트합니다.
 
 ### 스킬 사용법
 
@@ -76,13 +78,13 @@ $complex-prompt 결제 기능을 조사하고 구현 요청 문서를 작성해�
 설치 전에 변경 내용을 확인하려면 다음 명령을 사용하세요.
 
 ```bash
-npx @codex-complex-prompt/cli-bridge hook install --dry-run
+npx --yes --package @codex-complex-prompt/cli-bridge complex-prompt hook install --dry-run
 ```
 
 설치한 Codex Complex Prompt 항목을 제거하려면 다음을 실행합니다. 다른 사용자의 훅과 설정은 제거하지 않습니다.
 
 ```bash
-npx @codex-complex-prompt/cli-bridge hook remove
+npx --yes --package @codex-complex-prompt/cli-bridge complex-prompt hook remove
 ```
 
 ## 개발 및 기여

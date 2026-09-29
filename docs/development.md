@@ -9,10 +9,6 @@
 - `packages/core`: 전송 방식과 무관한 초안·제출 이력·실행 상태 모델
 - `e2e`: CLI 훅과 브라우저 간 종단 간 흐름
 
-## Codex 플러그인 패키지
-
-저장소 루트의 `.codex-plugin/plugin.json`은 `skills/` 아래의 설치 안내 스킬을 별도 Codex 플러그인으로 제공합니다. 외부 marketplace는 이 Git 저장소를 URL source로 참조합니다. 설치 skill은 명령만 안내하고 실행하지 않습니다. npm CLI 업데이트 시 `skills/install-complex-prompt/SKILL.md`의 고정 package version도 함께 갱신합니다.
-
 ## 로컬 개발
 
 ### 최초 설정
