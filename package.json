@@ -15,6 +15,7 @@
     "test:coverage": "turbo test:coverage",
     "build": "turbo build",
     "package:smoke": "pnpm build && pnpm --filter @codex-complex-prompt/cli-bridge package:smoke",
+    "plugin:update:younsang": "node scripts/update-younsang-plugin-pin.mjs",
     "changeset": "changeset",
     "changeset:status": "changeset status",
     "format:check": "prettier --check .",
