@@ -180,6 +180,8 @@ test('이미지 저장을 기다린 뒤 첨부 링크가 포함된 Markdown을 C
     });
     await uploadStarted;
 
+    const updatedPrompt = 'Review this image with the latest notes';
+    await editor.fill(updatedPrompt);
     await page.getByRole('button', { name: 'Send to Codex' }).click();
     await expect(page.getByRole('button', { name: 'Sending…' })).toBeDisabled();
     releaseUpload();
@@ -193,6 +195,7 @@ test('이미지 저장을 기다린 뒤 첨부 링크가 포함된 Markdown을 C
     expect(response.hookSpecificOutput.additionalContext).toContain(
       '![pasted.gif](.complex-prompt/attachments/e2e-image.gif)',
     );
+    expect(response.hookSpecificOutput.additionalContext).toContain(updatedPrompt);
   } finally {
     releaseUpload();
     if (!submitted) {

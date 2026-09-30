@@ -89,6 +89,10 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
   );
   const { feedbackLoop, submit } = bridgeSession;
   const markdown = markdownOverride ?? bridgeSession.initialMarkdown ?? '';
+  const updateMarkdownOverride = useCallback((nextMarkdown: string): void => {
+    currentMarkdownRef.current = nextMarkdown;
+    setMarkdownOverride(nextMarkdown);
+  }, []);
   useEffect(
     function syncCurrentMarkdownRef() {
       currentMarkdownRef.current = markdown;
@@ -100,7 +104,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     markdown,
     annotations: feedback.annotations,
     submit,
-    onMarkdownChange: setMarkdownOverride,
+    onMarkdownChange: updateMarkdownOverride,
     onComplete: () => {
       feedback.clearFeedback();
       setMode('edit');
@@ -164,11 +168,12 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       throw new Error(result.error ?? 'Could not save the drawing.');
     setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
     if (input.id === undefined) {
-      const next = `${markdown.trimEnd()}${markdown.trim() === '' ? '' : '\n\n'}![Drawing](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.png)`;
-      setMarkdownOverride(next);
+      const currentMarkdown = currentMarkdownRef.current;
+      const next = `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}![Drawing](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.png)`;
+      updateMarkdownOverride(next);
       setEditorResetVersion((version) => version + 1);
     } else {
-      setMarkdownOverride(editorRef.current?.getMarkdown() ?? markdown);
+      updateMarkdownOverride(currentMarkdownRef.current);
       setEditorResetVersion((version) => version + 1);
     }
   };
@@ -225,8 +230,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       const currentMarkdown = currentMarkdownRef.current;
       setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
       const next = `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}${markdownImages.join('\n\n')}`;
-      currentMarkdownRef.current = next;
-      setMarkdownOverride(next);
+      updateMarkdownOverride(next);
       setEditorResetVersion((version) => version + 1);
       // Read failures use metadata keys; a matching retry can clear that fallback.
       for (const [index, fileKey] of fileKeys.entries()) {
@@ -293,8 +297,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
   const withPromptAfterImageSaves = useCallback(
     (onPromptReady: (prompt: string) => void): void => {
       if (isWaitingForImageSavesRef.current) return;
-      const getCurrentPrompt = (): string =>
-        editorRef.current?.getMarkdown() ?? currentMarkdownRef.current;
+      const getCurrentPrompt = (): string => currentMarkdownRef.current;
       if (imageSaveFailuresRef.current.size > 0) {
         setValidationError(
           imageSaveFailuresRef.current.values().next().value?.error ?? 'Could not save the image.',
@@ -325,8 +328,8 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       const response = await fetch(endpoint, { method: 'DELETE' });
       if (!response.ok && response.status !== 404)
         throw new Error('Could not delete the drawing file.');
-      const next = removeMarkdownDrawingReferences(markdown, id);
-      setMarkdownOverride(next);
+      const next = removeMarkdownDrawingReferences(currentMarkdownRef.current, id);
+      updateMarkdownOverride(next);
       setEditorResetVersion((version) => version + 1);
     } catch (reason) {
       setValidationError(
@@ -335,20 +338,24 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     }
   };
 
-  const handleMarkdownChange = useCallback((nextMarkdown: string): void => {
-    currentMarkdownRef.current = nextMarkdown;
-    imageSaveFailuresRef.current.clear();
-    setMarkdownOverride(nextMarkdown);
-    setValidationError(null);
-  }, []);
+  const handleMarkdownChange = useCallback(
+    (nextMarkdown: string): void => {
+      updateMarkdownOverride(nextMarkdown);
+      imageSaveFailuresRef.current.clear();
+      setValidationError(null);
+    },
+    [updateMarkdownOverride],
+  );
 
-  const applyTemplate = useCallback((body: string): void => {
-    currentMarkdownRef.current = body;
-    imageSaveFailuresRef.current.clear();
-    setMarkdownOverride(body);
-    setValidationError(null);
-    setEditorResetVersion((version) => version + 1);
-  }, []);
+  const applyTemplate = useCallback(
+    (body: string): void => {
+      updateMarkdownOverride(body);
+      imageSaveFailuresRef.current.clear();
+      setValidationError(null);
+      setEditorResetVersion((version) => version + 1);
+    },
+    [updateMarkdownOverride],
+  );
 
   const submitMarkdown = useCallback((): void => {
     withPromptAfterImageSaves((prompt) => {
