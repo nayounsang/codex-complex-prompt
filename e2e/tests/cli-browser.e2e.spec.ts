@@ -133,6 +133,79 @@ test('입력한 Markdown을 Codex에 전달하고 3초 뒤 브라우저 종료�
   }
 });
 
+test('이미지 저장을 기다린 뒤 첨부 링크가 포함된 Markdown을 Codex에 전달한다', async ({ page }) => {
+  const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-image-submit-'));
+  const browserUrlFile = join(codexHome, 'browser-url.txt');
+  const fakeCodex = startFakeCodex(
+    'prompt',
+    {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'e2e-image-submit-session',
+      cwd: repositoryRoot,
+      prompt: '$complex-prompt Review this image',
+    },
+    codexHome,
+    browserUrlFile,
+  );
+  const uploadStarted = new Promise<void>((resolveUploadStarted) => {
+    page.route('**/_complex-prompt/attachments', async (route) => {
+      resolveUploadStarted();
+      await uploadGate;
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'e2e-image', extension: 'gif' }),
+      });
+    });
+  });
+  let releaseUpload!: () => void;
+  const uploadGate = new Promise<void>((resolveUpload) => {
+    releaseUpload = resolveUpload;
+  });
+  let submitted = false;
+
+  try {
+    await openFakeCodexBrowser(page, fakeCodex);
+    const editor = page.getByRole('textbox', { name: 'Command' });
+    await expect(editor).toContainText('Review this image');
+    await editor.evaluate((element) => {
+      const bytes = Uint8Array.from(atob('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='), (character) =>
+        character.charCodeAt(0),
+      );
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], 'pasted.gif', { type: 'image/gif' }));
+      element.dispatchEvent(
+        new ClipboardEvent('paste', { bubbles: true, clipboardData: transfer }),
+      );
+    });
+    await uploadStarted;
+
+    await page.getByRole('button', { name: 'Send to Codex' }).click();
+    await expect(page.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+    releaseUpload();
+
+    const hookResult = await fakeCodex.result;
+    submitted = true;
+    expect(hookResult.exitCode).toBe(0);
+    const response = JSON.parse(hookResult.output) as {
+      readonly hookSpecificOutput: { readonly additionalContext: string };
+    };
+    expect(response.hookSpecificOutput.additionalContext).toContain(
+      '![pasted.gif](.complex-prompt/attachments/e2e-image.gif)',
+    );
+  } finally {
+    releaseUpload();
+    if (!submitted) {
+      await page
+        .getByRole('button', { name: 'Send to Codex' })
+        .click({ timeout: 1_000 })
+        .catch(() => undefined);
+      await Promise.race([fakeCodex.result, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    }
+    await rm(codexHome, { recursive: true, force: true });
+  }
+});
+
 test('Mermaid 코드블록을 클릭하면 다이어그램 편집 다이얼로그를 표시한다', async ({ page }) => {
   const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-mermaid-'));
   const browserUrlFile = join(codexHome, 'browser-url.txt');

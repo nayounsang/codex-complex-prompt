@@ -16,37 +16,40 @@ interface FeedbackSubmissionOptions {
 interface FeedbackSubmission {
   readonly isSubmitting: boolean;
   readonly error: string | null;
-  readonly sendFeedback: () => Promise<void>;
+  readonly sendFeedback: (markdown?: string) => Promise<void>;
 }
 
 export function useFeedbackSubmission(options: FeedbackSubmissionOptions): FeedbackSubmission {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const sendFeedback = useCallback(async (): Promise<void> => {
-    if (isSubmitting || options.annotations.length === 0) return;
-    setIsSubmitting(true);
-    setError(null);
-    const prompt = serializeFeedback(options.markdown, options.annotations);
-    if (countPromptCharacters(prompt.trim()) > MAX_PROMPT_LENGTH) {
-      setError(`Feedback must be ${MAX_PROMPT_LENGTH.toLocaleString()} characters or fewer.`);
-      setIsSubmitting(false);
-      return;
-    }
-    try {
-      const result = await options.submit(prompt, 'feedback');
-      if (result.status === 'failed') {
-        setError(result.error ?? 'The feedback could not be sent.');
+  const sendFeedback = useCallback(
+    async (markdown = options.markdown): Promise<void> => {
+      if (isSubmitting || options.annotations.length === 0) return;
+      setIsSubmitting(true);
+      setError(null);
+      const prompt = serializeFeedback(markdown, options.annotations);
+      if (countPromptCharacters(prompt.trim()) > MAX_PROMPT_LENGTH) {
+        setError(`Feedback must be ${MAX_PROMPT_LENGTH.toLocaleString()} characters or fewer.`);
+        setIsSubmitting(false);
         return;
       }
-      if (result.prompt !== undefined) options.onMarkdownChange(result.prompt);
-      options.onComplete();
-    } catch {
-      setError('The feedback could not be sent.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [isSubmitting, options]);
+      try {
+        const result = await options.submit(prompt, 'feedback');
+        if (result.status === 'failed') {
+          setError(result.error ?? 'The feedback could not be sent.');
+          return;
+        }
+        if (result.prompt !== undefined) options.onMarkdownChange(result.prompt);
+        options.onComplete();
+      } catch {
+        setError('The feedback could not be sent.');
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [isSubmitting, options],
+  );
 
   return { isSubmitting, error, sendFeedback };
 }
