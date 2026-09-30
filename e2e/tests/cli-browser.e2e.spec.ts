@@ -209,6 +209,78 @@ test('이미지 저장을 기다린 뒤 첨부 링크가 포함된 Markdown을 C
   }
 });
 
+test('이미지 저장 실패 시 fallback 이미지를 보여주고 Markdown에 연결한다', async ({ page }) => {
+  const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-image-fallback-'));
+  const browserUrlFile = join(codexHome, 'browser-url.txt');
+  const fakeCodex = startFakeCodex(
+    'prompt',
+    {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'e2e-image-fallback-session',
+      cwd: repositoryRoot,
+      prompt: '$complex-prompt Review this image',
+    },
+    codexHome,
+    browserUrlFile,
+  );
+  let submitted = false;
+
+  try {
+    await page.route('**/_complex-prompt/attachments**', (route) =>
+      route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Could not save pasted.gif.' }),
+      }),
+    );
+    await openFakeCodexBrowser(page, fakeCodex);
+    const editor = page.getByRole('textbox', { name: 'Command' });
+    const uploadFailed = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes('/_complex-prompt/attachments'),
+    );
+    await editor.evaluate((element) => {
+      const bytes = Uint8Array.from(atob('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='), (character) =>
+        character.charCodeAt(0),
+      );
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], 'pasted.gif', { type: 'image/gif' }));
+      element.dispatchEvent(
+        new ClipboardEvent('paste', { bubbles: true, clipboardData: transfer }),
+      );
+    });
+    expect((await uploadFailed).status()).toBe(500);
+
+    const fallbackImage = page.getByRole('img', { name: 'Image upload failed: pasted.gif' });
+    await expect(fallbackImage).toHaveAttribute('src', '/image-upload-failed.svg');
+    const assetResponse = await page.request.get(
+      new URL('/image-upload-failed.svg', page.url()).href,
+    );
+    expect(assetResponse.ok()).toBe(true);
+
+    await page.getByRole('button', { name: 'Send to Codex' }).click();
+    const hookResult = await fakeCodex.result;
+    submitted = true;
+    expect(hookResult.exitCode).toBe(0);
+    const response = JSON.parse(hookResult.output) as {
+      readonly hookSpecificOutput: { readonly additionalContext: string };
+    };
+    expect(response.hookSpecificOutput.additionalContext).toContain(
+      '![Image upload failed: pasted.gif](/image-upload-failed.svg)',
+    );
+  } finally {
+    if (!submitted) {
+      await page
+        .getByRole('button', { name: 'Send to Codex' })
+        .click({ timeout: 1_000 })
+        .catch(() => undefined);
+      await Promise.race([fakeCodex.result, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    }
+    await rm(codexHome, { recursive: true, force: true });
+  }
+});
+
 test('Mermaid 코드블록을 클릭하면 다이어그램 편집 다이얼로그를 표시한다', async ({ page }) => {
   const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-mermaid-'));
   const browserUrlFile = join(codexHome, 'browser-url.txt');

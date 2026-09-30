@@ -1202,7 +1202,7 @@ describe('그림 첨부', () => {
     );
   });
 
-  it('동시 이미지 저장 중 실패가 성공 뒤에도 표시되고 제출을 막는다', async () => {
+  it('이미지 저장에 실패하면 fallback 이미지로 바꾸고 다른 저장 결과와 함께 제출한다', async () => {
     const gifBytes = Uint8Array.from(atob('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='), (char) =>
       char.charCodeAt(0),
     );
@@ -1272,50 +1272,31 @@ describe('그림 첨부', () => {
       await uploads[1]?.promise;
     });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save same-name.gif.');
-    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('prompt.submit'));
+    await waitFor(() =>
+      expect(socket.send).toHaveBeenLastCalledWith(
+        JSON.stringify({
+          type: 'prompt.submit',
+          submissionId: '00000000-0000-4000-8000-000000000004',
+          prompt:
+            'Review both images\n\n![Image upload failed: same-name.gif](/image-upload-failed.svg)\n\n![same-name.gif](.complex-prompt/attachments/saved-image.gif)',
+        }),
+      ),
+    );
   });
 
-  it('이미지 읽기에 실패한 뒤 다시 저장하면 실패 상태를 해제한다', async () => {
-    const gifBytes = Uint8Array.from(atob('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='), (char) =>
-      char.charCodeAt(0),
-    );
-    vi.spyOn(Blob.prototype, 'slice').mockImplementation(
-      () =>
-        ({
-          arrayBuffer: async () => gifBytes.buffer.slice(0),
-        }) as Blob,
-    );
-    let readCount = 0;
+  it('이미지 읽기에 실패해도 fallback 이미지를 넣고 제출한다', async () => {
     vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (
       this: FileReader,
     ): void {
-      if (readCount++ === 0) {
-        this.onerror?.(new ProgressEvent('error') as ProgressEvent<FileReader>);
-        return;
-      }
-      Object.defineProperty(this, 'result', { value: 'data:image/gif;base64,R0lGODlh' });
-      this.onload?.(new ProgressEvent('load') as ProgressEvent<FileReader>);
+      this.onerror?.(new ProgressEvent('error') as ProgressEvent<FileReader>);
     });
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 201,
-      text: async () => JSON.stringify({ id: 'retry-image', extension: 'gif' }),
-    } as Response);
-    vi.stubGlobal('fetch', fetchMock);
     const socket = renderWithSession('http://127.0.0.1:4321', 'Review this image', false, {
       url: 'http://127.0.0.1:8765/_complex-prompt/attachments',
       token: 'a'.repeat(32),
     });
     const editor = await screen.findByRole('textbox', { name: 'Command' });
-    const image = new File([gifBytes], 'retry.gif', { type: 'image/gif', lastModified: 1 });
+    const image = new File(['image'], 'retry.gif', { type: 'image/gif', lastModified: 1 });
     fireEvent.paste(editor, { clipboardData: { files: [image], items: [] } });
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not read the image.');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
-    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('prompt.submit'));
-    fireEvent.paste(editor, { clipboardData: { files: [image], items: [] } });
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
     fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
 
     await waitFor(() =>
@@ -1323,7 +1304,8 @@ describe('그림 첨부', () => {
         JSON.stringify({
           type: 'prompt.submit',
           submissionId: '00000000-0000-4000-8000-000000000004',
-          prompt: 'Review this image\n\n![retry.gif](.complex-prompt/attachments/retry-image.gif)',
+          prompt:
+            'Review this image\n\n![Image upload failed: retry.gif](/image-upload-failed.svg)',
         }),
       ),
     );
@@ -1395,9 +1377,9 @@ describe('그림 첨부', () => {
     );
   });
 
-  it('25 MB를 넘는 이미지는 읽기 전에 크기 제한 메시지를 표시한다', async () => {
+  it('25 MB를 넘는 이미지는 읽지 않고 fallback 이미지로 대체한다', async () => {
     const readAsDataURL = vi.spyOn(FileReader.prototype, 'readAsDataURL');
-    renderWithSession();
+    const socket = renderWithSession();
     const editor = await screen.findByRole('textbox', { name: 'Command' });
     const image = new File(['image'], 'large.png', { type: 'image/png' });
     Object.defineProperty(image, 'size', { value: 25 * 1024 * 1024 + 1 });
@@ -1406,10 +1388,12 @@ describe('그림 첨부', () => {
 
     editor.dispatchEvent(paste);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Image files must be 25 MB or smaller.',
+    expect(await screen.findByAltText('Image upload failed: large.png')).toHaveAttribute(
+      'src',
+      '/image-upload-failed.svg',
     );
     expect(readAsDataURL).not.toHaveBeenCalled();
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('prompt.submit'));
   });
 
   it('일반 이미지에는 그림 편집 버튼을 표시하지 않는다', async () => {
