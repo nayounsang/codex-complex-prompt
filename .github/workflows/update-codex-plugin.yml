@@ -1,4 +1,4 @@
-name: Update Younsang Codex plugin pin
+name: Update Codex plugin pin
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: update-younsang-codex-plugin
+  group: update-codex-plugin
   cancel-in-progress: false
 
 permissions:
@@ -14,7 +14,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  update-plugin-pin:
+  update-codex-plugin:
     runs-on: ubuntu-latest
     steps:
       - name: Check out main
@@ -45,7 +45,7 @@ jobs:
             exit 1
           fi
 
-          pnpm plugin:update:younsang
+          pnpm update-codex-plugin
           upstream_sha="$(jq -r '.plugins[] | select(.name == "younsang-codex-plugin") | .source.sha // empty' "$marketplace_file")"
           if [[ ! "$upstream_sha" =~ ^[0-9a-f]{40}$ ]]; then
             echo "The update script did not produce a 40-character commit SHA."
