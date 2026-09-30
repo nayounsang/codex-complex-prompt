@@ -1071,9 +1071,315 @@ describe('App integration', () => {
 });
 
 describe('그림 첨부', () => {
-  it('25 MB를 넘는 이미지는 읽기 전에 크기 제한 메시지를 표시한다', async () => {
+  it('이미지 저장이 끝난 뒤 저장된 Markdown을 제출한다', async () => {
+    const gifBytes = Uint8Array.from(atob('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='), (char) =>
+      char.charCodeAt(0),
+    );
+    vi.spyOn(Blob.prototype, 'slice').mockImplementation(
+      () =>
+        ({
+          arrayBuffer: async () => gifBytes.buffer.slice(0),
+        }) as Blob,
+    );
+    vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (
+      this: FileReader,
+    ): void {
+      Object.defineProperty(this, 'result', { value: 'data:image/gif;base64,R0lGODlh' });
+      this.onload?.(new ProgressEvent('load') as ProgressEvent<FileReader>);
+    });
+    let resolveUpload!: (response: Response) => void;
+    const uploadResponse = new Promise<Response>((resolve) => {
+      resolveUpload = resolve;
+    });
+    const fetchMock = vi.fn().mockReturnValue(uploadResponse);
+    vi.stubGlobal('fetch', fetchMock);
+    const socket = renderWithSession('http://127.0.0.1:4321', 'Review this image', false, {
+      url: 'http://127.0.0.1:8765/_complex-prompt/attachments',
+      token: 'a'.repeat(32),
+    });
+    const editor = await screen.findByRole('textbox', { name: 'Command' });
+    const image = new File([gifBytes], 'paste.gif', { type: 'image/gif' });
+    fireEvent.paste(editor, { clipboardData: { files: [image], items: [] } });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
+
+    expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('prompt.submit'));
+
+    await act(async () => {
+      resolveUpload({
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({ id: 'saved-image', extension: 'gif' }),
+      } as Response);
+      await uploadResponse;
+    });
+
+    await waitFor(() =>
+      expect(socket.send).toHaveBeenLastCalledWith(
+        JSON.stringify({
+          type: 'prompt.submit',
+          submissionId: '00000000-0000-4000-8000-000000000004',
+          prompt: 'Review this image\n\n![paste.gif](.complex-prompt/attachments/saved-image.gif)',
+        }),
+      ),
+    );
+  });
+
+  it('제출 대기 중 추가한 이미지도 모두 저장한 뒤 제출한다', async () => {
+    const gifBytes = Uint8Array.from(atob('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='), (char) =>
+      char.charCodeAt(0),
+    );
+    vi.spyOn(Blob.prototype, 'slice').mockImplementation(
+      () =>
+        ({
+          arrayBuffer: async () => gifBytes.buffer.slice(0),
+        }) as Blob,
+    );
+    vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (
+      this: FileReader,
+    ): void {
+      Object.defineProperty(this, 'result', { value: 'data:image/gif;base64,R0lGODlh' });
+      this.onload?.(new ProgressEvent('load') as ProgressEvent<FileReader>);
+    });
+    const uploads: Array<{
+      readonly promise: Promise<Response>;
+      readonly resolve: (response: Response) => void;
+    }> = [];
+    const fetchMock = vi.fn().mockImplementation(() => {
+      let resolveUpload!: (response: Response) => void;
+      const promise = new Promise<Response>((resolve) => {
+        resolveUpload = resolve;
+      });
+      uploads.push({ promise, resolve: resolveUpload });
+      return promise;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const socket = renderWithSession('http://127.0.0.1:4321', 'Review these images', false, {
+      url: 'http://127.0.0.1:8765/_complex-prompt/attachments',
+      token: 'a'.repeat(32),
+    });
+    const editor = await screen.findByRole('textbox', { name: 'Command' });
+    const imageA = new File([gifBytes], 'first.gif', { type: 'image/gif' });
+    const imageB = new File([gifBytes], 'second.gif', { type: 'image/gif' });
+    fireEvent.paste(editor, { clipboardData: { files: [imageA], items: [] } });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
+    fireEvent.paste(editor, { clipboardData: { files: [imageB], items: [] } });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('prompt.submit'));
+
+    await act(async () => {
+      uploads[0]?.resolve({
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({ id: 'first-image', extension: 'gif' }),
+      } as Response);
+      await uploads[0]?.promise;
+    });
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('prompt.submit'));
+
+    await act(async () => {
+      uploads[1]?.resolve({
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({ id: 'second-image', extension: 'gif' }),
+      } as Response);
+      await uploads[1]?.promise;
+    });
+
+    await waitFor(() =>
+      expect(socket.send).toHaveBeenLastCalledWith(
+        JSON.stringify({
+          type: 'prompt.submit',
+          submissionId: '00000000-0000-4000-8000-000000000004',
+          prompt:
+            'Review these images\n\n![first.gif](.complex-prompt/attachments/first-image.gif)\n\n![second.gif](.complex-prompt/attachments/second-image.gif)',
+        }),
+      ),
+    );
+  });
+
+  it('이미지 저장에 실패하면 fallback 이미지로 바꾸고 다른 저장 결과와 함께 제출한다', async () => {
+    const gifBytes = Uint8Array.from(atob('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='), (char) =>
+      char.charCodeAt(0),
+    );
+    vi.spyOn(Blob.prototype, 'slice').mockImplementation(
+      () =>
+        ({
+          arrayBuffer: async () => gifBytes.buffer.slice(0),
+        }) as Blob,
+    );
+    let readCount = 0;
+    vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (
+      this: FileReader,
+    ): void {
+      Object.defineProperty(this, 'result', {
+        value: `data:image/gif;base64,R0lGODlh${readCount++}`,
+      });
+      this.onload?.(new ProgressEvent('load') as ProgressEvent<FileReader>);
+    });
+    const uploads: Array<{
+      readonly promise: Promise<Response>;
+      readonly resolve: (response: Response) => void;
+    }> = [];
+    const fetchMock = vi.fn().mockImplementation(() => {
+      let resolveUpload!: (response: Response) => void;
+      const promise = new Promise<Response>((resolve) => {
+        resolveUpload = resolve;
+      });
+      uploads.push({ promise, resolve: resolveUpload });
+      return promise;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const socket = renderWithSession('http://127.0.0.1:4321', 'Review both images', false, {
+      url: 'http://127.0.0.1:8765/_complex-prompt/attachments',
+      token: 'a'.repeat(32),
+    });
+    const editor = await screen.findByRole('textbox', { name: 'Command' });
+    const imageBBytes = gifBytes.slice();
+    imageBBytes[imageBBytes.length - 1] = 0;
+    const imageA = new File([gifBytes], 'same-name.gif', {
+      type: 'image/gif',
+      lastModified: 1,
+    });
+    const imageB = new File([imageBBytes], 'same-name.gif', {
+      type: 'image/gif',
+      lastModified: 1,
+    });
+    fireEvent.paste(editor, { clipboardData: { files: [imageA], items: [] } });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
+    fireEvent.paste(editor, { clipboardData: { files: [imageB], items: [] } });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      uploads[0]?.resolve({
+        ok: false,
+        status: 500,
+        text: async () => JSON.stringify({ error: 'Could not save same-name.gif.' }),
+      } as Response);
+      await uploads[0]?.promise;
+    });
+    await act(async () => {
+      uploads[1]?.resolve({
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({ id: 'saved-image', extension: 'gif' }),
+      } as Response);
+      await uploads[1]?.promise;
+    });
+
+    await waitFor(() =>
+      expect(socket.send).toHaveBeenLastCalledWith(
+        JSON.stringify({
+          type: 'prompt.submit',
+          submissionId: '00000000-0000-4000-8000-000000000004',
+          prompt:
+            'Review both images\n\n![Image upload failed: same-name.gif](/image-upload-failed.svg)\n\n![same-name.gif](.complex-prompt/attachments/saved-image.gif)',
+        }),
+      ),
+    );
+  });
+
+  it('이미지 읽기에 실패해도 fallback 이미지를 넣고 제출한다', async () => {
+    vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (
+      this: FileReader,
+    ): void {
+      this.onerror?.(new ProgressEvent('error') as ProgressEvent<FileReader>);
+    });
+    const socket = renderWithSession('http://127.0.0.1:4321', 'Review this image', false, {
+      url: 'http://127.0.0.1:8765/_complex-prompt/attachments',
+      token: 'a'.repeat(32),
+    });
+    const editor = await screen.findByRole('textbox', { name: 'Command' });
+    const image = new File(['image'], 'retry.gif', { type: 'image/gif', lastModified: 1 });
+    fireEvent.paste(editor, { clipboardData: { files: [image], items: [] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
+
+    await waitFor(() =>
+      expect(socket.send).toHaveBeenLastCalledWith(
+        JSON.stringify({
+          type: 'prompt.submit',
+          submissionId: '00000000-0000-4000-8000-000000000004',
+          prompt:
+            'Review this image\n\n![Image upload failed: retry.gif](/image-upload-failed.svg)',
+        }),
+      ),
+    );
+  });
+
+  it('이미지 저장이 끝난 뒤 Feedback의 Current Markdown을 제출한다', async () => {
+    const gifBytes = Uint8Array.from(atob('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='), (char) =>
+      char.charCodeAt(0),
+    );
+    vi.spyOn(Blob.prototype, 'slice').mockImplementation(
+      () =>
+        ({
+          arrayBuffer: async () => gifBytes.buffer.slice(0),
+        }) as Blob,
+    );
+    vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (
+      this: FileReader,
+    ): void {
+      Object.defineProperty(this, 'result', { value: 'data:image/gif;base64,R0lGODlh' });
+      this.onload?.(new ProgressEvent('load') as ProgressEvent<FileReader>);
+    });
+    let resolveUpload!: (response: Response) => void;
+    const uploadResponse = new Promise<Response>((resolve) => {
+      resolveUpload = resolve;
+    });
+    const fetchMock = vi.fn().mockReturnValue(uploadResponse);
+    vi.stubGlobal('fetch', fetchMock);
+    const socket = renderWithSession('http://127.0.0.1:4321', 'Review this image', false, {
+      url: 'http://127.0.0.1:8765/_complex-prompt/attachments',
+      token: 'a'.repeat(32),
+    });
+    const editor = await screen.findByRole('textbox', { name: 'Command' });
+    const image = new File([gifBytes], 'feedback.gif', { type: 'image/gif' });
+    fireEvent.paste(editor, { clipboardData: { files: [image], items: [] } });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add global feedback' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Global feedback' }), {
+      target: { value: 'Include the attached image.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add feedback' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit Mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Codex' }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Unsent feedback');
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Send Feedback' }),
+    );
+
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('prompt.submit'));
+    await act(async () => {
+      resolveUpload({
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({ id: 'feedback-image', extension: 'gif' }),
+      } as Response);
+      await uploadResponse;
+    });
+
+    await waitFor(() =>
+      expect(socket.send).toHaveBeenLastCalledWith(
+        JSON.stringify({
+          type: 'prompt.submit',
+          submissionId: '00000000-0000-4000-8000-000000000004',
+          prompt:
+            '## AI Feedback\n\n### Global feedback\n\nInclude the attached image.\n\n### Current Markdown\n\nReview this image\n\n![feedback.gif](.complex-prompt/attachments/feedback-image.gif)',
+          mode: 'feedback',
+        }),
+      ),
+    );
+  });
+
+  it('25 MB를 넘는 이미지는 읽지 않고 fallback 이미지로 대체한다', async () => {
     const readAsDataURL = vi.spyOn(FileReader.prototype, 'readAsDataURL');
-    renderWithSession();
+    const socket = renderWithSession();
     const editor = await screen.findByRole('textbox', { name: 'Command' });
     const image = new File(['image'], 'large.png', { type: 'image/png' });
     Object.defineProperty(image, 'size', { value: 25 * 1024 * 1024 + 1 });
@@ -1082,10 +1388,12 @@ describe('그림 첨부', () => {
 
     editor.dispatchEvent(paste);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Image files must be 25 MB or smaller.',
+    expect(await screen.findByAltText('Image upload failed: large.png')).toHaveAttribute(
+      'src',
+      '/image-upload-failed.svg',
     );
     expect(readAsDataURL).not.toHaveBeenCalled();
+    expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('prompt.submit'));
   });
 
   it('일반 이미지에는 그림 편집 버튼을 표시하지 않는다', async () => {

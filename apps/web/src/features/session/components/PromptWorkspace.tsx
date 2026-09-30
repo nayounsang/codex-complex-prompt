@@ -1,4 +1,12 @@
-import { type SyntheticEvent, lazy, Suspense, useCallback, useRef, useState } from 'react';
+import {
+  type SyntheticEvent,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
 import {
@@ -15,6 +23,7 @@ import { useFeedbackAnnotations } from '../../feedback/hooks/useFeedbackAnnotati
 import { useFeedbackSubmission } from '../../feedback/hooks/useFeedbackSubmission.js';
 import { useProjectTemplates } from '../../templates/hooks/useProjectTemplates.js';
 import { removeMarkdownDrawingReferences } from '../../input/drawing-markdown.js';
+import { countMarkdownImageOccurrences } from '../../../shared/markdown/markdown-source-map.js';
 import { MARKDOWN_ATTACHMENT_DIRECTORY } from '../../../shared/markdown/attachment-path.js';
 import { identifyImageFormat } from '../../../shared/image-format.js';
 
@@ -29,9 +38,17 @@ interface ActiveDrawing {
   readonly scene?: string;
 }
 
+interface PendingImageMarkdown {
+  readonly markdown: string;
+  // Prevent an older identical image line in the draft from consuming this append.
+  readonly occurrence: number;
+}
+
 interface PromptWorkspaceProps {
   readonly bridgeSession: BridgeSession;
 }
+
+const IMAGE_UPLOAD_FALLBACK_PATH = '/image-upload-failed.svg';
 
 export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.JSX.Element {
   const [markdownOverride, setMarkdownOverride] = useState<string | null>(null);
@@ -41,27 +58,70 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
   const [showEmptyFinishDialog, setShowEmptyFinishDialog] = useState(false);
   const [editorResetVersion, setEditorResetVersion] = useState(0);
   const [attachmentRefreshKey, setAttachmentRefreshKey] = useState(0);
+  const [isWaitingForImageSaves, setIsWaitingForImageSaves] = useState(false);
   const [drawing, setDrawing] = useState<ActiveDrawing | null>(null);
   const editorRef = useRef<MarkdownEditorHandle>(null);
+  const currentMarkdownRef = useRef(markdownOverride ?? bridgeSession.initialMarkdown ?? '');
+  const pendingImageMarkdownRef = useRef<PendingImageMarkdown[]>([]);
+  const pendingImageSavesRef = useRef(new Set<Promise<void>>());
+  const isWaitingForImageSavesRef = useRef(false);
   const { feedbackLoop, submit } = bridgeSession;
   const markdown = markdownOverride ?? bridgeSession.initialMarkdown ?? '';
+  const updateMarkdownOverride = useCallback((nextMarkdown: string): void => {
+    currentMarkdownRef.current = nextMarkdown;
+    setMarkdownOverride(nextMarkdown);
+  }, []);
+  const includePendingImageMarkdown = useCallback((markdown: string): string => {
+    const pendingImages = [...pendingImageMarkdownRef.current];
+    const markdownOccurrences = countMarkdownImageOccurrences(
+      markdown,
+      pendingImages.map((image) => image.markdown),
+    );
+    const remainingImages: PendingImageMarkdown[] = [];
+    const missingImages: string[] = [];
+    for (const image of pendingImages) {
+      const available = markdownOccurrences.get(image.markdown) ?? 0;
+      if (available < image.occurrence) {
+        remainingImages.push(image);
+        missingImages.push(image.markdown);
+      }
+    }
+    pendingImageMarkdownRef.current = remainingImages;
+    if (missingImages.length === 0) return markdown;
+    return `${markdown.trimEnd()}${markdown.trim() === '' ? '' : '\n\n'}${missingImages.join('\n\n')}`;
+  }, []);
+  const getCurrentMarkdown = useCallback(
+    (): string =>
+      includePendingImageMarkdown(editorRef.current?.getMarkdown() ?? currentMarkdownRef.current),
+    [includePendingImageMarkdown],
+  );
+  useEffect(
+    function syncCurrentMarkdownRef() {
+      currentMarkdownRef.current = markdown;
+    },
+    [markdown],
+  );
   const feedback = useFeedbackAnnotations();
   const feedbackSubmission = useFeedbackSubmission({
     markdown,
     annotations: feedback.annotations,
     submit,
-    onMarkdownChange: setMarkdownOverride,
+    onMarkdownChange: updateMarkdownOverride,
     onComplete: () => {
       feedback.clearFeedback();
       setMode('edit');
     },
   });
+  const sendFeedback = feedbackSubmission.sendFeedback;
   const projectTemplates = useProjectTemplates({
     snapshot: bridgeSession.templateSnapshot,
     requestChange: bridgeSession.requestTemplateChange,
   });
   const isConnected = bridgeSession.state === 'connected';
-  const isSubmitting = bridgeSession.state === 'submitting' || feedbackSubmission.isSubmitting;
+  const isSubmitting =
+    bridgeSession.state === 'submitting' ||
+    feedbackSubmission.isSubmitting ||
+    isWaitingForImageSaves;
   const { attachmentUrl, attachmentToken } = bridgeSession;
   const attachmentEndpoint = (id?: string, extension?: string): string | null => {
     if (attachmentUrl === null || attachmentToken === null) return null;
@@ -110,25 +170,28 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       throw new Error(result.error ?? 'Could not save the drawing.');
     setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
     if (input.id === undefined) {
-      const next = `${markdown.trimEnd()}${markdown.trim() === '' ? '' : '\n\n'}![Drawing](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.png)`;
-      setMarkdownOverride(next);
+      const currentMarkdown = getCurrentMarkdown();
+      const next = `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}![Drawing](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.png)`;
+      updateMarkdownOverride(next);
       setEditorResetVersion((version) => version + 1);
     } else {
-      setMarkdownOverride(editorRef.current?.getMarkdown() ?? markdown);
+      updateMarkdownOverride(getCurrentMarkdown());
       setEditorResetVersion((version) => version + 1);
     }
   };
 
   const saveImageFiles = async (files: readonly File[]): Promise<void> => {
-    const savedIds: string[] = [];
-    try {
-      const markdownImages: string[] = [];
-      for (const file of files) {
+    const markdownImages: string[] = [];
+    let hasSavedAttachments = false;
+    for (const file of files) {
+      try {
         if (file.size > MAX_ATTACHMENT_IMAGE_BYTES) {
           throw new Error('Image files must be 25 MB or smaller.');
         }
+        const sourceMimeType = file.type || 'application/octet-stream';
+        const sourceImage = await readFileAsDataUrl(file, sourceMimeType);
         const format = await identifyImageFormat(file, file.name);
-        const image = await readFileAsDataUrl(file, format.mimeType);
+        const image = sourceImage.replace(/^data:[^;,]+;/, `data:${format.mimeType};`);
         const endpoint = attachmentEndpoint();
         if (endpoint === null)
           throw new Error('Could not connect to the project attachment store.');
@@ -152,29 +215,72 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
         }
         if (!response.ok || result.id === undefined)
           throw new Error(result.error ?? 'Could not save the image.');
-        savedIds.push(result.id);
+        hasSavedAttachments = true;
         markdownImages.push(
           `![${escapeMarkdownAlt(file.name)}](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.${result.extension ?? format.extension})`,
         );
-      }
-      const currentMarkdown = editorRef.current?.getMarkdown() ?? markdown;
-      setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
-      const next = `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}${markdownImages.join('\n\n')}`;
-      setMarkdownOverride(next);
-      setEditorResetVersion((version) => version + 1);
-      setValidationError(null);
-    } catch (reason) {
-      const endpoint = attachmentEndpoint();
-      if (endpoint !== null) {
-        await Promise.allSettled(
-          savedIds.map((id) =>
-            fetch(attachmentEndpoint(id) ?? `${endpoint}/${id}`, { method: 'DELETE' }),
-          ),
+      } catch {
+        markdownImages.push(
+          `![Image upload failed: ${escapeMarkdownAlt(file.name)}](${IMAGE_UPLOAD_FALLBACK_PATH})`,
         );
       }
-      setValidationError(reason instanceof Error ? reason.message : 'Could not save the image.');
     }
+    const currentMarkdown = getCurrentMarkdown();
+    const currentOccurrences = countMarkdownImageOccurrences(currentMarkdown, markdownImages);
+    const appendedOccurrences = new Map<string, number>();
+    for (const image of markdownImages) {
+      const appended = appendedOccurrences.get(image) ?? 0;
+      pendingImageMarkdownRef.current.push({
+        markdown: image,
+        occurrence: (currentOccurrences.get(image) ?? 0) + appended + 1,
+      });
+      appendedOccurrences.set(image, appended + 1);
+    }
+    if (hasSavedAttachments) setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
+    const next = `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}${markdownImages.join('\n\n')}`;
+    updateMarkdownOverride(next);
+    setEditorResetVersion((version) => version + 1);
   };
+
+  const handleImageFiles = (files: readonly File[]): Promise<void> => {
+    const save = saveImageFiles(files);
+    pendingImageSavesRef.current.add(save);
+    void save.then(() => pendingImageSavesRef.current.delete(save));
+    return save.then(() => undefined);
+  };
+
+  const waitForPendingImageSaves = useCallback(async (): Promise<void> => {
+    if (pendingImageSavesRef.current.size === 0) return;
+    isWaitingForImageSavesRef.current = true;
+    setIsWaitingForImageSaves(true);
+    try {
+      while (pendingImageSavesRef.current.size > 0) {
+        const saves = [...pendingImageSavesRef.current];
+        await Promise.all(saves);
+      }
+    } finally {
+      isWaitingForImageSavesRef.current = false;
+      setIsWaitingForImageSaves(false);
+    }
+  }, []);
+
+  const withPromptAfterImageSaves = useCallback(
+    (onPromptReady: (prompt: string) => void): void => {
+      if (isWaitingForImageSavesRef.current) return;
+      if (pendingImageSavesRef.current.size === 0) {
+        onPromptReady(getCurrentMarkdown());
+        return;
+      }
+      void waitForPendingImageSaves().then(() => onPromptReady(getCurrentMarkdown()));
+    },
+    [getCurrentMarkdown, waitForPendingImageSaves],
+  );
+
+  const sendFeedbackAfterImageSaves = useCallback((): void => {
+    withPromptAfterImageSaves((prompt) => {
+      void sendFeedback(prompt);
+    });
+  }, [sendFeedback, withPromptAfterImageSaves]);
 
   const deleteDrawing = async (id: string): Promise<void> => {
     const endpoint = attachmentEndpoint(id);
@@ -183,8 +289,8 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       const response = await fetch(endpoint, { method: 'DELETE' });
       if (!response.ok && response.status !== 404)
         throw new Error('Could not delete the drawing file.');
-      const next = removeMarkdownDrawingReferences(markdown, id);
-      setMarkdownOverride(next);
+      const next = removeMarkdownDrawingReferences(getCurrentMarkdown(), id);
+      updateMarkdownOverride(next);
       setEditorResetVersion((version) => version + 1);
     } catch (reason) {
       setValidationError(
@@ -193,32 +299,25 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     }
   };
 
-  const handleMarkdownChange = useCallback((nextMarkdown: string): void => {
-    setMarkdownOverride(nextMarkdown);
-    setValidationError(null);
-  }, []);
+  const handleMarkdownChange = useCallback(
+    (nextMarkdown: string): void => {
+      updateMarkdownOverride(includePendingImageMarkdown(nextMarkdown));
+      setValidationError(null);
+    },
+    [includePendingImageMarkdown, updateMarkdownOverride],
+  );
 
-  const applyTemplate = useCallback((body: string): void => {
-    setMarkdownOverride(body);
-    setValidationError(null);
-    setEditorResetVersion((version) => version + 1);
-  }, []);
+  const applyTemplate = useCallback(
+    (body: string): void => {
+      updateMarkdownOverride(body);
+      setValidationError(null);
+      setEditorResetVersion((version) => version + 1);
+    },
+    [updateMarkdownOverride],
+  );
 
   const submitMarkdown = useCallback((): void => {
-    const prompt = editorRef.current?.getMarkdown() ?? markdown;
-    if (countPromptCharacters(prompt.trim()) > MAX_PROMPT_LENGTH) {
-      setValidationError(
-        `Markdown commands must be ${MAX_PROMPT_LENGTH.toLocaleString()} characters or fewer.`,
-      );
-      return;
-    }
-    setValidationError(null);
-    void submit(prompt);
-  }, [markdown, submit]);
-
-  const handlePromptSubmit = useCallback((): void => {
-    if (feedbackLoop) {
-      const prompt = editorRef.current?.getMarkdown() ?? markdown;
+    withPromptAfterImageSaves((prompt) => {
       if (countPromptCharacters(prompt.trim()) > MAX_PROMPT_LENGTH) {
         setValidationError(
           `Markdown commands must be ${MAX_PROMPT_LENGTH.toLocaleString()} characters or fewer.`,
@@ -226,23 +325,45 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
         return;
       }
       setValidationError(null);
-      if (prompt.trim() === '') {
-        setShowEmptyFinishDialog(true);
-        return;
-      }
-      void submit(prompt, 'finish');
+      void submit(prompt);
+    });
+  }, [submit, withPromptAfterImageSaves]);
+
+  const handlePromptSubmit = useCallback((): void => {
+    if (isWaitingForImageSavesRef.current) return;
+    if (feedbackLoop) {
+      withPromptAfterImageSaves((prompt) => {
+        if (countPromptCharacters(prompt.trim()) > MAX_PROMPT_LENGTH) {
+          setValidationError(
+            `Markdown commands must be ${MAX_PROMPT_LENGTH.toLocaleString()} characters or fewer.`,
+          );
+          return;
+        }
+        setValidationError(null);
+        if (prompt.trim() === '') {
+          setShowEmptyFinishDialog(true);
+          return;
+        }
+        void submit(prompt, 'finish');
+      });
       return;
     }
     if (feedback.annotations.length > 0) {
       setShowSubmitDialog(true);
       return;
     }
-    submitMarkdown();
-  }, [feedback.annotations.length, feedbackLoop, markdown, submit, submitMarkdown]);
+    void submitMarkdown();
+  }, [
+    feedback.annotations.length,
+    feedbackLoop,
+    submit,
+    submitMarkdown,
+    withPromptAfterImageSaves,
+  ]);
 
   const handleApproveAnyway = useCallback((): void => {
     setShowSubmitDialog(false);
-    submitMarkdown();
+    void submitMarkdown();
   }, [submitMarkdown]);
 
   return (
@@ -254,10 +375,10 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           isSubmitting,
           allowEmptySubmit: bridgeSession.feedbackLoop,
           onModeChange: setMode,
-          onSubmit: handlePromptSubmit,
-          onSendFeedback: () => {
-            void feedbackSubmission.sendFeedback();
+          onSubmit: () => {
+            void handlePromptSubmit();
           },
+          onSendFeedback: sendFeedbackAfterImageSaves,
         }}
         editor={{
           markdown,
@@ -282,7 +403,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           onDelete: feedback.removeFeedback,
         }}
         drawings={{
-          onImageFiles: saveImageFiles,
+          onImageFiles: handleImageFiles,
           onDraw: () => {
             void openDrawing();
           },
@@ -325,7 +446,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
         id="prompt-form"
         onSubmit={(event: SyntheticEvent<HTMLFormElement>) => {
           event.preventDefault();
-          handlePromptSubmit();
+          void handlePromptSubmit();
         }}
         className="submit-proxy-form"
       >
@@ -337,7 +458,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           onSendFeedback={() => {
             setShowSubmitDialog(false);
             setMode('feedback');
-            void feedbackSubmission.sendFeedback();
+            sendFeedbackAfterImageSaves();
           }}
           onApproveAnyway={handleApproveAnyway}
         />

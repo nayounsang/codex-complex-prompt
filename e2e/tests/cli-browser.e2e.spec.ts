@@ -117,7 +117,9 @@ test('입력한 Markdown을 Codex에 전달하고 3초 뒤 브라우저 종료�
     await openFakeCodexBrowser(page, fakeCodex);
     const editor = page.getByRole('textbox', { name: 'Command' });
     await expect(editor).toContainText('Input draft');
-    await editor.fill(submittedMarkdown);
+    await editor.press('ControlOrMeta+A');
+    await editor.pressSequentially(submittedMarkdown);
+    await expect(editor).toContainText(submittedMarkdown);
     const submittedAt = await page.evaluate(() => performance.now());
     await page.getByRole('button', { name: 'Send to Codex' }).click();
 
@@ -129,6 +131,156 @@ test('입력한 Markdown을 Codex에 전달하고 3초 뒤 브라우저 종료�
     expect(response.hookSpecificOutput.additionalContext).toContain(submittedMarkdown);
     await expectBrowserCloseAfterThreeSeconds(page, submittedAt);
   } finally {
+    await rm(codexHome, { recursive: true, force: true });
+  }
+});
+
+test('이미지 저장을 기다린 뒤 첨부 링크가 포함된 Markdown을 Codex에 전달한다', async ({ page }) => {
+  const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-image-submit-'));
+  const browserUrlFile = join(codexHome, 'browser-url.txt');
+  const fakeCodex = startFakeCodex(
+    'prompt',
+    {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'e2e-image-submit-session',
+      cwd: repositoryRoot,
+      prompt: '$complex-prompt Review this image',
+    },
+    codexHome,
+    browserUrlFile,
+  );
+  const uploadStarted = new Promise<void>((resolveUploadStarted) => {
+    page.route('**/_complex-prompt/attachments**', async (route) => {
+      resolveUploadStarted();
+      await uploadGate;
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'e2e-image', extension: 'gif' }),
+      });
+    });
+  });
+  let releaseUpload!: () => void;
+  const uploadGate = new Promise<void>((resolveUpload) => {
+    releaseUpload = resolveUpload;
+  });
+  let submitted = false;
+
+  try {
+    await openFakeCodexBrowser(page, fakeCodex);
+    const editor = page.getByRole('textbox', { name: 'Command' });
+    await expect(editor).toContainText('Review this image');
+    await editor.evaluate((element) => {
+      const bytes = Uint8Array.from(atob('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='), (character) =>
+        character.charCodeAt(0),
+      );
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], 'pasted.gif', { type: 'image/gif' }));
+      element.dispatchEvent(
+        new ClipboardEvent('paste', { bubbles: true, clipboardData: transfer }),
+      );
+    });
+    await uploadStarted;
+
+    const updatedPrompt = 'Review this image with the latest notes';
+    await editor.press('ControlOrMeta+A');
+    await editor.pressSequentially(updatedPrompt);
+    await expect(editor).toContainText(updatedPrompt);
+    await page.getByRole('button', { name: 'Send to Codex' }).click();
+    await expect(page.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+    releaseUpload();
+
+    const hookResult = await fakeCodex.result;
+    submitted = true;
+    expect(hookResult.exitCode).toBe(0);
+    const response = JSON.parse(hookResult.output) as {
+      readonly hookSpecificOutput: { readonly additionalContext: string };
+    };
+    expect(response.hookSpecificOutput.additionalContext).toContain(
+      '![pasted.gif](.complex-prompt/attachments/e2e-image.gif)',
+    );
+    expect(response.hookSpecificOutput.additionalContext).toContain(updatedPrompt);
+  } finally {
+    releaseUpload();
+    if (!submitted) {
+      await page
+        .getByRole('button', { name: 'Send to Codex' })
+        .click({ timeout: 1_000 })
+        .catch(() => undefined);
+      await Promise.race([fakeCodex.result, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    }
+    await rm(codexHome, { recursive: true, force: true });
+  }
+});
+
+test('이미지 저장 실패 시 fallback 이미지를 보여주고 Markdown에 연결한다', async ({ page }) => {
+  const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-image-fallback-'));
+  const browserUrlFile = join(codexHome, 'browser-url.txt');
+  const fakeCodex = startFakeCodex(
+    'prompt',
+    {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'e2e-image-fallback-session',
+      cwd: repositoryRoot,
+      prompt: '$complex-prompt Review this image',
+    },
+    codexHome,
+    browserUrlFile,
+  );
+  let submitted = false;
+
+  try {
+    await page.route('**/_complex-prompt/attachments**', (route) =>
+      route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Could not save pasted.gif.' }),
+      }),
+    );
+    await openFakeCodexBrowser(page, fakeCodex);
+    const editor = page.getByRole('textbox', { name: 'Command' });
+    const uploadFailed = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes('/_complex-prompt/attachments'),
+    );
+    await editor.evaluate((element) => {
+      const bytes = Uint8Array.from(atob('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='), (character) =>
+        character.charCodeAt(0),
+      );
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], 'pasted.gif', { type: 'image/gif' }));
+      element.dispatchEvent(
+        new ClipboardEvent('paste', { bubbles: true, clipboardData: transfer }),
+      );
+    });
+    expect((await uploadFailed).status()).toBe(500);
+
+    const fallbackImage = page.getByRole('img', { name: 'Image upload failed: pasted.gif' });
+    await expect(fallbackImage).toHaveAttribute('src', '/image-upload-failed.svg');
+    const assetResponse = await page.request.get(
+      new URL('/image-upload-failed.svg', page.url()).href,
+    );
+    expect(assetResponse.ok()).toBe(true);
+
+    await page.getByRole('button', { name: 'Send to Codex' }).click();
+    const hookResult = await fakeCodex.result;
+    submitted = true;
+    expect(hookResult.exitCode).toBe(0);
+    const response = JSON.parse(hookResult.output) as {
+      readonly hookSpecificOutput: { readonly additionalContext: string };
+    };
+    expect(response.hookSpecificOutput.additionalContext).toContain(
+      '![Image upload failed: pasted.gif](/image-upload-failed.svg)',
+    );
+  } finally {
+    if (!submitted) {
+      await page
+        .getByRole('button', { name: 'Send to Codex' })
+        .click({ timeout: 1_000 })
+        .catch(() => undefined);
+      await Promise.race([fakeCodex.result, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    }
     await rm(codexHome, { recursive: true, force: true });
   }
 });
