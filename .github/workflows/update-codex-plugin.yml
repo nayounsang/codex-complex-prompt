@@ -21,6 +21,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: main
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
@@ -32,9 +33,8 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - name: Open an update pull request when upstream changes
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Update the pinned plugin commit
+        id: update-plugin-pin
         run: |
           set -euo pipefail
 
@@ -54,11 +54,39 @@ jobs:
 
           if [[ "$upstream_sha" == "$current_sha" ]]; then
             echo "The project already pins the latest upstream commit."
-            exit 0
+            changed=false
+          else
+            changed=true
           fi
 
+          {
+            echo "current_sha=$current_sha"
+            echo "upstream_sha=$upstream_sha"
+            echo "changed=$changed"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open an update pull request
+        if: steps.update-plugin-pin.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_SHA: ${{ steps.update-plugin-pin.outputs.current_sha }}
+          UPSTREAM_SHA: ${{ steps.update-plugin-pin.outputs.upstream_sha }}
+        run: |
+          set -euo pipefail
+
+          marketplace_file=".agents/plugins/marketplace.json"
+          current_sha="$CURRENT_SHA"
+          upstream_sha="$UPSTREAM_SHA"
           short_sha="${upstream_sha:0:12}"
           branch="automation/update-younsang-codex-plugin-${short_sha}"
+          github_auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+
+          git_with_token() {
+            GIT_CONFIG_COUNT=1 \
+              GIT_CONFIG_KEY_0='http.https://github.com/.extraheader' \
+              GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $github_auth_header" \
+              git "$@"
+          }
 
           create_pr() {
             gh pr create \
@@ -79,8 +107,8 @@ jobs:
             exit 0
           fi
 
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            git fetch origin "$branch"
+          if git_with_token ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git_with_token fetch origin "$branch"
             branch_sha="$(git show "FETCH_HEAD:${marketplace_file}" | jq -r '.plugins[] | select(.name == "younsang-codex-plugin") | .source.sha // empty')"
             if [[ "$branch_sha" != "$upstream_sha" ]]; then
               echo "The existing branch $branch does not pin $upstream_sha; refusing to reuse it."
@@ -91,14 +119,9 @@ jobs:
             exit 0
           fi
 
-          jq --arg sha "$upstream_sha" \
-            '(.plugins[] | select(.name == "younsang-codex-plugin").source) |= (del(.ref) | .sha = $sha)' \
-            "$marketplace_file" > "$RUNNER_TEMP/marketplace.json"
-          mv "$RUNNER_TEMP/marketplace.json" "$marketplace_file"
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "$marketplace_file"
           git commit -m "chore: update Younsang Codex plugin to ${short_sha}"
-          git push origin "HEAD:refs/heads/${branch}"
+          git_with_token push origin "HEAD:refs/heads/${branch}"
           create_pr
