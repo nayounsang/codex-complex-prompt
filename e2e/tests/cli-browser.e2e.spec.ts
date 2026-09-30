@@ -188,6 +188,79 @@ test('Mermaid 코드블록을 클릭하면 다이어그램 편집 다이얼로�
   }
 });
 
+test('큰 Mermaid 다이어그램 미리보기를 고정된 영역 안에 맞춘다', async ({ page }) => {
+  const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-mermaid-fit-'));
+  const browserUrlFile = join(codexHome, 'browser-url.txt');
+  const nodes = Array.from(
+    { length: 24 },
+    (_, index) => `N${index}["Step ${index + 1}: A detailed node label for the preview"]`,
+  ).join('\n');
+  const edges = Array.from({ length: 23 }, (_, index) => `N${index} --> N${index + 1}`).join('\n');
+  const markdown = `\`\`\`mermaid\nflowchart TD\n${nodes}\n${edges}\n\`\`\``;
+  const fakeCodex = startFakeCodex(
+    'prompt',
+    {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'e2e-mermaid-fit-session',
+      cwd: repositoryRoot,
+      prompt: `$complex-prompt ${markdown}`,
+    },
+    codexHome,
+    browserUrlFile,
+  );
+  let submitted = false;
+
+  try {
+    await openFakeCodexBrowser(page, fakeCodex);
+    const commandEditor = page.getByRole('textbox', { name: 'Command' });
+    await expect(commandEditor).toContainText('flowchart TD');
+    const preview = page.locator('.mermaid-preview-content .mve-preview');
+    await expect(preview.locator('svg')).toBeVisible();
+    await expect
+      .poll(async () => {
+        return preview.evaluate((element) => {
+          const stage = element.closest('.mve-preview-stage');
+          const svg = element.querySelector('svg');
+          if (!stage || !svg) return false;
+          const stageBounds = stage.getBoundingClientRect();
+          const svgBounds = svg.getBoundingClientRect();
+          const viewBox = svg.viewBox.baseVal;
+          const diagramBounds = svg.getBBox();
+          const viewBoxRight = viewBox.x + viewBox.width;
+          const viewBoxBottom = viewBox.y + viewBox.height;
+          const strokeOverscanX = viewBox.width * 0.05;
+          const strokeOverscanY = viewBox.height * 0.05;
+          return (
+            svgBounds.left >= stageBounds.left &&
+            svgBounds.top >= stageBounds.top &&
+            svgBounds.right <= stageBounds.right &&
+            svgBounds.bottom <= stageBounds.bottom &&
+            viewBox.width > 0 &&
+            viewBox.height > 0 &&
+            diagramBounds.x >= viewBox.x - strokeOverscanX &&
+            diagramBounds.y >= viewBox.y - strokeOverscanY &&
+            diagramBounds.x + diagramBounds.width <= viewBoxRight + strokeOverscanX &&
+            diagramBounds.y + diagramBounds.height <= viewBoxBottom + strokeOverscanY
+          );
+        });
+      })
+      .toBe(true);
+
+    await page.getByRole('button', { name: 'Send to Codex' }).click();
+    submitted = true;
+    await fakeCodex.result;
+  } finally {
+    if (!submitted) {
+      await page
+        .getByRole('button', { name: 'Send to Codex' })
+        .click({ timeout: 1_000 })
+        .catch(() => undefined);
+      await Promise.race([fakeCodex.result, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    }
+    await rm(codexHome, { recursive: true, force: true });
+  }
+});
+
 test('슬래시 메뉴에서 추가한 빈 다이어그램 블록을 클릭하면 편집 다이얼로그를 표시한다', async ({
   page,
 }) => {
