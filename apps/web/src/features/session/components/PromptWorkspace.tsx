@@ -23,6 +23,7 @@ import { useFeedbackAnnotations } from '../../feedback/hooks/useFeedbackAnnotati
 import { useFeedbackSubmission } from '../../feedback/hooks/useFeedbackSubmission.js';
 import { useProjectTemplates } from '../../templates/hooks/useProjectTemplates.js';
 import { removeMarkdownDrawingReferences } from '../../input/drawing-markdown.js';
+import { countMarkdownImageOccurrences } from '../../../shared/markdown/markdown-source-map.js';
 import { MARKDOWN_ATTACHMENT_DIRECTORY } from '../../../shared/markdown/attachment-path.js';
 import { identifyImageFormat } from '../../../shared/image-format.js';
 
@@ -35,6 +36,12 @@ const DrawingDialog = lazy(async () => {
 interface ActiveDrawing {
   readonly id?: string;
   readonly scene?: string;
+}
+
+interface PendingImageMarkdown {
+  readonly markdown: string;
+  // Prevent an older identical image line in the draft from consuming this append.
+  readonly occurrence: number;
 }
 
 interface PromptWorkspaceProps {
@@ -55,6 +62,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
   const [drawing, setDrawing] = useState<ActiveDrawing | null>(null);
   const editorRef = useRef<MarkdownEditorHandle>(null);
   const currentMarkdownRef = useRef(markdownOverride ?? bridgeSession.initialMarkdown ?? '');
+  const pendingImageMarkdownRef = useRef<PendingImageMarkdown[]>([]);
   const pendingImageSavesRef = useRef(new Set<Promise<void>>());
   const isWaitingForImageSavesRef = useRef(false);
   const { feedbackLoop, submit } = bridgeSession;
@@ -63,9 +71,29 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     currentMarkdownRef.current = nextMarkdown;
     setMarkdownOverride(nextMarkdown);
   }, []);
+  const includePendingImageMarkdown = useCallback((markdown: string): string => {
+    const pendingImages = [...pendingImageMarkdownRef.current];
+    const markdownOccurrences = countMarkdownImageOccurrences(
+      markdown,
+      pendingImages.map((image) => image.markdown),
+    );
+    const remainingImages: PendingImageMarkdown[] = [];
+    const missingImages: string[] = [];
+    for (const image of pendingImages) {
+      const available = markdownOccurrences.get(image.markdown) ?? 0;
+      if (available < image.occurrence) {
+        remainingImages.push(image);
+        missingImages.push(image.markdown);
+      }
+    }
+    pendingImageMarkdownRef.current = remainingImages;
+    if (missingImages.length === 0) return markdown;
+    return `${markdown.trimEnd()}${markdown.trim() === '' ? '' : '\n\n'}${missingImages.join('\n\n')}`;
+  }, []);
   const getCurrentMarkdown = useCallback(
-    (): string => editorRef.current?.getMarkdown() ?? currentMarkdownRef.current,
-    [],
+    (): string =>
+      includePendingImageMarkdown(editorRef.current?.getMarkdown() ?? currentMarkdownRef.current),
+    [includePendingImageMarkdown],
   );
   useEffect(
     function syncCurrentMarkdownRef() {
@@ -142,12 +170,12 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       throw new Error(result.error ?? 'Could not save the drawing.');
     setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
     if (input.id === undefined) {
-      const currentMarkdown = currentMarkdownRef.current;
+      const currentMarkdown = getCurrentMarkdown();
       const next = `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}![Drawing](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.png)`;
       updateMarkdownOverride(next);
       setEditorResetVersion((version) => version + 1);
     } else {
-      updateMarkdownOverride(currentMarkdownRef.current);
+      updateMarkdownOverride(getCurrentMarkdown());
       setEditorResetVersion((version) => version + 1);
     }
   };
@@ -197,10 +225,17 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
         );
       }
     }
-    // Another upload can finish before the editor remount from an earlier
-    // append commits. In that window the mounted editor still has the old
-    // Markdown, while the ref already includes earlier attachment links.
-    const currentMarkdown = currentMarkdownRef.current;
+    const currentMarkdown = getCurrentMarkdown();
+    const currentOccurrences = countMarkdownImageOccurrences(currentMarkdown, markdownImages);
+    const appendedOccurrences = new Map<string, number>();
+    for (const image of markdownImages) {
+      const appended = appendedOccurrences.get(image) ?? 0;
+      pendingImageMarkdownRef.current.push({
+        markdown: image,
+        occurrence: (currentOccurrences.get(image) ?? 0) + appended + 1,
+      });
+      appendedOccurrences.set(image, appended + 1);
+    }
     if (hasSavedAttachments) setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
     const next = `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}${markdownImages.join('\n\n')}`;
     updateMarkdownOverride(next);
@@ -236,7 +271,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
         onPromptReady(getCurrentMarkdown());
         return;
       }
-      void waitForPendingImageSaves().then(() => onPromptReady(currentMarkdownRef.current));
+      void waitForPendingImageSaves().then(() => onPromptReady(getCurrentMarkdown()));
     },
     [getCurrentMarkdown, waitForPendingImageSaves],
   );
@@ -254,7 +289,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       const response = await fetch(endpoint, { method: 'DELETE' });
       if (!response.ok && response.status !== 404)
         throw new Error('Could not delete the drawing file.');
-      const next = removeMarkdownDrawingReferences(currentMarkdownRef.current, id);
+      const next = removeMarkdownDrawingReferences(getCurrentMarkdown(), id);
       updateMarkdownOverride(next);
       setEditorResetVersion((version) => version + 1);
     } catch (reason) {
@@ -266,10 +301,10 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
 
   const handleMarkdownChange = useCallback(
     (nextMarkdown: string): void => {
-      updateMarkdownOverride(nextMarkdown);
+      updateMarkdownOverride(includePendingImageMarkdown(nextMarkdown));
       setValidationError(null);
     },
-    [updateMarkdownOverride],
+    [includePendingImageMarkdown, updateMarkdownOverride],
   );
 
   const applyTemplate = useCallback(

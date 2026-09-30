@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  countMarkdownImageOccurrences,
   decorateMarkdownRoot,
   getMappedSourceOffset,
   getVisibleSourceMap,
@@ -13,6 +14,18 @@ afterEach(() => {
 });
 
 describe('Markdown source map', () => {
+  it('counts duplicate image nodes without matching identical code or HTML text', () => {
+    const image = '![upload failed](image-upload-failed.svg)';
+    const markdown = [
+      image,
+      `\`\`\`markdown\n${image}\n\`\`\``,
+      `<pre>\n${image}\n</pre>`,
+      image,
+    ].join('\n\n');
+
+    expect(countMarkdownImageOccurrences(markdown, [image])).toEqual(new Map([[image, 2]]));
+  });
+
   it('제목 마커 뒤 여러 공백을 건너뛴 source offset을 반환한다', () => {
     const markdown = '#   title';
 

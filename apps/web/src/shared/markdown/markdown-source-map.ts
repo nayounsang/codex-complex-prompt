@@ -298,7 +298,7 @@ function getAttachmentImageExtension(
 
 function getMarkdownAttachmentImageRanges(markdown: string): MarkdownAttachmentImageRange[] {
   const ranges: MarkdownAttachmentImageRange[] = [];
-  const tree = unified().use(remarkParse).use(remarkGfm).parse(markdown) as MarkdownNode;
+  const tree = parseMarkdownTree(markdown);
   const visit = (node: MarkdownNode): void => {
     if (node.type === 'image' && node.url !== undefined && node.position !== undefined) {
       const id = getMarkdownAttachmentId(node.url);
@@ -322,6 +322,36 @@ interface MarkdownNode {
     readonly end: { readonly offset?: number };
   };
   readonly children?: readonly MarkdownNode[];
+}
+
+export function countMarkdownImageOccurrences(
+  markdown: string,
+  targets: readonly string[],
+): Map<string, number> {
+  const targetSet = new Set(targets);
+  const occurrences = new Map<string, number>();
+  if (targetSet.size === 0) return occurrences;
+
+  const tree = parseMarkdownTree(markdown);
+  const visit = (node: MarkdownNode): void => {
+    if (
+      node.type === 'image' &&
+      node.position !== undefined &&
+      typeof node.position.start.offset === 'number' &&
+      typeof node.position.end.offset === 'number'
+    ) {
+      const imageMarkdown = markdown.slice(node.position.start.offset, node.position.end.offset);
+      if (targetSet.has(imageMarkdown))
+        occurrences.set(imageMarkdown, (occurrences.get(imageMarkdown) ?? 0) + 1);
+    }
+    node.children?.forEach(visit);
+  };
+  visit(tree);
+  return occurrences;
+}
+
+function parseMarkdownTree(markdown: string): MarkdownNode {
+  return unified().use(remarkParse).use(remarkGfm).parse(markdown) as MarkdownNode;
 }
 
 function decorateTableSourceRanges(
