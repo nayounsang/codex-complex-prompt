@@ -117,7 +117,9 @@ test('입력한 Markdown을 Codex에 전달하고 3초 뒤 브라우저 종료�
     await openFakeCodexBrowser(page, fakeCodex);
     const editor = page.getByRole('textbox', { name: 'Command' });
     await expect(editor).toContainText('Input draft');
-    await editor.fill(submittedMarkdown);
+    await editor.press('ControlOrMeta+A');
+    await editor.pressSequentially(submittedMarkdown);
+    await expect(editor).toContainText(submittedMarkdown);
     const submittedAt = await page.evaluate(() => performance.now());
     await page.getByRole('button', { name: 'Send to Codex' }).click();
 
@@ -148,7 +150,7 @@ test('이미지 저장을 기다린 뒤 첨부 링크가 포함된 Markdown을 C
     browserUrlFile,
   );
   const uploadStarted = new Promise<void>((resolveUploadStarted) => {
-    page.route('**/_complex-prompt/attachments', async (route) => {
+    page.route('**/_complex-prompt/attachments**', async (route) => {
       resolveUploadStarted();
       await uploadGate;
       await route.fulfill({
@@ -181,7 +183,9 @@ test('이미지 저장을 기다린 뒤 첨부 링크가 포함된 Markdown을 C
     await uploadStarted;
 
     const updatedPrompt = 'Review this image with the latest notes';
-    await editor.fill(updatedPrompt);
+    await editor.press('ControlOrMeta+A');
+    await editor.pressSequentially(updatedPrompt);
+    await expect(editor).toContainText(updatedPrompt);
     await page.getByRole('button', { name: 'Send to Codex' }).click();
     await expect(page.getByRole('button', { name: 'Sending…' })).toBeDisabled();
     releaseUpload();

@@ -63,6 +63,10 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     currentMarkdownRef.current = nextMarkdown;
     setMarkdownOverride(nextMarkdown);
   }, []);
+  const getCurrentMarkdown = useCallback(
+    (): string => editorRef.current?.getMarkdown() ?? currentMarkdownRef.current,
+    [],
+  );
   useEffect(
     function syncCurrentMarkdownRef() {
       currentMarkdownRef.current = markdown;
@@ -193,6 +197,9 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
         );
       }
     }
+    // Another upload can finish before the editor remount from an earlier
+    // append commits. In that window the mounted editor still has the old
+    // Markdown, while the ref already includes earlier attachment links.
     const currentMarkdown = currentMarkdownRef.current;
     if (hasSavedAttachments) setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
     const next = `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}${markdownImages.join('\n\n')}`;
@@ -225,14 +232,13 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
   const withPromptAfterImageSaves = useCallback(
     (onPromptReady: (prompt: string) => void): void => {
       if (isWaitingForImageSavesRef.current) return;
-      const getCurrentPrompt = (): string => currentMarkdownRef.current;
       if (pendingImageSavesRef.current.size === 0) {
-        onPromptReady(getCurrentPrompt());
+        onPromptReady(getCurrentMarkdown());
         return;
       }
-      void waitForPendingImageSaves().then(() => onPromptReady(getCurrentPrompt()));
+      void waitForPendingImageSaves().then(() => onPromptReady(currentMarkdownRef.current));
     },
-    [waitForPendingImageSaves],
+    [getCurrentMarkdown, waitForPendingImageSaves],
   );
 
   const sendFeedbackAfterImageSaves = useCallback((): void => {
