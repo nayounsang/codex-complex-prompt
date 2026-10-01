@@ -24,9 +24,16 @@ interface MermaidDialogEditorProps {
 
 export function MermaidPreview({ source }: MermaidPreviewProps): React.JSX.Element {
   return (
-    <MermaidEditor className="mermaid-preview-editor" value={source} onChange={() => undefined}>
-      <MermaidCanvasOnly />
-    </MermaidEditor>
+    <div className="mermaid-preview-host">
+      <MermaidEditor
+        className="mermaid-preview-editor"
+        value={source}
+        onChange={() => undefined}
+        autoFit
+      >
+        <MermaidCanvasOnly />
+      </MermaidEditor>
+    </div>
   );
 }
 
