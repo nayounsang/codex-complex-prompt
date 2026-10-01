@@ -364,6 +364,10 @@ button:focus-visible,
   padding: 18px;
   pointer-events: none;
 }
+.mermaid-preview-host {
+  width: 100%;
+  min-width: 0;
+}
 .mermaid-preview-trigger {
   position: absolute;
   z-index: 1;
@@ -400,6 +404,14 @@ button:focus-visible,
 }
 .mermaid-preview-content .mermaid-preview-editor .mve-preview-stage {
   min-height: 0;
+}
+.mermaid-preview-content .mermaid-preview-editor .mve-preview foreignObject p {
+  margin: 0;
+  font-family: 'trebuchet ms', verdana, arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  white-space: normal;
+  word-break: normal;
 }
 .mermaid-preview-content .mermaid-preview-editor .mve-canvas-heading {
   display: none;
