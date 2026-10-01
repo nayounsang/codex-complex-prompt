@@ -17,7 +17,7 @@
     "@excalidraw/excalidraw": "^0.18.1",
     "@file-type/xml": "^1.1.1",
     "@floating-ui/dom": "^1.8.0",
-    "@mermaid-editor-sdk/ui": "0.0.2",
+    "@mermaid-editor-sdk/ui": "0.1.1",
     "@milkdown/crepe": "^7.22.1",
     "@milkdown/kit": "^7.22.1",
     "file-type": "^22.1.1",
