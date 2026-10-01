@@ -1,5 +1,13 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.3.4
+
+### Patch Changes
+
+- bf756ef: Wait for pasted or dropped image attachments to finish saving before submitting the prompt.
+- 1d1faba: Keep Mermaid diagram editor saves connected to the current code block when preview mounts are refreshed.
+- 9a0c69d: Translate built-in templates and user-facing editor messages into English.
+
 ## 0.3.3
 
 ### Patch Changes
