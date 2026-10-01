@@ -187,7 +187,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       editor.action((ctx) => {
         const view = ctx.get(editorViewCtx);
         const schema = ctx.get(schemaCtx);
-        const node = view.state.doc.nodeAt(target.position);
+        const pos = target.position;
+        const node = view.state.doc.nodeAt(pos);
         if (
           node === null ||
           node.type.name !== 'code_block' ||
@@ -195,7 +196,6 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           node.textContent !== target.source
         )
           return;
-        const pos = target.position;
         const replacement =
           source === undefined
             ? schema.nodes['paragraph']?.create()
@@ -211,9 +211,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       return replaced;
     };
     const replaceCurrentMermaidBlock = (target: MermaidDiagramTarget, source?: string): boolean => {
-      const current = mermaidTargets.find((candidate) => candidate.id === target.id);
-      if (current === undefined || current.source !== target.source) return false;
-      return replaceMermaidBlock({ ...current, source: target.source }, source);
+      return replaceMermaidBlock(target, source);
     };
     const handleDrawingImageHover = (image: HTMLImageElement): void => {
       const actions = drawingActionsRef.current;
