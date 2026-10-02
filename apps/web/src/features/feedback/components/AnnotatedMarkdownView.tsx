@@ -110,13 +110,21 @@ export function AnnotatedMarkdownView({
   useEffect(
     function decorateReadOnlyMarkdown() {
       if (rendererRoot === null) return;
-      decorateMarkdownRoot(
-        rendererRoot,
-        renderedMarkdown,
-        JSON.parse(decorationRangeKey) as SourceFeedbackRange[],
-        markdown,
-        attachmentUrl,
-      );
+      const feedbackRanges = JSON.parse(decorationRangeKey) as SourceFeedbackRange[];
+      const decorate = (): void => {
+        decorateMarkdownRoot(
+          rendererRoot,
+          renderedMarkdown,
+          feedbackRanges,
+          markdown,
+          attachmentUrl,
+        );
+      };
+      // TODO: Profile large documents; share the Markdown AST/line index and batch renderer churn if costly.
+      const observer = new MutationObserver(decorate);
+      observer.observe(rendererRoot, { childList: true, characterData: true, subtree: true });
+      decorate();
+      return () => observer.disconnect();
     },
     [attachmentUrl, decorationRangeKey, markdown, rendererRoot, renderedMarkdown],
   );

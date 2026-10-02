@@ -5,6 +5,7 @@ import {
   getSelectionAnchor,
   getTableSelectionAnchor,
 } from './selection-anchor.js';
+import { getCodeBlockSourceRanges } from './markdown-source-map.js';
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -68,7 +69,7 @@ describe('선택 영역 anchor', () => {
     expect(anchor?.quote).toBe('| Header |\n| --- |\n| Cell | end');
   });
 
-  it('코드 블록 내부 일부를 선택해도 코드 전체 source 범위를 반환한다', () => {
+  it('코드 블록 내부에서 선택한 텍스트만 source 범위로 반환한다', () => {
     const root = document.createElement('article');
     const codeBlock = document.createElement('div');
     codeBlock.className = 'milkdown-code-block';
@@ -76,22 +77,97 @@ describe('선택 영역 anchor', () => {
     codeBlock.dataset['codeSourceEnd'] = '24';
     const content = document.createElement('div');
     content.className = 'cm-content';
-    content.textContent = 'const answer = 42;';
+    const line = document.createElement('div');
+    line.className = 'cm-line';
+    line.textContent = 'const answer = 42;';
+    content.append(line);
     codeBlock.append(content);
     root.append(codeBlock);
     document.body.append(root);
 
     const range = document.createRange();
-    range.setStart(content.firstChild as Text, 6);
-    range.setEnd(content.firstChild as Text, 12);
+    range.setStart(line.firstChild as Text, 6);
+    range.setEnd(line.firstChild as Text, 12);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
 
     const anchor = getCodeBlockSelectionAnchor(root, '```ts\nconst answer = 42;\n```');
 
-    expect(anchor?.start).toBe(6);
-    expect(anchor?.end).toBe(24);
-    expect(anchor?.quote).toBe('const answer = 42;');
+    expect(anchor?.start).toBe(12);
+    expect(anchor?.end).toBe(18);
+    expect(anchor?.quote).toBe('answer');
+  });
+
+  it('CRLF 코드 블록 둘째 줄의 선택 offset을 원문과 일치시킨다', () => {
+    const markdown = '```ts\r\nconst first = 0;\r\nconst bar = 2;\r\n```';
+    const root = document.createElement('article');
+    const codeBlock = document.createElement('div');
+    codeBlock.className = 'milkdown-code-block';
+    codeBlock.dataset['codeSourceStart'] = String(markdown.indexOf('const first'));
+    codeBlock.dataset['codeSourceEnd'] = String(markdown.indexOf('\r\n```'));
+    const content = document.createElement('div');
+    content.className = 'cm-content';
+    const firstLine = document.createElement('div');
+    firstLine.className = 'cm-line';
+    firstLine.textContent = 'const first = 0;';
+    const secondLine = document.createElement('div');
+    secondLine.className = 'cm-line';
+    secondLine.textContent = 'const bar = 2;';
+    content.append(firstLine, secondLine);
+    codeBlock.append(content);
+    root.append(codeBlock);
+    document.body.append(root);
+
+    const range = document.createRange();
+    range.setStart(secondLine.firstChild as Text, 6);
+    range.setEnd(secondLine.firstChild as Text, 9);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    const anchor = getCodeBlockSelectionAnchor(root, markdown);
+    const expectedStart = markdown.indexOf('bar');
+
+    expect(anchor).toMatchObject({
+      start: expectedStart,
+      end: expectedStart + 'bar'.length,
+      quote: 'bar',
+    });
+  });
+
+  it('블록 인용 코드 블록의 선택 offset에서 컨테이너 마커를 건너뛴다', () => {
+    const markdown = '> ```ts\n> const answer = 42;\n> ```';
+    const sourceRange = getCodeBlockSourceRanges(markdown)[0];
+    const root = document.createElement('article');
+    const codeBlock = document.createElement('div');
+    codeBlock.className = 'milkdown-code-block';
+    codeBlock.dataset['codeSourceStart'] = String(sourceRange?.start);
+    codeBlock.dataset['codeSourceEnd'] = String(sourceRange?.end);
+    const content = document.createElement('div');
+    content.className = 'cm-content';
+    const line = document.createElement('div');
+    line.className = 'cm-line';
+    line.textContent = 'const answer = 42;';
+    content.append(line);
+    codeBlock.append(content);
+    root.append(codeBlock);
+    document.body.append(root);
+
+    const range = document.createRange();
+    range.setStart(line.firstChild as Text, 6);
+    range.setEnd(line.firstChild as Text, 12);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    const anchor = getCodeBlockSelectionAnchor(root, markdown);
+    const expectedStart = markdown.indexOf('answer');
+
+    expect(anchor).toMatchObject({
+      start: expectedStart,
+      end: expectedStart + 'answer'.length,
+      quote: 'answer',
+    });
   });
 });
