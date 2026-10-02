@@ -48,6 +48,9 @@ importers:
         specifier: ^8.18.0
         version: 8.21.3
     devDependencies:
+      '@codex-complex-prompt/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@codex-complex-prompt/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -93,6 +96,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.8.0
         version: 1.8.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@codex-complex-prompt/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@codex-complex-prompt/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
