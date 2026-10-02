@@ -124,7 +124,7 @@ pnpm --filter @codex-complex-prompt/model-evaluation eval example-feedback-scope
 ```
 
 Model output is saved to a new temporary directory and does not overwrite workspace files.
-The runner prints the temporary directory path as `Output directory` so you can inspect the revised Markdown and Codex trace.
+The runner prints the temporary directory path as `Output directory` so you can inspect the revised Markdown and Codex trace. If Codex cannot start or exits unsuccessfully, the error also includes the directory path.
 
 After reviewing the output, remove that directory using the exact path printed by the runner:
 

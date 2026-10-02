@@ -31,12 +31,22 @@ export async function runCodex(prompt: string): Promise<ModelRunResult> {
   child.stdin.end(prompt);
 
   const exitCode = await new Promise<number | null>((resolve, reject) => {
-    child.once('error', reject);
+    child.once('error', (error: Error) =>
+      reject(
+        new Error(`Could not start the Codex CLI. Output directory: ${outputDirectory}.`, {
+          cause: error,
+        }),
+      ),
+    );
     child.once('close', resolve);
   });
   const trace = Buffer.concat(traceChunks).toString('utf8');
   if (trace !== '') await writeFile(tracePath, trace, 'utf8');
-  if (exitCode !== 0) throw new Error(`codex exec exited with status ${String(exitCode)}.`);
+  if (exitCode !== 0) {
+    throw new Error(
+      `codex exec exited with status ${String(exitCode)}. Output directory: ${outputDirectory}.`,
+    );
+  }
 
   const rawOutput = await readFile(outputPath, 'utf8');
   const output = rawOutput.endsWith('\n') ? rawOutput : `${rawOutput}\n`;
