@@ -124,6 +124,14 @@ pnpm --filter @codex-complex-prompt/model-evaluation eval example-feedback-scope
 ```
 
 Model output is saved to a new temporary directory and does not overwrite workspace files.
+The runner prints the temporary directory path as `Output directory` so you can inspect the revised Markdown and Codex trace.
+
+After reviewing the output, remove that directory using the exact path printed by the runner:
+
+```sh
+OUTPUT_DIR="/path/printed/by/the/runner"
+rm -r "$OUTPUT_DIR"
+```
 
 The local model evaluation checks the real feedback payload together with the model response. Since responses can vary between calls, run the same case several times and review how consistent the results are.
 

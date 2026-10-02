@@ -27,7 +27,7 @@ pnpm --filter @codex-complex-prompt/model-evaluation typecheck
 pnpm --filter @codex-complex-prompt/model-evaluation lint
 ```
 
-Codex runs in a read-only sandbox. The runner prints each criterion's result and the paths to the original fixture, revised Markdown, and Codex JSONL trace.
+Codex runs in a read-only sandbox. The runner prints each criterion's result and the paths to the original fixture, revised Markdown, and Codex JSONL trace. It keeps the output files in a temporary directory and prints that directory's path for inspection.
 
 ## Writing test cases
 

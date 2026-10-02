@@ -54,6 +54,7 @@ async function evaluateCase(testCase: ModelEvaluationCase): Promise<void> {
   const passed = results.every((result) => result.passed);
   console.log(`\n${testCase.title}: ${passed ? 'PASS' : 'FAIL'}`);
   console.log(`Original: ${fixturePath}`);
+  console.log(`Output directory: ${modelRun.outputDirectory}`);
   console.log(`Model output: ${modelRun.outputPath}`);
   console.log(`Codex trace: ${modelRun.tracePath}`);
   console.log(`Compare: diff -u "${fixturePath}" "${modelRun.outputPath}"`);
