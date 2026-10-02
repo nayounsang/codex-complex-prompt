@@ -43,6 +43,10 @@ Invoke the skill from Codex CLI to check the real user flow:
 $complex-prompt ## test test test
 ```
 
+### (Optional) Model Evaluate
+
+For direct model checks that evaluate feedback behavior against reusable criteria, follow [the AI feedback scope check](manual-feedback-model-check.md).
+
 ### Reproduce hook input directly
 
 You can reproduce the `UserPromptSubmit` input sent by Codex instead of invoking the skill. This command opens the browser editor and waits for you to submit from the editor.
