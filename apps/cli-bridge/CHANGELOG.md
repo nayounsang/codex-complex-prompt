@@ -1,5 +1,11 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.3.5
+
+### Patch Changes
+
+- f2f3d7e: Constrain selected AI feedback to its quoted Markdown range so similar content elsewhere stays unchanged.
+
 ## 0.3.4
 
 ### Patch Changes
