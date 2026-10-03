@@ -182,6 +182,7 @@ export function decorateMarkdownRoot(
 
   const sourceMap = getVisibleSourceMap(markdown);
   const mappings: RenderedTextMapping[] = [];
+  const mappedCodeBlocks = new Set<HTMLElement>();
   const walker = document.createTreeWalker(proseMirror, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parent = node.parentNode instanceof Element ? node.parentNode : null;
@@ -204,8 +205,13 @@ export function decorateMarkdownRoot(
     const codeBlock = textNode.parentElement?.closest<HTMLElement>('.milkdown-code-block');
     if (codeBlock !== null && codeBlock !== undefined) {
       const codeEnd = Number(codeBlock.dataset['codeSourceEnd']);
-      if (Number.isFinite(codeEnd)) {
-        sourceIndex = Math.max(sourceIndex, findSourceIndexAtOrAfter(sourceMap, codeEnd));
+      if (!mappedCodeBlocks.has(codeBlock)) {
+        mappedCodeBlocks.add(codeBlock);
+        const codeStart = Number(codeBlock.dataset['codeSourceStart']);
+        if (Number.isFinite(codeStart) && Number.isFinite(codeEnd)) {
+          mappings.push(...mapCodeBlockText(codeBlock, codeStart, codeEnd, markdown));
+          sourceIndex = Math.max(sourceIndex, findSourceIndexAtOrAfter(sourceMap, codeEnd));
+        }
       }
       continue;
     }
@@ -229,6 +235,53 @@ export function decorateMarkdownRoot(
   }
   renderedTextMappings.set(proseMirror, mappings);
   paintFeedbackHighlights(mappings, sortedRanges);
+}
+
+function mapCodeBlockText(
+  codeBlock: HTMLElement,
+  sourceStart: number,
+  sourceEnd: number,
+  markdown: string,
+): RenderedTextMapping[] {
+  const codeContent = codeBlock.querySelector<HTMLElement>('.cm-content');
+  if (codeContent === null) return [];
+  const lines = Array.from(codeContent.querySelectorAll<HTMLElement>('.cm-line'));
+  const mappings: RenderedTextMapping[] = [];
+  const lineStarts = getCodeBlockSourceLineOffsets(
+    markdown,
+    sourceStart,
+    lines.map((line) => line.textContent ?? ''),
+  );
+  lines.forEach((line, lineIndex) => {
+    const lineStart = lineStarts[lineIndex] ?? sourceStart;
+    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+    let current = walker.nextNode();
+    let lineOffset = 0;
+    while (current !== null) {
+      const node = current as Text;
+      const text = node.textContent ?? '';
+      const characters: RenderedCharacter[] = [];
+      let localOffset = 0;
+      for (const char of text) {
+        const start = lineStart + lineOffset + localOffset;
+        const end = start + char.length;
+        if (end <= sourceEnd) {
+          characters.push({
+            char,
+            start,
+            end,
+            localStart: localOffset,
+            localEnd: localOffset + char.length,
+          });
+        }
+        localOffset += char.length;
+      }
+      if (characters.length > 0) mappings.push({ node, characters });
+      lineOffset += text.length;
+      current = walker.nextNode();
+    }
+  });
+  return mappings;
 }
 
 function decorateAttachmentImages(
@@ -318,8 +371,8 @@ interface MarkdownNode {
   readonly type: string;
   readonly url?: string;
   readonly position?: {
-    readonly start: { readonly offset?: number };
-    readonly end: { readonly offset?: number };
+    readonly start: { readonly offset?: number; readonly line?: number };
+    readonly end: { readonly offset?: number; readonly line?: number };
   };
   readonly children?: readonly MarkdownNode[];
 }
@@ -386,7 +439,7 @@ function decorateCodeBlockSourceRanges(
   markdown: string,
   feedbackRanges: readonly SourceFeedbackRange[],
 ): void {
-  const codeRanges = getFencedCodeRanges(markdown);
+  const codeRanges = getCodeBlockSourceRanges(markdown);
   const codeBlocks = Array.from(root.querySelectorAll<HTMLElement>('.milkdown-code-block'));
   codeBlocks.forEach((codeBlock, index) => {
     const sourceRange = codeRanges[index];
@@ -409,36 +462,81 @@ function decorateCodeBlockSourceRanges(
   });
 }
 
-function getFencedCodeRanges(
+export function getCodeBlockSourceRanges(
   markdown: string,
 ): Array<{ readonly start: number; readonly end: number }> {
-  const lines = markdown.split('\n');
-  const lineStarts: number[] = [];
-  let offset = 0;
-  for (const line of lines) {
-    lineStarts.push(offset);
-    offset += line.length + 1;
-  }
-
   const ranges: Array<{ readonly start: number; readonly end: number }> = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    if (!/^\s*```/.test(lines[index] ?? '')) continue;
-    const closingFence = lines.findIndex(
-      (candidate, candidateIndex) => candidateIndex > index && /^\s*```/.test(candidate),
-    );
-    const firstContentLine = index + 1;
-    const lastContentLine = closingFence === -1 ? lines.length : closingFence;
-    const start = lineStarts[firstContentLine] ?? markdown.length;
-    const closingStart = lineStarts[lastContentLine] ?? markdown.length;
-    const end =
-      closingFence === -1
-        ? markdown.length
-        : Math.max(start, closingStart - (lastContentLine > firstContentLine ? 1 : 0));
-    ranges.push({ start, end });
-    if (closingFence === -1) break;
-    index = closingFence;
-  }
+  const lines = getMarkdownLines(markdown);
+  const visit = (node: MarkdownNode): void => {
+    const position = node.position;
+    if (
+      node.type === 'code' &&
+      position !== undefined &&
+      typeof position.start.offset === 'number' &&
+      typeof position.end.offset === 'number'
+    ) {
+      const startLine = lines[position.start.line === undefined ? -1 : position.start.line - 1];
+      const endLine = lines[position.end.line === undefined ? -1 : position.end.line - 1];
+      const openingFence = markdown.slice(position.start.offset).match(/^(`{3,}|~{3,})/);
+      if (openingFence !== null && openingFence !== undefined && startLine !== undefined) {
+        const fence = openingFence[1] ?? '';
+        const closingFencePattern = new RegExp(
+          `^[ \\t>+*\\-0-9.)]*${fence[0] === '~' ? '~' : '`'}{${fence.length},}[ \\t]*$`,
+        );
+        const hasClosingFence =
+          endLine !== undefined &&
+          endLine.start > startLine.start &&
+          closingFencePattern.test(endLine.text);
+        const firstContentLine = lines[position.start.line ?? 0];
+        const start = firstContentLine?.start ?? position.end.offset;
+        const previousLine = hasClosingFence ? lines[(position.end.line ?? 0) - 2] : undefined;
+        const end = hasClosingFence
+          ? Math.max(start, previousLine?.contentEnd ?? start)
+          : position.end.offset;
+        ranges.push({ start, end });
+      } else {
+        ranges.push({ start: position.start.offset, end: position.end.offset });
+      }
+    }
+    node.children?.forEach(visit);
+  };
+  visit(parseMarkdownTree(markdown));
   return ranges;
+}
+
+function getMarkdownLines(markdown: string): Array<{
+  readonly start: number;
+  readonly contentEnd: number;
+  readonly text: string;
+}> {
+  const lines: Array<{ start: number; contentEnd: number; text: string }> = [];
+  const lineEndingPattern = /\r\n|\n|\r/g;
+  let start = 0;
+  let match: RegExpExecArray | null;
+  while ((match = lineEndingPattern.exec(markdown)) !== null) {
+    const contentEnd = match.index;
+    lines.push({ start, contentEnd, text: markdown.slice(start, contentEnd) });
+    start = contentEnd + match[0].length;
+  }
+  lines.push({ start, contentEnd: markdown.length, text: markdown.slice(start) });
+  return lines;
+}
+
+export function getCodeBlockSourceLineOffsets(
+  markdown: string,
+  sourceStart: number,
+  renderedLines: readonly string[],
+): number[] {
+  const sourceLines = getMarkdownLines(markdown);
+  let lineIndex = sourceLines.findIndex((line) => line.start >= sourceStart);
+  if (lineIndex < 0) return [];
+  return renderedLines.map((renderedLine) => {
+    const sourceLine = sourceLines[lineIndex];
+    lineIndex += 1;
+    if (sourceLine === undefined || renderedLine === '') return sourceLine?.start ?? sourceStart;
+    const localOffset = sourceLine.text.indexOf(renderedLine);
+    return localOffset < 0 ? sourceLine.start : sourceLine.start + localOffset;
+  });
 }
 
 function isDecoratedUiText(element: Element): boolean {

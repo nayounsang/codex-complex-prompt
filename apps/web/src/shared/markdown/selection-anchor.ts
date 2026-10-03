@@ -1,5 +1,7 @@
 import type { SelectionAnchor, SelectionRect } from './types.js';
 import {
+  getCodeBlockSourceLineOffsets,
+  getCodeBlockSourceRanges,
   getMappedSourceOffset,
   getMarkdownTableRanges,
   locateMappedText,
@@ -63,14 +65,31 @@ export function getCodeBlockSelectionAnchor(
   const endBlock = closestCodeBlock(range.endContainer);
   if (startBlock === null || startBlock !== endBlock) return null;
 
-  const start = Number(startBlock.dataset['codeSourceStart']);
-  const end = Number(startBlock.dataset['codeSourceEnd']);
+  let start = Number(startBlock.dataset['codeSourceStart']);
+  let end = Number(startBlock.dataset['codeSourceEnd']);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    const codeBlocks = Array.from(root.querySelectorAll<HTMLElement>('.milkdown-code-block'));
+    const sourceRange = getCodeBlockSourceRanges(markdown)[codeBlocks.indexOf(startBlock)];
+    if (sourceRange === undefined) return null;
+    start = sourceRange.start;
+    end = sourceRange.end;
+    startBlock.dataset['codeSourceStart'] = String(start);
+    startBlock.dataset['codeSourceEnd'] = String(end);
+  }
   if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return null;
+  const selectionStart = codeBlockTextOffset(range.startContainer, range.startOffset, markdown);
+  const selectionEnd = codeBlockTextOffset(range.endContainer, range.endOffset, markdown);
+  if (selectionStart === null || selectionEnd === null || selectionStart >= selectionEnd)
+    return null;
   return {
-    quote: markdown.slice(start, end),
-    start,
-    end,
-    rect: toSelectionRect(startBlock.getBoundingClientRect()),
+    quote: markdown.slice(selectionStart, selectionEnd),
+    start: selectionStart,
+    end: selectionEnd,
+    rect: toSelectionRect(
+      typeof range.getBoundingClientRect === 'function'
+        ? range.getBoundingClientRect()
+        : startBlock.getBoundingClientRect(),
+    ),
   };
 }
 
@@ -132,10 +151,10 @@ function textOffset(root: HTMLElement, container: Node, offset: number): number 
   return total;
 }
 
-function codeBlockTextOffset(container: Node, offset: number): number | null {
+function codeBlockTextOffset(container: Node, offset: number, markdown?: string): number | null {
   const element =
     container.nodeType === Node.ELEMENT_NODE ? (container as Element) : container.parentElement;
-  const codeBlock = element?.closest<HTMLElement>('.milkdown-code-block[data-code-source-start]');
+  const codeBlock = element?.closest<HTMLElement>('.milkdown-code-block');
   const codeContent = codeBlock?.querySelector<HTMLElement>('.cm-content');
   if (
     codeBlock === null ||
@@ -147,16 +166,54 @@ function codeBlockTextOffset(container: Node, offset: number): number | null {
   }
   if (!codeContent.contains(container)) return null;
   const sourceStart = Number(codeBlock.dataset['codeSourceStart']);
+  if (!Number.isFinite(sourceStart)) return null;
+  const lines = Array.from(codeContent.querySelectorAll<HTMLElement>('.cm-line'));
+  if (lines.length === 0) {
+    const range = document.createRange();
+    range.selectNodeContents(codeContent);
+    range.setEnd(container, offset);
+    return sourceStart + range.toString().length;
+  }
+  const selectedLine =
+    (container.nodeType === Node.ELEMENT_NODE
+      ? (container as Element)
+      : container.parentElement
+    )?.closest<HTMLElement>('.cm-line') ?? null;
+  let lineIndex = selectedLine === null ? -1 : lines.indexOf(selectedLine);
+  if (lineIndex < 0 && container === codeContent) {
+    const child = codeContent.childNodes[offset];
+    const childLine =
+      (child?.nodeType === Node.ELEMENT_NODE
+        ? (child as Element)
+        : child?.parentElement
+      )?.closest<HTMLElement>('.cm-line') ?? null;
+    lineIndex = childLine === null ? lines.length - 1 : lines.indexOf(childLine);
+  }
+  if (lineIndex < 0) return null;
+
+  const line = lines[lineIndex];
+  if (line === undefined) return null;
   const range = document.createRange();
-  range.selectNodeContents(codeContent);
+  range.selectNodeContents(line);
   range.setEnd(container, offset);
-  return sourceStart + range.toString().length;
+  const lineStart =
+    markdown === undefined
+      ? sourceStart +
+        lines
+          .slice(0, lineIndex)
+          .reduce((length, previousLine) => length + (previousLine.textContent?.length ?? 0) + 1, 0)
+      : (getCodeBlockSourceLineOffsets(
+          markdown,
+          sourceStart,
+          lines.map((sourceLine) => sourceLine.textContent ?? ''),
+        )[lineIndex] ?? sourceStart);
+  return lineStart + range.toString().length;
 }
 
 function closestCodeBlock(container: Node): HTMLElement | null {
   const element =
     container.nodeType === Node.ELEMENT_NODE ? (container as Element) : container.parentElement;
-  return element?.closest<HTMLElement>('.milkdown-code-block[data-code-source-start]') ?? null;
+  return element?.closest<HTMLElement>('.milkdown-code-block') ?? null;
 }
 
 function elementSourceOffset(element: Element, offset: number): number | null {

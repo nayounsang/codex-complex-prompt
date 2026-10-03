@@ -679,20 +679,6 @@ button:focus-visible,
   background: #fafafa;
 }
 
-.markdown-content .milkdown-code-block.feedback-code-highlight,
-.markdown-editor .milkdown .milkdown-code-block.feedback-code-highlight {
-  border-color: #eecb54;
-  background: #fff8d8;
-  box-shadow: 0 0 0 2px rgb(238 203 84 / 22%);
-}
-
-.markdown-content .milkdown-code-block.feedback-code-highlight .cm-editor,
-.markdown-content .milkdown-code-block.feedback-code-highlight .cm-gutters,
-.markdown-editor .milkdown .milkdown-code-block.feedback-code-highlight .cm-editor,
-.markdown-editor .milkdown .milkdown-code-block.feedback-code-highlight .cm-gutters {
-  background: #fff8d8;
-}
-
 .annotated-markdown img[role='button'] {
   cursor: pointer;
 }
