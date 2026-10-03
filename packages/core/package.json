@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./feedback": {
+      "types": "./src/feedback.ts",
+      "import": "./dist/feedback.js"
     }
   },
   "types": "src/index.ts",
@@ -14,6 +18,7 @@
   "scripts": {
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
+    "pretest": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "build": "tsc -p tsconfig.build.json"

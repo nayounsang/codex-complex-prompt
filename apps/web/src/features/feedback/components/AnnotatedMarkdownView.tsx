@@ -53,8 +53,6 @@ export function AnnotatedMarkdownView({
   const decorationRangeKey = JSON.stringify(
     annotations.flatMap((annotation) =>
       annotation.scope === 'selection' &&
-      annotation.start !== undefined &&
-      annotation.end !== undefined &&
       annotation.end > annotation.start &&
       markdown.slice(annotation.start, annotation.end) === annotation.quote
         ? [{ id: annotation.id, start: annotation.start, end: annotation.end }]

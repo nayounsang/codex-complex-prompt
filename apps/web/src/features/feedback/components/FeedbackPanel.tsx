@@ -46,14 +46,12 @@ export function FeedbackPanel({
                   )}
                   {annotation.scope === 'global'
                     ? 'Global'
-                    : annotation.start !== undefined &&
-                        annotation.end !== undefined &&
-                        markdown.slice(annotation.start, annotation.end) === annotation.quote
+                    : markdown.slice(annotation.start, annotation.end) === annotation.quote
                       ? 'Selected text'
                       : 'Invalid selection'}
                 </span>
               </div>
-              {annotation.quote !== undefined && <blockquote>{annotation.quote}</blockquote>}
+              {annotation.scope === 'selection' && <blockquote>{annotation.quote}</blockquote>}
               {editingId === annotation.id ? (
                 <textarea
                   aria-label={`Edit feedback ${index + 1}`}

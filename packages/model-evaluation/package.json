@@ -1,0 +1,26 @@
+{
+  "name": "@codex-complex-prompt/model-evaluation",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "eval": "pnpm --filter @codex-complex-prompt/core build && tsx src/cli.ts",
+    "cases": "pnpm --filter @codex-complex-prompt/core build && tsx src/cli.ts --list",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@codex-complex-prompt/core": "workspace:*",
+    "@vitest/coverage-v8": "^3.2.7",
+    "@typescript-eslint/eslint-plugin": "^8.24.0",
+    "@typescript-eslint/parser": "^8.24.0",
+    "@types/node": "^22.13.4",
+    "@vitest/eslint-plugin": "^1.6.18",
+    "eslint": "^9.22.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}

@@ -1,4 +1,8 @@
-import type { FeedbackAnnotation, SelectionAnchor } from '../model/feedback-types.js';
+import type {
+  FeedbackAnnotation,
+  SelectionAnchor,
+  SelectionFeedbackAnnotation,
+} from '../model/feedback-types.js';
 
 export function mergeSelectionWithExistingFeedback(
   anchor: SelectionAnchor,
@@ -6,17 +10,15 @@ export function mergeSelectionWithExistingFeedback(
   markdown: string,
 ): SelectionAnchor {
   const existing = annotations.find(
-    (annotation) =>
+    (annotation): annotation is SelectionFeedbackAnnotation =>
       annotation.scope === 'selection' &&
-      annotation.start !== undefined &&
-      annotation.end !== undefined &&
       annotation.start < anchor.end &&
       annotation.end > anchor.start,
   );
   if (existing === undefined) return anchor;
 
-  const start = Math.min(anchor.start, existing.start as number);
-  const end = Math.max(anchor.end, existing.end as number);
+  const start = Math.min(anchor.start, existing.start);
+  const end = Math.max(anchor.end, existing.end);
   return {
     ...anchor,
     annotationId: existing.id,

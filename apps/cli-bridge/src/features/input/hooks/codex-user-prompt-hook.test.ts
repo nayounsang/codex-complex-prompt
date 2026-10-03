@@ -319,7 +319,6 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
     expect(result.hookSpecificOutput?.additionalContext).toContain(
       'Return the complete updated Markdown only',
     );
-    expect(result.hookSpecificOutput?.additionalContext).toContain('not Submit');
     expect(result.hookSpecificOutput?.additionalContext).toContain(
       'Do not call ExitPlanMode for this feedback submission',
     );

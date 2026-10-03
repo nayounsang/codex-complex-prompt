@@ -50,6 +50,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@codex-complex-prompt/core": "workspace:*",
     "@codex-complex-prompt/protocol": "workspace:*",
     "@codex-complex-prompt/server": "workspace:*",
     "@codex-complex-prompt/web": "workspace:*",

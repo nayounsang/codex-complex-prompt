@@ -5,6 +5,7 @@ import {
 } from '@codex-complex-prompt/protocol';
 
 import { resolveInitialMarkdown } from '../model/codex-prompt-input.js';
+import { CODEX_FEEDBACK_SUBMISSION_INSTRUCTION } from '../model/codex-feedback-prompt-instruction.js';
 import { DEFAULT_BROWSER_WAIT_TIMEOUT_MS } from '../../../shared/hook-timeouts.js';
 import {
   createFeedbackLoopStateStore,
@@ -121,8 +122,7 @@ export async function runCodexUserPromptHook(
             ? ''
             : `Project working directory for relative attachment paths: ${input.cwd}\nRead the PNG files referenced by Markdown image paths when they are relevant to the task.\n\n`) +
           (submission.mode === 'feedback'
-            ? 'The user selected AI Feedback, not Submit. Apply the feedback to the complete Current Markdown document included below. Preserve all unaffected content. Return the complete updated Markdown only, without an introduction, summary, or code fence. Do not call ExitPlanMode for this feedback submission; the browser editor will reopen so the user can continue review.\n\n' +
-              command
+            ? CODEX_FEEDBACK_SUBMISSION_INSTRUCTION + command
             : input.permission_mode === 'plan'
               ? 'Plan Mode is active and the user selected Submit. Treat the following command as a request to prepare an implementation plan only. Do not edit files or carry out the plan. Once the plan is ready, call ExitPlanMode to present it for user approval.\n\n' +
                 command
