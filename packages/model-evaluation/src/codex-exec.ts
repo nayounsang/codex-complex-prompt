@@ -28,7 +28,6 @@ export async function runCodex(prompt: string): Promise<ModelRunResult> {
   );
   const traceChunks: Buffer[] = [];
   child.stdout.on('data', (chunk: Buffer) => traceChunks.push(chunk));
-  child.stdin.end(prompt);
 
   const exitCode = await new Promise<number | null>((resolve, reject) => {
     child.once('error', (error: Error) =>
@@ -38,7 +37,18 @@ export async function runCodex(prompt: string): Promise<ModelRunResult> {
         }),
       ),
     );
+    child.stdin.once('error', (error: Error) =>
+      reject(
+        new Error(
+          `Could not send the prompt to the Codex CLI. Output directory: ${outputDirectory}.`,
+          {
+            cause: error,
+          },
+        ),
+      ),
+    );
     child.once('close', resolve);
+    child.stdin.end(prompt);
   });
   const trace = Buffer.concat(traceChunks).toString('utf8');
   if (trace !== '') await writeFile(tracePath, trace, 'utf8');
