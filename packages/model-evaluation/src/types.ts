@@ -1,4 +1,7 @@
-import type { FeedbackAnnotation, SelectionFeedbackAnnotation } from '@codex-complex-prompt/core';
+import type {
+  FeedbackAnnotation,
+  SelectionFeedbackAnnotation,
+} from '@codex-complex-prompt/core/feedback';
 
 export interface ModelRunResult {
   readonly output: string;

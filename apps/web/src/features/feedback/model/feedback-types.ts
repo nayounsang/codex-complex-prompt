@@ -3,7 +3,7 @@ export type {
   FeedbackScope,
   GlobalFeedbackAnnotation,
   SelectionFeedbackAnnotation,
-} from '@codex-complex-prompt/core';
+} from '@codex-complex-prompt/core/feedback';
 
 import type { SelectionAnchor as MarkdownSelectionAnchor } from '../../../shared/markdown/types.js';
 

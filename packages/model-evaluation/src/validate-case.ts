@@ -1,4 +1,4 @@
-import type { SelectionFeedbackAnnotation } from '@codex-complex-prompt/core';
+import type { SelectionFeedbackAnnotation } from '@codex-complex-prompt/core/feedback';
 
 import type { ModelEvaluationCase } from './types.js';
 

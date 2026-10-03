@@ -83,3 +83,49 @@ test('accepts separated selection ranges and returns them in annotation order', 
     selections,
   );
 });
+
+test('rejects a selection quote that differs from its fixture text', () => {
+  assert.throws(
+    () =>
+      validateEvaluationCase(
+        createCase({
+          annotations: [
+            {
+              id: 'selection-1',
+              scope: 'selection',
+              start: 0,
+              end: 3,
+              quote: 'Wrong',
+              feedback: 'Edit this text.',
+            },
+          ],
+        }),
+        'One',
+        '/fixture.md',
+      ),
+    /Selection range does not match its quote/,
+  );
+});
+
+test('rejects a selection range that extends past the fixture', () => {
+  assert.throws(
+    () =>
+      validateEvaluationCase(
+        createCase({
+          annotations: [
+            {
+              id: 'selection-1',
+              scope: 'selection',
+              start: 0,
+              end: 4,
+              quote: 'One',
+              feedback: 'Edit this text.',
+            },
+          ],
+        }),
+        'One',
+        '/fixture.md',
+      ),
+    /Selection ranges overlap, touch, or are invalid/,
+  );
+});

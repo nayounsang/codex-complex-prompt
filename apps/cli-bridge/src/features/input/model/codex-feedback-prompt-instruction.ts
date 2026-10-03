@@ -1,4 +1,4 @@
-import { FEEDBACK_EDIT_INSTRUCTION } from '@codex-complex-prompt/core';
+import { FEEDBACK_EDIT_INSTRUCTION } from '@codex-complex-prompt/core/feedback';
 
 export const CODEX_FEEDBACK_SUBMISSION_INSTRUCTION =
   FEEDBACK_EDIT_INSTRUCTION +
