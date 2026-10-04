@@ -81,6 +81,47 @@ test('selected-feedback criterion checks each selected feedback result', async (
   );
 });
 
+test('selected-feedback criterion can require an exact selected result', async () => {
+  const options = {
+    selectionIndex: 0,
+    mustNotContain: 'beef',
+    mustContain: 'fork',
+    expectedSelectedOutput: 'ground fork patty',
+  };
+
+  assert.equal(
+    (
+      await selectedFeedbackApplied.evaluate(
+        context({ selectedOutputs: ['ground fork patty', 'UPDATED'] }),
+        options,
+      )
+    ).passed,
+    true,
+  );
+  assert.equal(
+    (
+      await selectedFeedbackApplied.evaluate(
+        context({ selectedOutputs: ['seasoned ground fork patty', 'UPDATED'] }),
+        options,
+      )
+    ).passed,
+    false,
+  );
+});
+
+test('selected-feedback criterion omits exact-match status when none is configured', async () => {
+  const result = await selectedFeedbackApplied.evaluate(
+    context({ selectedOutputs: ['Return HTTP 429.', 'UPDATED'] }),
+    {
+      selectionIndex: 0,
+      mustNotContain: 'Retry-After: 30',
+      mustContain: 'HTTP 429',
+    },
+  );
+
+  assert.equal(result.detail, 'Requested text removed: true; required text retained: true.');
+});
+
 test('similar-content criterion checks each configured decoy passage', async () => {
   const options = { passages: ['Retry-After: 60', 'delivery Retry-After header'] };
   assert.equal(

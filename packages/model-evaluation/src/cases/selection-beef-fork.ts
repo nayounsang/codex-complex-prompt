@@ -3,6 +3,9 @@ import { selectedFeedbackApplied } from '../criteria/selected-feedback-applied.j
 import { similarContentPreserved } from '../criteria/similar-content-preserved.js';
 import { configureCriterion, type ModelEvaluationCase } from '../types.js';
 
+const selectedParagraph =
+  'Divide the ground beef into four equal portions and shape them into patties slightly wider than the buns. Season both sides with salt and black pepper. Heat the oil in a skillet over medium-high heat. Cook the patties for about four minutes on each side, or until they reach the desired doneness. Add a slice of cheddar during the final minute so it melts over each patty.';
+
 const selectionBeefFork: ModelEvaluationCase = {
   id: 'selection-beef-fork',
   title: 'Replace beef only in the selected recipe paragraph',
@@ -13,8 +16,7 @@ const selectionBeefFork: ModelEvaluationCase = {
       scope: 'selection',
       start: 496,
       end: 868,
-      quote:
-        'Divide the ground beef into four equal portions and shape them into patties slightly wider than the buns. Season both sides with salt and black pepper. Heat the oil in a skillet over medium-high heat. Cook the patties for about four minutes on each side, or until they reach the desired doneness. Add a slice of cheddar during the final minute so it melts over each patty.',
+      quote: selectedParagraph,
       feedback: '이 문단의 beef를 fork로 바꿔줘.',
     },
   ],
@@ -23,6 +25,7 @@ const selectionBeefFork: ModelEvaluationCase = {
       selectionIndex: 0,
       mustNotContain: 'beef',
       mustContain: 'fork',
+      expectedSelectedOutput: selectedParagraph.replace(/\bbeef\b/g, 'fork'),
     }),
     configureCriterion(outsideSelectionUnchanged, {}),
     configureCriterion(similarContentPreserved, {
