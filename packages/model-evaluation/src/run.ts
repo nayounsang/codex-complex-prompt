@@ -33,9 +33,13 @@ export async function evaluateCase(
   const context: CriterionContext = {
     original,
     revised: modelRun.output,
-    selections,
-    selectedOutputs: isolation.selectedOutputs,
-    selectionIsolationSucceeded: isolation.succeeded,
+    ...(selections.length === 0
+      ? {}
+      : {
+          selections,
+          selectedOutputs: isolation.selectedOutputs,
+          selectionIsolationSucceeded: isolation.succeeded,
+        }),
   };
   const criteria = await Promise.all(
     testCase.criteria.map(async (criterion) => ({

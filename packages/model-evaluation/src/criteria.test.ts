@@ -40,6 +40,10 @@ test('outside-selection criterion rejects changes outside every selected range',
       .passed,
     false,
   );
+  assert.equal(
+    (await outsideSelectionUnchanged.evaluate({ original: '', revised: '' }, {})).passed,
+    false,
+  );
 });
 
 test('selected-feedback criterion checks each selected feedback result', async () => {
