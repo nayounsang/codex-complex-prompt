@@ -35,7 +35,7 @@ interface PromptHeaderProps {
 export function PromptHeader(props: PromptHeaderProps): React.JSX.Element {
   return (
     <section className="app-action-bar" aria-label="Prompt actions">
-      <div className="action-inner">
+      <div className="action-inner" data-mode={props.mode}>
         <ModeTabs mode={props.mode} onChange={props.onModeChange} />
         {props.mode === 'edit' && (
           <TemplateManager

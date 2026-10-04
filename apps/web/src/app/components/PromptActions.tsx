@@ -34,48 +34,46 @@ export function PromptActions({
   return (
     <div className="prompt-actions">
       {mode === 'feedback' && (
-        <>
-          <Popover.Root open={globalFeedbackOpen} onOpenChange={setGlobalFeedbackOpen}>
-            <Popover.Trigger
-              id="global-feedback-trigger"
-              className={`button-secondary header-feedback-button${globalFeedback === undefined ? '' : ' has-global-feedback'}`}
-              aria-label={
-                globalFeedback === undefined ? 'Add global feedback' : 'Edit global feedback'
-              }
-              disabled={isSubmitting}
-            >
-              <span className="global-feedback-icon" aria-hidden="true" />
-              <span>Global feedback</span>
-              {globalFeedback !== undefined && <span className="global-feedback-state">Added</span>}
-            </Popover.Trigger>
-            <Popover.Portal>
-              <Popover.Positioner side="bottom" sideOffset={8} align="end" collisionPadding={12}>
-                <Popover.Popup className="feedback-popover" initialFocus={true}>
-                  <FeedbackComposer
-                    selection={null}
-                    initialFeedback={globalFeedback?.feedback ?? ''}
-                    onSubmit={(feedback) => {
-                      onAddGlobalFeedback(feedback);
-                      setGlobalFeedbackOpen(false);
-                    }}
-                    onCancel={() => setGlobalFeedbackOpen(false)}
-                  />
-                </Popover.Popup>
-              </Popover.Positioner>
-            </Popover.Portal>
-          </Popover.Root>
-          <Button
-            type="button"
-            className="button-primary"
-            disabled={!isConnected || isSubmitting || feedbackCount === 0}
-            onClick={onSendFeedback}
+        <Popover.Root open={globalFeedbackOpen} onOpenChange={setGlobalFeedbackOpen}>
+          <Popover.Trigger
+            id="global-feedback-trigger"
+            className={`button-secondary header-feedback-button${globalFeedback === undefined ? '' : ' has-global-feedback'}`}
+            aria-label={
+              globalFeedback === undefined ? 'Add global feedback' : 'Edit global feedback'
+            }
+            disabled={isSubmitting}
           >
-            {isSubmitting
-              ? 'Sending…'
-              : `Send Feedback${feedbackCount > 0 ? ` (${feedbackCount})` : ''}`}
-          </Button>
-        </>
+            <span className="global-feedback-icon" aria-hidden="true" />
+            <span>Global feedback</span>
+            {globalFeedback !== undefined && <span className="global-feedback-state">Added</span>}
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Positioner side="bottom" sideOffset={8} align="end" collisionPadding={12}>
+              <Popover.Popup className="feedback-popover" initialFocus={true}>
+                <FeedbackComposer
+                  selection={null}
+                  initialFeedback={globalFeedback?.feedback ?? ''}
+                  onSubmit={(feedback) => {
+                    onAddGlobalFeedback(feedback);
+                    setGlobalFeedbackOpen(false);
+                  }}
+                  onCancel={() => setGlobalFeedbackOpen(false)}
+                />
+              </Popover.Popup>
+            </Popover.Positioner>
+          </Popover.Portal>
+        </Popover.Root>
       )}
+      <Button
+        type="button"
+        className="button-primary"
+        disabled={!isConnected || isSubmitting || feedbackCount === 0}
+        onClick={onSendFeedback}
+      >
+        {isSubmitting && mode !== 'edit'
+          ? 'Sending…'
+          : `Send Feedback${feedbackCount > 0 ? ` (${feedbackCount})` : ''}`}
+      </Button>
       <Button
         type="button"
         className="button-secondary"
