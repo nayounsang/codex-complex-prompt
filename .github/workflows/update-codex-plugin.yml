@@ -33,12 +33,25 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - name: Update the pinned plugin commit
-        id: update-plugin-pin
+      - name: Create or refresh the update pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
           marketplace_file=".agents/plugins/marketplace.json"
+          git_auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+
+          git_with_token() {
+            GIT_CONFIG_COUNT=1 \
+              GIT_CONFIG_KEY_0='http.https://github.com/.extraheader' \
+              GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $git_auth_header" \
+              git "$@"
+          }
+
+          # Rebuild the update branch from the latest main commit on every run.
+          git_with_token fetch origin main
+          git reset --hard FETCH_HEAD
           current_sha="$(jq -r '.plugins[] | select(.name == "younsang-codex-plugin") | .source.sha // empty' "$marketplace_file")"
           if [[ ! "$current_sha" =~ ^[0-9a-f]{40}$ ]]; then
             echo "The marketplace plugin source must have a pinned 40-character SHA."
@@ -51,42 +64,28 @@ jobs:
             echo "The update script did not produce a 40-character commit SHA."
             exit 1
           fi
-
           if [[ "$upstream_sha" == "$current_sha" ]]; then
-            echo "The project already pins the latest upstream commit."
-            changed=false
-          else
-            changed=true
+            echo "The latest main commit already pins the latest upstream plugin commit."
+            exit 0
           fi
 
-          {
-            echo "current_sha=$current_sha"
-            echo "upstream_sha=$upstream_sha"
-            echo "changed=$changed"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Open an update pull request
-        if: steps.update-plugin-pin.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CURRENT_SHA: ${{ steps.update-plugin-pin.outputs.current_sha }}
-          UPSTREAM_SHA: ${{ steps.update-plugin-pin.outputs.upstream_sha }}
-        run: |
-          set -euo pipefail
-
-          marketplace_file=".agents/plugins/marketplace.json"
-          current_sha="$CURRENT_SHA"
-          upstream_sha="$UPSTREAM_SHA"
           short_sha="${upstream_sha:0:12}"
-          branch="automation/update-younsang-codex-plugin-${short_sha}"
-          github_auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          branch="automation/update-younsang-codex-plugin"
 
-          git_with_token() {
-            GIT_CONFIG_COUNT=1 \
-              GIT_CONFIG_KEY_0='http.https://github.com/.extraheader' \
-              GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $github_auth_header" \
-              git "$@"
-          }
+          # Keep a declined update's branch intact; use a new branch for a later SHA.
+          closed_stable_pr="$(gh pr list --state closed --head "$branch" --json number --jq '.[0].number // empty')"
+          if [[ -n "$closed_stable_pr" ]]; then
+            branch="${branch}-${short_sha}"
+          fi
+
+          existing_pr="$(gh pr list --state open --head "$branch" --json number --jq '.[0].number // empty')"
+          if [[ -z "$existing_pr" ]]; then
+            closed_pr="$(gh pr list --state closed --head "$branch" --json number --jq '.[0].number // empty')"
+            if [[ -n "$closed_pr" ]]; then
+              echo "An update pull request for $upstream_sha was already closed; leaving that decision in place."
+              exit 0
+            fi
+          fi
 
           create_pr() {
             gh pr create \
@@ -96,32 +95,16 @@ jobs:
               --body "Updates the project plugin pin from ${current_sha} to ${upstream_sha}. Review the upstream changes: https://github.com/nayounsang/younsang-codex-plugin/compare/${current_sha}...${upstream_sha}"
           }
 
-          existing_pr="$(gh pr list --state all --head "$branch" --json number,state --jq '.[0] // empty')"
-          if [[ -n "$existing_pr" ]]; then
-            existing_pr_state="$(jq -r '.state' <<< "$existing_pr")"
-            if [[ "$existing_pr_state" == "OPEN" ]]; then
-              echo "An update pull request for $upstream_sha is already open."
-            else
-              echo "An update pull request for $upstream_sha was already closed; leaving that decision in place."
-            fi
-            exit 0
-          fi
-
-          if git_with_token ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            git_with_token fetch origin "$branch"
-            branch_sha="$(git show "FETCH_HEAD:${marketplace_file}" | jq -r '.plugins[] | select(.name == "younsang-codex-plugin") | .source.sha // empty')"
-            if [[ "$branch_sha" != "$upstream_sha" ]]; then
-              echo "The existing branch $branch does not pin $upstream_sha; refusing to reuse it."
-              exit 1
-            fi
-            echo "Retrying pull request creation for the existing update branch."
-            create_pr
-            exit 0
-          fi
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "$marketplace_file"
           git commit -m "chore: update Younsang Codex plugin to ${short_sha}"
-          git_with_token push origin "HEAD:refs/heads/${branch}"
+          git_with_token push --force origin "HEAD:refs/heads/${branch}"
+
+          if [[ -n "$existing_pr" ]]; then
+            gh pr edit "$existing_pr" \
+              --title "chore: update Younsang Codex plugin to ${short_sha}" \
+              --body "Updates the project plugin pin from ${current_sha} to ${upstream_sha}. Review the upstream changes: https://github.com/nayounsang/younsang-codex-plugin/compare/${current_sha}...${upstream_sha}"
+            exit 0
+          fi
           create_pr
