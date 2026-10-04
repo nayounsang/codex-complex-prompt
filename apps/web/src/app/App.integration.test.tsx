@@ -817,7 +817,7 @@ describe('App integration', () => {
     const start = markdown.indexOf('answer');
     await waitFor(() => expect(article.querySelector('[data-code-source-start]')).not.toBeNull());
     selectCodeSourceRange(article, start, start + 'answer'.length);
-    expect(within(await screen.findByRole('dialog')).getByText('const answer = 42;')).toBeVisible();
+    expect(within(await screen.findByRole('dialog')).getByText('answer')).toBeVisible();
     fireEvent.change(await screen.findByRole('textbox', { name: 'Feedback on selection' }), {
       target: { value: 'Review the implementation.' },
     });
