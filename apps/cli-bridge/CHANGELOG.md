@@ -1,5 +1,12 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.3.5
+
+### Patch Changes
+
+- 2f05aef: Improve feedback mode action clarity and keep the feedback list usable while scrolling.
+- f2f3d7e: Constrain selected AI feedback to its quoted Markdown range so similar content elsewhere stays unchanged.
+
 ## 0.3.4
 
 ### Patch Changes
