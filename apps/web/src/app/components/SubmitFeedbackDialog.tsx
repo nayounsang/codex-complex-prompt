@@ -20,10 +20,10 @@ export function SubmitFeedbackDialog({
               You have feedback that has not been sent. Choose how to continue.
             </AlertDialog.Description>
             <div className="dialog-actions">
-              <AlertDialog.Close className="button-quiet" onClick={onCancel}>
+              <AlertDialog.Close className="button-secondary" onClick={onCancel}>
                 Cancel
               </AlertDialog.Close>
-              <Button type="button" className="button-secondary" onClick={onApproveAnyway}>
+              <Button type="button" className="button-quiet" onClick={onApproveAnyway}>
                 Approve anyway
               </Button>
               <Button type="button" className="button-primary" onClick={onSendFeedback}>
