@@ -8,7 +8,7 @@ import { evaluationCases } from './cases/index.js';
 import { outsideSelectionUnchanged } from './criteria/outside-selection-unchanged.js';
 import { evaluateCase } from './run.js';
 import { configureCriterion } from './types.js';
-import type { EvaluationCriterion, ModelEvaluationCase } from './types.js';
+import type { CriterionContext, EvaluationCriterion, ModelEvaluationCase } from './types.js';
 
 const fixtureDirectories: string[] = [];
 
@@ -38,7 +38,7 @@ describe('evaluateCase', () => {
           {
             id: 'selected-output',
             evaluate: ({ selectedOutputs }) => ({
-              passed: selectedOutputs[0] === 'Rewritten',
+              passed: selectedOutputs?.[0] === 'Rewritten',
               detail: 'Checks the rewritten selected text.',
             }),
           } as EvaluationCriterion<Record<never, never>>,
@@ -86,19 +86,41 @@ describe('evaluateCase', () => {
 
   it('evaluates a document with global feedback and no selected ranges', async () => {
     const original = 'Original document.\n';
+    let criterionContext: CriterionContext | undefined;
     const testCase = await createCase(original, {
       annotations: [{ id: 'global-1', scope: 'global', feedback: 'Make it concise.' }],
-      criteria: [configureCriterion(outsideSelectionUnchanged, {})],
+      criteria: [
+        configureCriterion(
+          {
+            id: 'global-context',
+            evaluate: (context: CriterionContext) => {
+              criterionContext = context;
+              return { passed: true, detail: 'Global feedback context received.' };
+            },
+          },
+          {},
+        ),
+      ],
     });
 
     const result = await evaluateCase(testCase, async () => modelResult(original));
 
     expect(result.passed).toBe(true);
     expect(result.criteria[0]?.passed).toBe(true);
+    expect(criterionContext).toMatchObject({ original, revised: original });
+    expect(criterionContext).not.toHaveProperty('selections');
+    expect(criterionContext).not.toHaveProperty('selectedOutputs');
+    expect(criterionContext).not.toHaveProperty('selectionIsolationSucceeded');
   });
 
-  it('registers the scoped feedback evaluation case', () => {
-    expect(evaluationCases.map(({ id }) => id)).toContain('selection-feedback-scope');
+  it('registers both selection-scoped and global feedback evaluation cases', () => {
+    expect(evaluationCases.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([
+        'selection-feedback-scope',
+        'selection-beef-fork',
+        'global-ketchup-replacement',
+      ]),
+    );
   });
 });
 

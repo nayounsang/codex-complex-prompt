@@ -16,12 +16,12 @@ export interface CriterionContext {
   readonly original: string;
   /** Complete Markdown returned by the model. */
   readonly revised: string;
-  /** Selected-feedback annotations, in the order used by the case. */
-  readonly selections: readonly SelectionFeedbackAnnotation[];
+  /** Selection-specific details are absent when a case contains only global feedback. */
+  readonly selections?: readonly SelectionFeedbackAnnotation[];
   /** Model output isolated for each selection; `null` when isolation fails. Uses `selections` order. */
-  readonly selectedOutputs: readonly (string | null)[];
+  readonly selectedOutputs?: readonly (string | null)[];
   /** Whether all text outside the selected ranges is unchanged in the model output. */
-  readonly selectionIsolationSucceeded: boolean;
+  readonly selectionIsolationSucceeded?: boolean;
 }
 
 /** Result returned by one evaluation criterion. */
