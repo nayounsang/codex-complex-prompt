@@ -53,6 +53,27 @@ test('global replacement criterion rejects an incomplete or extra replacement co
   );
 });
 
+test('global replacement criterion rejects a replacement at an unrelated occurrence when counts match', async () => {
+  const result = await globalReplacementApplied.evaluate(
+    context('ketchup on bun. tomato on plate.', 'tomato on bun. mustard on plate.'),
+    { targetWord: 'ketchup', replacementWord: 'mustard' },
+  );
+
+  assert.equal(result.passed, false);
+});
+
+test('global replacement criterion accepts an added prefix before the replaced text', async () => {
+  const result = await globalReplacementApplied.evaluate(
+    context(
+      'ketchup on bun. tomato on plate.',
+      'Here is the revision: mustard on bun. tomato on plate.',
+    ),
+    { targetWord: 'ketchup', replacementWord: 'mustard' },
+  );
+
+  assert.equal(result.passed, true);
+});
+
 test('global replacement criterion rejects values that are not single words', async () => {
   const result = await globalReplacementApplied.evaluate(
     context('ketchup on the side', 'mustard on the side'),

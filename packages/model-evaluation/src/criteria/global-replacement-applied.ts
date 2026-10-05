@@ -18,31 +18,54 @@ const globalReplacementApplied: EvaluationCriterion<GlobalReplacementOptions> = 
       };
     }
 
-    const originalTargetCount = countWholeWord(original, targetWord);
-    const remainingTargetCount = countWholeWord(revised, targetWord);
+    const normalizedTarget = targetWord.toLowerCase();
+    const normalizedReplacement = replacementWord.toLowerCase();
+    const originalWords = wholeWords(original);
+    const revisedWords = wholeWords(revised);
+    const originalTargetCount = originalWords.filter((word) => word === normalizedTarget).length;
+    const remainingTargetCount = revisedWords.filter((word) => word === normalizedTarget).length;
     const expectedReplacementCount =
-      countWholeWord(original, replacementWord) + originalTargetCount;
-    const revisedReplacementCount = countWholeWord(revised, replacementWord);
+      originalWords.filter((word) => word === normalizedReplacement).length + originalTargetCount;
+    const revisedReplacementCount = revisedWords.filter(
+      (word) => word === normalizedReplacement,
+    ).length;
+    const expectedWords = originalWords.map((word) =>
+      word === normalizedTarget ? normalizedReplacement : word,
+    );
+    const expectedWordsRetainedInOrder = isSubsequence(expectedWords, revisedWords);
     const passed =
       originalTargetCount > 0 &&
       remainingTargetCount === 0 &&
-      revisedReplacementCount === expectedReplacementCount;
+      revisedReplacementCount === expectedReplacementCount &&
+      expectedWordsRetainedInOrder;
 
     return {
       passed,
       detail: passed
         ? `All ${originalTargetCount} ${targetWord} occurrence(s) were replaced with ${replacementWord}.`
-        : `${remainingTargetCount} ${targetWord} occurrence(s) remain; expected ${expectedReplacementCount} ${replacementWord} occurrence(s), found ${revisedReplacementCount}.`,
+        : `${remainingTargetCount} ${targetWord} occurrence(s) remain; expected ${expectedReplacementCount} ${replacementWord} occurrence(s), found ${revisedReplacementCount}; expected words retained in order: ${expectedWordsRetainedInOrder}.`,
     };
   },
 };
 
-function countWholeWord(text: string, word: string): number {
-  const normalizedWord = word.toLowerCase();
-  return text
-    .toLowerCase()
-    .split(/[^a-z0-9]+/g)
-    .filter((token) => token === normalizedWord).length;
+function wholeWords(text: string): string[] {
+  return text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+}
+
+function isSubsequence(expected: readonly string[], actual: readonly string[]): boolean {
+  let expectedIndex = 0;
+
+  for (const word of actual) {
+    if (word === expected[expectedIndex]) {
+      expectedIndex += 1;
+    }
+
+    if (expectedIndex === expected.length) {
+      return true;
+    }
+  }
+
+  return expectedIndex === expected.length;
 }
 
 function isSingleWord(value: string): boolean {
