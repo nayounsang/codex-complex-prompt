@@ -698,7 +698,7 @@ describe('App integration', () => {
     expect(within(article).getByText('Review this')).toBeInTheDocument();
   });
 
-  it('키보드로 문서를 선택하면 선택 영역 위에 feedback tooltip을 표시한다', async () => {
+  it('native selectionchange로 선택 문서를 감지해 feedback tooltip을 표시한다', async () => {
     renderWithSession();
     await editMarkdown('Keyboard selection');
     fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
@@ -712,11 +712,38 @@ describe('App integration', () => {
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
-    document.dispatchEvent(new Event('selectionchange'));
+    fireEvent(document, new Event('selectionchange'));
 
     expect(
       await screen.findByRole('textbox', { name: 'Feedback on selection' }),
     ).toBeInTheDocument();
+  });
+
+  it('Milkdown selectionUpdated로 선택 문서를 감지해 feedback tooltip을 표시한다', async () => {
+    renderWithSession();
+    await editMarkdown('Plugin selection');
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
+
+    const article = screen.getByTestId('annotated-markdown');
+    await waitFor(() => expect(article.querySelector('p')?.textContent).toBe('Plugin selection'));
+    const textNode = article.querySelector('p')?.firstChild;
+    if (!(textNode instanceof Text)) throw new Error('Rendered paragraph text was not found.');
+    const range = document.createRange();
+    range.selectNodeContents(textNode);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    act(() => crepeTestState.state.instance?.emitSelectionUpdated());
+
+    expect(
+      await screen.findByRole('textbox', { name: 'Feedback on selection' }),
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole('textbox', { name: 'Feedback on selection' })
+        .closest('form')
+        ?.querySelector('q')?.textContent,
+    ).toBe('Plugin selection');
   });
 
   it('겹치는 선택 영역은 기존 feedback을 열고 확장된 범위로 저장한다', async () => {

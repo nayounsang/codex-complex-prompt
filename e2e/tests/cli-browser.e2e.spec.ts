@@ -171,14 +171,30 @@ test('이미지 저장을 기다린 뒤 첨부 링크가 포함된 Markdown을 C
     const editor = page.getByRole('textbox', { name: 'Command' });
     await expect(editor).toContainText('Review this image');
     await editor.evaluate((element) => {
-      const bytes = Uint8Array.from(atob('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='), (character) =>
-        character.charCodeAt(0),
-      );
       const transfer = new DataTransfer();
-      transfer.items.add(new File([bytes], 'pasted.gif', { type: 'image/gif' }));
+      transfer.items.add(new File(['notes'], 'notes.txt', { type: 'text/plain' }));
+      transfer.setData('text/html', '<p>Copied rich text</p>');
+      transfer.setData('text/plain', 'Copied rich text');
       element.dispatchEvent(
         new ClipboardEvent('paste', { bubbles: true, clipboardData: transfer }),
       );
+    });
+    await expect(editor).toContainText('Copied rich text');
+    await editor.evaluate((element) => {
+      const bytes = Uint8Array.from(atob('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='), (character) =>
+        character.charCodeAt(0),
+      );
+      const image = new File([bytes], 'pasted.gif', { type: 'image/gif' });
+      const paste = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(paste, 'clipboardData', {
+        value: {
+          files: [],
+          items: [{ kind: 'file', getAsFile: () => image }],
+          types: [],
+          getData: () => '',
+        },
+      });
+      element.dispatchEvent(paste);
     });
     await uploadStarted;
 

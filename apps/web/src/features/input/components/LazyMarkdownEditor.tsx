@@ -10,10 +10,12 @@ const MarkdownEditor = lazy(async function loadMarkdownEditor() {
 
 export interface LazyMarkdownEditorProps extends MarkdownEditorProps {
   readonly loadImmediately?: boolean;
+  readonly onImageFiles?: ((files: readonly File[]) => void | Promise<void>) | undefined;
 }
 
 export const LazyMarkdownEditor = forwardRef<MarkdownEditorHandle, LazyMarkdownEditorProps>(
   function LazyMarkdownEditor(props, forwardedRef): React.JSX.Element {
+    const { onImageFiles, ...editorProps } = props;
     const [isEditorRequested, setIsEditorRequested] = useState(
       () => props.loadImmediately === true || (props.defaultMarkdown ?? '').trim().length > 0,
     );
@@ -26,7 +28,7 @@ export const LazyMarkdownEditor = forwardRef<MarkdownEditorHandle, LazyMarkdownE
         <MarkdownEditorFallback
           readOnly={props.readOnly ?? false}
           onActivate={requestEditor}
-          onImageFiles={props.onImageFiles}
+          onImageFiles={onImageFiles}
         />
       );
     }
@@ -37,11 +39,11 @@ export const LazyMarkdownEditor = forwardRef<MarkdownEditorHandle, LazyMarkdownE
           fallback={
             <MarkdownEditorFallback
               readOnly={props.readOnly ?? false}
-              onImageFiles={props.onImageFiles}
+              onImageFiles={onImageFiles}
             />
           }
         >
-          <MarkdownEditor {...props} ref={forwardedRef} />
+          <MarkdownEditor {...editorProps} ref={forwardedRef} />
         </Suspense>
       </MarkdownEditorErrorBoundary>
     );
@@ -51,7 +53,7 @@ export const LazyMarkdownEditor = forwardRef<MarkdownEditorHandle, LazyMarkdownE
 interface MarkdownEditorFallbackProps extends Pick<MarkdownEditorProps, 'readOnly'> {
   readonly onActivate?: () => void;
   readonly error?: boolean;
-  readonly onImageFiles?: MarkdownEditorProps['onImageFiles'];
+  readonly onImageFiles?: ((files: readonly File[]) => void | Promise<void>) | undefined;
 }
 
 function MarkdownEditorFallback({

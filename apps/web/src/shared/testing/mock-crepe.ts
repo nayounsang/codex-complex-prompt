@@ -1,6 +1,18 @@
 import { vi } from 'vitest';
 
 const mockCrepe = vi.hoisted(() => {
+  interface MockUploadConfig {
+    readonly uploader?: (
+      files: FileList,
+      schema: {
+        readonly nodes: {
+          readonly image: { createAndFill: (attrs: Record<string, string>) => unknown };
+          readonly paragraph: { create: (attrs: null, content: unknown) => unknown };
+        };
+      },
+    ) => Promise<readonly unknown[]>;
+  }
+
   function renderMockMarkdown(root: HTMLElement, markdown: string): void {
     root.replaceChildren();
     const lines = markdown.split('\n');
@@ -161,7 +173,23 @@ const mockCrepe = vi.hoisted(() => {
     private readOnly = false;
     private markdownUpdated:
       ((ctx: unknown, markdown: string, previousMarkdown: string) => void) | undefined;
+    private selectionUpdated: (() => void) | undefined;
     private editorElement: HTMLElement | undefined;
+    private uploadConfig: MockUploadConfig = {};
+    public readonly editor = {
+      action: vi.fn(),
+      config: (
+        configure: (ctx: {
+          update: (key: unknown, updater: (previous: MockUploadConfig) => MockUploadConfig) => void;
+        }) => void,
+      ): void => {
+        configure({
+          update: (_key, updater) => {
+            this.uploadConfig = updater(this.uploadConfig);
+          },
+        });
+      },
+    };
 
     public constructor(options: Record<string, unknown>) {
       this.options = options;
@@ -181,14 +209,22 @@ const mockCrepe = vi.hoisted(() => {
         markdownUpdated: (
           callback: (ctx: unknown, markdown: string, previousMarkdown: string) => void,
         ) => void;
+        selectionUpdated: (callback: () => void) => void;
       }): void;
     }): this {
       configure({
         markdownUpdated: (callback) => {
           this.markdownUpdated = callback;
         },
+        selectionUpdated: (callback) => {
+          this.selectionUpdated = callback;
+        },
       });
       return this;
+    }
+
+    public emitSelectionUpdated(): void {
+      this.selectionUpdated?.();
     }
 
     public create(): Promise<this> {
@@ -207,9 +243,45 @@ const mockCrepe = vi.hoisted(() => {
         this.markdown = editor.textContent ?? '';
         this.markdownUpdated?.({}, this.markdown, '');
       });
+      const uploadFiles = (event: ClipboardEvent | DragEvent): void => {
+        const transfer = 'clipboardData' in event ? event.clipboardData : event.dataTransfer;
+        const files = transfer === null ? [] : Array.from(transfer.files);
+        if (files.length === 0 || this.uploadConfig.uploader === undefined) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void this.uploadImages(files);
+      };
+      editor.addEventListener('paste', uploadFiles);
+      editor.addEventListener('drop', uploadFiles);
       root.append(editor);
       this.editorElement = editor;
       return Promise.resolve(this);
+    }
+
+    private async uploadImages(files: readonly File[]): Promise<void> {
+      const uploader = this.uploadConfig.uploader;
+      const root = this.editorElement;
+      if (uploader === undefined || root === undefined) return;
+      const fileList = Object.assign([...files], {
+        item: (index: number) => files[index] ?? null,
+      }) as unknown as FileList;
+      const schema = {
+        nodes: {
+          image: { createAndFill: (attrs: Record<string, string>) => ({ attrs }) },
+          paragraph: { create: (_attrs: null, content: unknown) => ({ content }) },
+        },
+      };
+      const paragraphs = await uploader(fileList, schema);
+      const markdownImages = paragraphs.map((paragraph) => {
+        const image = (
+          paragraph as { readonly content?: { readonly attrs?: Record<string, string> } }
+        ).content;
+        return `![${image?.attrs?.['alt'] ?? ''}](${image?.attrs?.['src'] ?? ''})`;
+      });
+      const previousMarkdown = this.markdown;
+      this.markdown = `${previousMarkdown.trimEnd()}${previousMarkdown.trim() === '' ? '' : '\n\n'}${markdownImages.join('\n\n')}`;
+      renderMockMarkdown(root, this.markdown);
+      this.markdownUpdated?.({}, this.markdown, previousMarkdown);
     }
 
     public getMarkdown(): string {

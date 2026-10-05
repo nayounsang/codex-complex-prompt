@@ -38,9 +38,14 @@ interface ActiveDrawing {
   readonly scene?: string;
 }
 
+interface UploadedImage {
+  readonly src: string;
+  readonly alt: string;
+  readonly markdown: string;
+}
+
 interface PendingImageMarkdown {
   readonly markdown: string;
-  // Prevent an older identical image line in the draft from consuming this append.
   readonly occurrence: number;
 }
 
@@ -63,7 +68,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
   const editorRef = useRef<MarkdownEditorHandle>(null);
   const currentMarkdownRef = useRef(markdownOverride ?? bridgeSession.initialMarkdown ?? '');
   const pendingImageMarkdownRef = useRef<PendingImageMarkdown[]>([]);
-  const pendingImageSavesRef = useRef(new Set<Promise<void>>());
+  const pendingImageSavesRef = useRef(new Set<Promise<readonly UploadedImage[]>>());
   const isWaitingForImageSavesRef = useRef(false);
   const { feedbackLoop, submit } = bridgeSession;
   const markdown = markdownOverride ?? bridgeSession.initialMarkdown ?? '';
@@ -71,10 +76,10 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     currentMarkdownRef.current = nextMarkdown;
     setMarkdownOverride(nextMarkdown);
   }, []);
-  const includePendingImageMarkdown = useCallback((markdown: string): string => {
+  const includePendingImageMarkdown = useCallback((currentMarkdown: string): string => {
     const pendingImages = [...pendingImageMarkdownRef.current];
     const markdownOccurrences = countMarkdownImageOccurrences(
-      markdown,
+      currentMarkdown,
       pendingImages.map((image) => image.markdown),
     );
     const remainingImages: PendingImageMarkdown[] = [];
@@ -87,8 +92,8 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       }
     }
     pendingImageMarkdownRef.current = remainingImages;
-    if (missingImages.length === 0) return markdown;
-    return `${markdown.trimEnd()}${markdown.trim() === '' ? '' : '\n\n'}${missingImages.join('\n\n')}`;
+    if (missingImages.length === 0) return currentMarkdown;
+    return `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}${missingImages.join('\n\n')}`;
   }, []);
   const getCurrentMarkdown = useCallback(
     (): string =>
@@ -180,8 +185,8 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     }
   };
 
-  const saveImageFiles = async (files: readonly File[]): Promise<void> => {
-    const markdownImages: string[] = [];
+  const uploadImageFiles = async (files: readonly File[]): Promise<readonly UploadedImage[]> => {
+    const uploadedImages: UploadedImage[] = [];
     let hasSavedAttachments = false;
     for (const file of files) {
       try {
@@ -216,37 +221,49 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
         if (!response.ok || result.id === undefined)
           throw new Error(result.error ?? 'Could not save the image.');
         hasSavedAttachments = true;
-        markdownImages.push(
-          `![${escapeMarkdownAlt(file.name)}](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.${result.extension ?? format.extension})`,
-        );
+        uploadedImages.push({
+          src: `${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.${result.extension ?? format.extension}`,
+          alt: file.name,
+          markdown: `![${escapeMarkdownAlt(file.name)}](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.${result.extension ?? format.extension})`,
+        });
       } catch {
-        markdownImages.push(
-          `![Image upload failed: ${escapeMarkdownAlt(file.name)}](${IMAGE_UPLOAD_FALLBACK_PATH})`,
-        );
+        uploadedImages.push({
+          src: IMAGE_UPLOAD_FALLBACK_PATH,
+          alt: `Image upload failed: ${file.name}`,
+          markdown: `![Image upload failed: ${escapeMarkdownAlt(file.name)}](${IMAGE_UPLOAD_FALLBACK_PATH})`,
+        });
       }
     }
-    const currentMarkdown = getCurrentMarkdown();
-    const currentOccurrences = countMarkdownImageOccurrences(currentMarkdown, markdownImages);
-    const appendedOccurrences = new Map<string, number>();
-    for (const image of markdownImages) {
-      const appended = appendedOccurrences.get(image) ?? 0;
-      pendingImageMarkdownRef.current.push({
-        markdown: image,
-        occurrence: (currentOccurrences.get(image) ?? 0) + appended + 1,
-      });
-      appendedOccurrences.set(image, appended + 1);
-    }
     if (hasSavedAttachments) setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
-    const next = `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}${markdownImages.join('\n\n')}`;
-    updateMarkdownOverride(next);
-    setEditorResetVersion((version) => version + 1);
+    return uploadedImages;
   };
 
-  const handleImageFiles = (files: readonly File[]): Promise<void> => {
-    const save = saveImageFiles(files);
+  const trackImageUpload = (files: readonly File[]): Promise<readonly UploadedImage[]> => {
+    const save = uploadImageFiles(files).then((uploadedImages) => {
+      const markdownImages = uploadedImages.map((image) => image.markdown);
+      const currentMarkdown = currentMarkdownRef.current;
+      const currentOccurrences = countMarkdownImageOccurrences(currentMarkdown, markdownImages);
+      const appendedOccurrences = new Map<string, number>();
+      for (const markdown of markdownImages) {
+        const appended = appendedOccurrences.get(markdown) ?? 0;
+        pendingImageMarkdownRef.current.push({
+          markdown,
+          occurrence: (currentOccurrences.get(markdown) ?? 0) + appended + 1,
+        });
+        appendedOccurrences.set(markdown, appended + 1);
+      }
+      const next = `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}${markdownImages.join('\n\n')}`;
+      updateMarkdownOverride(next);
+      return uploadedImages;
+    });
     pendingImageSavesRef.current.add(save);
     void save.then(() => pendingImageSavesRef.current.delete(save));
-    return save.then(() => undefined);
+    return save;
+  };
+
+  const handleFallbackImageFiles = async (files: readonly File[]): Promise<void> => {
+    await trackImageUpload(files);
+    setEditorResetVersion((version) => version + 1);
   };
 
   const waitForPendingImageSaves = useCallback(async (): Promise<void> => {
@@ -403,7 +420,8 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           onDelete: feedback.removeFeedback,
         }}
         drawings={{
-          onImageFiles: handleImageFiles,
+          onImageFiles: handleFallbackImageFiles,
+          onUploadImageFiles: trackImageUpload,
           onDraw: () => {
             void openDrawing();
           },

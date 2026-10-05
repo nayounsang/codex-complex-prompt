@@ -1,11 +1,14 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LazyMarkdownEditor } from './LazyMarkdownEditor.js';
 import { MarkdownEditor } from './MarkdownEditor.js';
 import type { MarkdownEditorProps } from './MarkdownEditor.js';
 
 const crepeTest = vi.hoisted(() => {
-  const state: { instance: unknown } = { instance: undefined };
+  const state: { instance: unknown; uploadConfig: Record<string, unknown> | undefined } = {
+    instance: undefined,
+    uploadConfig: undefined,
+  };
   class MockCrepe {
     public static readonly Feature = {
       ImageBlock: 'image-block',
@@ -14,7 +17,25 @@ const crepeTest = vi.hoisted(() => {
     } as const;
     public readonly options: Record<string, unknown>;
     public readonly destroy = vi.fn(async () => undefined);
-    public readonly editor = { action: vi.fn() };
+    public readonly editor = {
+      action: vi.fn(),
+      config: vi.fn(
+        (
+          configure: (ctx: {
+            update: (
+              key: unknown,
+              updater: (previous: Record<string, unknown>) => Record<string, unknown>,
+            ) => void;
+          }) => void,
+        ) => {
+          configure({
+            update: (_key, updater) => {
+              state.uploadConfig = updater({});
+            },
+          });
+        },
+      ),
+    };
     private readOnly = false;
     private editorElement: HTMLElement | undefined;
     public constructor(options: Record<string, unknown>) {
@@ -26,7 +47,20 @@ const crepeTest = vi.hoisted(() => {
       this.editorElement?.setAttribute('contenteditable', String(!value));
       return this;
     }
-    public on(): this {
+    public on(
+      configure: (listener: {
+        markdownUpdated: (
+          callback: (ctx: unknown, markdown: string, previousMarkdown: string) => void,
+        ) => void;
+        selectionUpdated: (callback: () => void) => void;
+      }) => void,
+    ): this {
+      configure({
+        markdownUpdated: () => undefined,
+        selectionUpdated: (callback) => {
+          this.selectionUpdated = callback;
+        },
+      });
       return this;
     }
     public async create(): Promise<this> {
@@ -43,6 +77,10 @@ const crepeTest = vi.hoisted(() => {
     public getMarkdown(): string {
       return '';
     }
+    public emitSelectionUpdated(): void {
+      this.selectionUpdated?.();
+    }
+    private selectionUpdated: (() => void) | undefined;
   }
   return { state, MockCrepe };
 });
@@ -52,6 +90,7 @@ vi.mock('@milkdown/crepe', () => ({ Crepe: crepeTest.MockCrepe }));
 afterEach(() => {
   cleanup();
   crepeTest.state.instance = undefined;
+  crepeTest.state.uploadConfig = undefined;
   vi.restoreAllMocks();
 });
 
@@ -92,51 +131,63 @@ describe('MarkdownEditor', () => {
     });
   });
 
-  it('이미지를 붙여넣으면 이미지 처리 콜백에 전달한다', async () => {
-    const onImageFiles = vi.fn();
-    render(<MarkdownEditor onImageFiles={onImageFiles} />);
-    const editor = await screen.findByRole('textbox', { name: 'Command' });
-    const paste = new Event('paste', { bubbles: true, cancelable: true });
+  it('Milkdown 업로더를 앱 첨부 업로드 콜백에 연결한다', async () => {
+    const uploadedImage = { src: '.complex-prompt/attachments/saved.png', alt: 'paste.png' };
+    const onUploadImageFiles = vi.fn().mockResolvedValue([uploadedImage]);
+    render(<MarkdownEditor onUploadImageFiles={onUploadImageFiles} />);
+    await screen.findByRole('textbox', { name: 'Command' });
+    const uploader = crepeTest.state.uploadConfig?.['uploader'] as (
+      files: FileList,
+      schema: {
+        nodes: {
+          image: { createAndFill: (attrs: Record<string, string>) => unknown };
+          paragraph: { create: (attrs: null, content: unknown) => unknown };
+        };
+      },
+    ) => Promise<readonly unknown[]>;
+    const getInsertPos = crepeTest.state.uploadConfig?.['getInsertPos'] as (
+      event: unknown,
+      context: {
+        get: (key: unknown) => {
+          readonly state: { readonly doc: { readonly content: { readonly size: number } } };
+        };
+      },
+      defaultPosition: number,
+    ) => number;
     const image = new File(['image'], 'paste.png', { type: 'image/png' });
-    Object.defineProperty(paste, 'clipboardData', {
-      value: { files: [image], items: [] },
-    });
+    const files = Object.assign([image], { item: (index: number) => [image][index] ?? null });
+    const schema = {
+      nodes: {
+        image: { createAndFill: vi.fn((attrs: Record<string, string>) => ({ attrs })) },
+        paragraph: { create: vi.fn((_attrs: null, content: unknown) => ({ content })) },
+      },
+    };
 
-    editor.dispatchEvent(paste);
+    const nodes = await uploader(files as unknown as FileList, schema);
+    const insertionPosition = getInsertPos(
+      new Event('paste'),
+      {
+        get: () => ({ state: { doc: { content: { size: 42 } } } }),
+      },
+      3,
+    );
 
-    expect(onImageFiles).toHaveBeenCalledExactlyOnceWith([image]);
-    expect(paste.defaultPrevented).toBe(true);
+    expect(crepeTest.state.uploadConfig?.['enableHtmlFileUploader']).toBe(true);
+    expect(insertionPosition).toBe(42);
+    expect(onUploadImageFiles).toHaveBeenCalledExactlyOnceWith([image]);
+    expect(nodes).toEqual([{ content: { attrs: uploadedImage } }]);
+    expect(schema.nodes.paragraph.create).toHaveBeenCalledOnce();
   });
 
-  it('MIME 형식이 비어 있는 붙여넣기 파일을 이미지 검사 콜백에 전달한다', async () => {
-    const onImageFiles = vi.fn();
-    render(<MarkdownEditor onImageFiles={onImageFiles} />);
-    const editor = await screen.findByRole('textbox', { name: 'Command' });
-    const paste = new Event('paste', { bubbles: true, cancelable: true });
-    const image = new File(['image'], 'paste.png');
-    Object.defineProperty(paste, 'clipboardData', {
-      value: { files: [image], items: [] },
-    });
+  it('Milkdown 선택 변경을 피드백 선택 콜백으로 전달한다', async () => {
+    const onSelectionUpdated = vi.fn();
+    render(<MarkdownEditor onSelectionUpdated={onSelectionUpdated} />);
+    await screen.findByRole('textbox', { name: 'Command' });
+    const instance = crepeTest.state.instance as InstanceType<typeof crepeTest.MockCrepe>;
 
-    editor.dispatchEvent(paste);
+    act(() => instance.emitSelectionUpdated());
 
-    expect(image.type).toBe('');
-    expect(onImageFiles).toHaveBeenCalledExactlyOnceWith([image]);
-    expect(paste.defaultPrevented).toBe(true);
-  });
-
-  it('이미지 파일을 드롭하면 이미지 처리 콜백에 전달한다', async () => {
-    const onImageFiles = vi.fn();
-    render(<MarkdownEditor onImageFiles={onImageFiles} />);
-    const editor = await screen.findByRole('textbox', { name: 'Command' });
-    const image = new File(['image'], 'drop.png', { type: 'image/png' });
-    const drop = new Event('drop', { bubbles: true, cancelable: true });
-    Object.defineProperty(drop, 'dataTransfer', { value: { files: [image] } });
-
-    editor.dispatchEvent(drop);
-
-    expect(onImageFiles).toHaveBeenCalledExactlyOnceWith([image]);
-    expect(drop.defaultPrevented).toBe(true);
+    expect(onSelectionUpdated).toHaveBeenCalledOnce();
   });
 
   it('아직 열지 않은 빈 편집기에 이미지를 드롭하면 이미지 처리 콜백에 전달한다', () => {

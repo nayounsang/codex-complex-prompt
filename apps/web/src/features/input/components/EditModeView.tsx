@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { LazyMarkdownEditor } from './LazyMarkdownEditor.js';
-import type { MarkdownEditorHandle } from './MarkdownEditor.js';
+import type { MarkdownEditorHandle, MarkdownEditorProps } from './MarkdownEditor.js';
 
 interface EditModeViewProps {
   readonly initialMarkdown: string;
@@ -14,6 +14,7 @@ interface EditModeViewProps {
   readonly attachmentRefreshKey: number;
   readonly onDraw: () => void;
   readonly onImageFiles: (files: readonly File[]) => void | Promise<void>;
+  readonly onUploadImageFiles: NonNullable<MarkdownEditorProps['onUploadImageFiles']>;
   readonly onEditDrawing: (id: string) => void;
   readonly onDeleteDrawing: (id: string) => void;
 }
@@ -29,6 +30,7 @@ export function EditModeView({
   attachmentRefreshKey,
   onDraw,
   onImageFiles,
+  onUploadImageFiles,
   onEditDrawing,
   onDeleteDrawing,
 }: EditModeViewProps): React.JSX.Element {
@@ -46,6 +48,7 @@ export function EditModeView({
           attachmentRefreshKey={attachmentRefreshKey}
           onDraw={onDraw}
           onImageFiles={onImageFiles}
+          onUploadImageFiles={onUploadImageFiles}
           onEditDrawing={onEditDrawing}
           onDeleteDrawing={onDeleteDrawing}
         />

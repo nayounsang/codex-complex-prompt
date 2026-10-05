@@ -11,6 +11,7 @@ import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/d
 import { Crepe } from '@milkdown/crepe';
 import type { BlockEditFeatureConfig } from '@milkdown/crepe/feature/block-edit';
 import { editorViewCtx, schemaCtx } from '@milkdown/kit/core';
+import { uploadConfig } from '@milkdown/kit/plugin/upload';
 import { createAttachmentImageUrl } from '../../../attachment-image-url.js';
 import {
   hasMermaidRelevantMutations,
@@ -45,7 +46,10 @@ export interface MarkdownEditorProps {
   readonly attachmentToken?: string | null;
   readonly attachmentRefreshKey?: number;
   readonly onDraw?: () => void;
-  readonly onImageFiles?: (files: readonly File[]) => void | Promise<void>;
+  readonly onUploadImageFiles?: (
+    files: readonly File[],
+  ) => Promise<readonly { readonly src: string; readonly alt: string }[]>;
+  readonly onSelectionUpdated?: () => void;
   readonly onEditDrawing?: (id: string) => void;
   readonly onDeleteDrawing?: (id: string) => void;
   readonly onReady?: (root: HTMLDivElement) => void;
@@ -103,16 +107,19 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       attachmentToken,
       attachmentRefreshKey = 0,
       onDraw,
-      onImageFiles,
+      onUploadImageFiles,
       onEditDrawing,
       onDeleteDrawing,
       onReady,
+      onSelectionUpdated,
     },
     forwardedRef,
   ): React.JSX.Element {
     const rootRef = useRef<HTMLDivElement>(null);
     const hostRef = useRef<HTMLDivElement>(null);
     const crepeRef = useRef<Crepe | null>(null);
+    const attachmentStateRef = useRef({ attachmentUrl, attachmentToken, attachmentRefreshKey });
+    attachmentStateRef.current = { attachmentUrl, attachmentToken, attachmentRefreshKey };
     const markdownRef = useRef(defaultMarkdown);
     const hoveredImageRef = useRef<HTMLImageElement | null>(null);
     const hoverRequestIdRef = useRef(0);
@@ -332,8 +339,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const notifyReady = useEffectEvent((root: HTMLDivElement) => {
       onReady?.(root);
     });
-    const receiveImageFiles = useEffectEvent((files: readonly File[]) => {
-      void onImageFiles?.(files);
+    const uploadImageFiles = useEffectEvent(
+      (files: readonly File[]) => onUploadImageFiles?.(files) ?? Promise.resolve([]),
+    );
+    const notifySelectionUpdated = useEffectEvent(() => {
+      onSelectionUpdated?.();
     });
 
     useImperativeHandle(
@@ -349,6 +359,15 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         const root = rootRef.current;
         if (root === null) return;
         const editorRoot: HTMLDivElement = root;
+        const replaceCurrentAttachmentImageUrls = (): void => {
+          const attachmentState = attachmentStateRef.current;
+          replaceAttachmentImageUrls(
+            editorRoot,
+            attachmentState.attachmentUrl,
+            attachmentState.attachmentToken,
+            attachmentState.attachmentRefreshKey,
+          );
+        };
         const blockEditConfig: BlockEditFeatureConfig = {
           slashMenu: {},
           buildMenu: (builder) => {
@@ -389,27 +408,74 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
 
         let disposed = false;
         let crepe: Crepe | null = null;
-        const blockFileTransfer = (event: ClipboardEvent | DragEvent): void => {
-          const transfer = 'clipboardData' in event ? event.clipboardData : event.dataTransfer;
-          const files = transfer === null ? [] : Array.from(transfer.files);
-          if (files.length === 0 && 'clipboardData' in event && transfer !== null) {
-            for (const item of Array.from(transfer.items)) {
-              if (item.kind !== 'file') continue;
-              const file = item.getAsFile();
-              if (file !== null) files.push(file);
+        const replayWithoutFiles = (event: ClipboardEvent | DragEvent): void => {
+          const transfer = new DataTransfer();
+          const sourceTransfer =
+            'clipboardData' in event ? event.clipboardData : event.dataTransfer;
+          if (sourceTransfer !== null) {
+            for (const type of Array.from(sourceTransfer.types)) {
+              if (type.toLowerCase() === 'files' || !type.startsWith('text/')) continue;
+              const value = sourceTransfer.getData(type);
+              if (value !== '') transfer.setData(type, value);
             }
           }
-          const imageFiles = files.filter(
+          const replayedEvent =
+            'clipboardData' in event
+              ? new ClipboardEvent('paste', {
+                  bubbles: true,
+                  cancelable: true,
+                  clipboardData: transfer,
+                })
+              : new DragEvent('drop', {
+                  bubbles: true,
+                  cancelable: true,
+                  clientX: event.clientX,
+                  clientY: event.clientY,
+                  dataTransfer: transfer,
+                });
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          const target = event.target;
+          (target !== null && editorRoot.contains(target as Node)
+            ? target
+            : editorRoot
+          ).dispatchEvent(replayedEvent);
+        };
+        const normalizeFileTransfer = (event: ClipboardEvent | DragEvent): void => {
+          const sourceTransfer =
+            'clipboardData' in event ? event.clipboardData : event.dataTransfer;
+          if (sourceTransfer === null) return;
+          let imageFiles = Array.from(sourceTransfer.files).filter(
             (file) => file.type === '' || file.type.startsWith('image/'),
           );
-          if (imageFiles.length === 0) return;
-          event.preventDefault();
-          event.stopPropagation();
-          receiveImageFiles(imageFiles);
+          if (imageFiles.length === 0 && sourceTransfer.files.length === 0) {
+            if (!('clipboardData' in event)) return;
+            imageFiles = Array.from(sourceTransfer.items)
+              .filter((item) => item.kind === 'file')
+              .map((item) => item.getAsFile())
+              .filter((file): file is File => file !== null)
+              .filter((file) => file.type === '' || file.type.startsWith('image/'));
+            if (imageFiles.length === 0) return;
+            const normalizedTransfer = new DataTransfer();
+            imageFiles.forEach((file) => normalizedTransfer.items.add(file));
+            const normalizedPaste = new ClipboardEvent('paste', {
+              bubbles: true,
+              cancelable: true,
+              clipboardData: normalizedTransfer,
+            });
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            const target = event.target;
+            (target !== null && editorRoot.contains(target as Node)
+              ? target
+              : editorRoot
+            ).dispatchEvent(normalizedPaste);
+            return;
+          }
+          if (imageFiles.length === 0) replayWithoutFiles(event);
         };
-        editorRoot.addEventListener('paste', blockFileTransfer, true);
-        editorRoot.addEventListener('drop', blockFileTransfer, true);
-
+        editorRoot.addEventListener('paste', normalizeFileTransfer, true);
+        editorRoot.addEventListener('drop', normalizeFileTransfer, true);
         crepe = new Crepe({
           root: editorRoot,
           defaultValue: defaultMarkdown,
@@ -417,12 +483,36 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           featureConfigs,
         });
         crepeRef.current = crepe;
+        crepe.editor.config((ctx) => {
+          ctx.update(uploadConfig.key, (previous) => ({
+            ...previous,
+            enableHtmlFileUploader: true,
+            getInsertPos: (_event, editorContext) =>
+              editorContext.get(editorViewCtx).state.doc.content.size,
+            uploader: async (files, schema) => {
+              const imageFiles = Array.from(files).filter(
+                (file) => file.type === '' || file.type.startsWith('image/'),
+              );
+              if (imageFiles.length === 0) return [];
+              const uploaded = await uploadImageFiles(imageFiles);
+              return uploaded.flatMap(({ src, alt }) => {
+                const image = schema.nodes['image']?.createAndFill({ src, alt });
+                const paragraph =
+                  image === null || image === undefined
+                    ? undefined
+                    : schema.nodes['paragraph']?.create(null, image);
+                return paragraph === undefined ? [] : [paragraph];
+              });
+            },
+          }));
+        });
         crepe.setReadonly(getCurrentReadOnly());
         crepe.on((listener) => {
           listener.markdownUpdated((_ctx, markdown) => {
             markdownRef.current = markdown;
             notifyMarkdownChange(markdown);
           });
+          listener.selectionUpdated(() => notifySelectionUpdated());
         });
 
         let readyTimer: number | undefined;
@@ -430,12 +520,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         let mermaidObserver: MutationObserver | undefined;
         const syncInitialMarkdown = (): void => {
           if (disposed) return;
-          replaceAttachmentImageUrls(
-            editorRoot,
-            attachmentUrl,
-            attachmentToken,
-            attachmentRefreshKey,
-          );
+          replaceCurrentAttachmentImageUrls();
           const proseMirror = editorRoot.querySelector<HTMLElement>('.ProseMirror');
           if (proseMirror === null) return;
           if (readyTimer !== undefined) window.clearTimeout(readyTimer);
@@ -444,14 +529,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             const stableProseMirror = editorRoot.querySelector<HTMLElement>('.ProseMirror');
             if (stableProseMirror === null) return;
             editorObserver.disconnect();
-            attachmentObserver = new MutationObserver(() =>
-              replaceAttachmentImageUrls(
-                editorRoot,
-                attachmentUrl,
-                attachmentToken,
-                attachmentRefreshKey,
-              ),
-            );
+            attachmentObserver = new MutationObserver(replaceCurrentAttachmentImageUrls);
             attachmentObserver.observe(editorRoot, { childList: true, subtree: true });
             stableProseMirror.setAttribute('aria-label', getEditorAriaLabel());
             notifyReady(editorRoot);
@@ -494,13 +572,13 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           editorObserver.disconnect();
           attachmentObserver?.disconnect();
           mermaidObserver?.disconnect();
-          editorRoot.removeEventListener('paste', blockFileTransfer, true);
-          editorRoot.removeEventListener('drop', blockFileTransfer, true);
+          editorRoot.removeEventListener('paste', normalizeFileTransfer, true);
+          editorRoot.removeEventListener('drop', normalizeFileTransfer, true);
           crepeRef.current = null;
           if (crepe !== null) void crepe.destroy();
         };
       },
-      [attachmentRefreshKey, attachmentToken, attachmentUrl, defaultMarkdown],
+      [attachmentToken, attachmentUrl, defaultMarkdown],
     );
 
     useEffect(

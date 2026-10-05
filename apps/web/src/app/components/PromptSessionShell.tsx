@@ -5,7 +5,10 @@ import type {
 import { FeedbackModeView } from '../../features/feedback/components/FeedbackModeView.js';
 import { EditModeView } from '../../features/input/components/EditModeView.js';
 import { PromptHeader } from './PromptHeader.js';
-import type { MarkdownEditorHandle } from '../../features/input/components/MarkdownEditor.js';
+import type {
+  MarkdownEditorHandle,
+  MarkdownEditorProps,
+} from '../../features/input/components/MarkdownEditor.js';
 import type { PromptTemplate } from '@codex-complex-prompt/protocol';
 
 interface PromptSessionShellProps {
@@ -56,6 +59,7 @@ interface PromptSessionShellProps {
   readonly drawings: {
     readonly onDraw: () => void;
     readonly onImageFiles: (files: readonly File[]) => void | Promise<void>;
+    readonly onUploadImageFiles: NonNullable<MarkdownEditorProps['onUploadImageFiles']>;
     readonly onEdit: (id: string) => void;
     readonly onDelete: (id: string) => void;
     readonly attachmentUrl: string | null;
@@ -100,6 +104,7 @@ export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.El
           attachmentRefreshKey={drawings.attachmentRefreshKey}
           onDraw={drawings.onDraw}
           onImageFiles={drawings.onImageFiles}
+          onUploadImageFiles={drawings.onUploadImageFiles}
           onEditDrawing={drawings.onEdit}
           onDeleteDrawing={drawings.onDelete}
         />

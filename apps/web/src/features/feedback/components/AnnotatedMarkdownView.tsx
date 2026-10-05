@@ -93,6 +93,27 @@ export function AnnotatedMarkdownView({
     }
     publishSelection(mergeSelectionWithExistingFeedback(anchor, annotations, markdown));
   }, [annotations, markdown, publishSelection]);
+  const handleEditorSelectionUpdated = useCallback((): void => {
+    if (pointerSelectingRef.current || selectionDismissedRef.current) return;
+    if (window.getSelection()?.isCollapsed && pendingSelectionRef.current !== null) return;
+    handleSelection();
+  }, [handleSelection]);
+  const handleNativeSelectionChange = useCallback((): void => {
+    if (pointerSelectingRef.current || selectionDismissedRef.current) return;
+    const root = rootRef.current;
+    const selection = window.getSelection();
+    if (
+      root === null ||
+      selection === null ||
+      selection.rangeCount === 0 ||
+      !root.contains(selection.getRangeAt(0).startContainer) ||
+      !root.contains(selection.getRangeAt(0).endContainer) ||
+      (selection.isCollapsed && pendingSelectionRef.current !== null)
+    ) {
+      return;
+    }
+    handleSelection();
+  }, [handleSelection]);
 
   const handleImageSelection = useCallback(
     (image: HTMLImageElement): void => {
@@ -147,6 +168,14 @@ export function AnnotatedMarkdownView({
   );
 
   useEffect(
+    function listenForNativeKeyboardSelection() {
+      document.addEventListener('selectionchange', handleNativeSelectionChange);
+      return () => document.removeEventListener('selectionchange', handleNativeSelectionChange);
+    },
+    [handleNativeSelectionChange],
+  );
+
+  useEffect(
     function finishSelectionWhenPointerLeavesDocument() {
       const finishPointerSelection = (): void => {
         if (!pointerSelectingRef.current) return;
@@ -163,31 +192,6 @@ export function AnnotatedMarkdownView({
         document.removeEventListener('mouseup', finishPointerSelection, true);
         window.removeEventListener('blur', resetPointerSelection);
       };
-    },
-    [handleSelection],
-  );
-
-  useEffect(
-    function listenForKeyboardSelection() {
-      const handleDocumentSelectionChange = (): void => {
-        if (pointerSelectingRef.current) return;
-        if (selectionDismissedRef.current) return;
-        const root = rootRef.current;
-        const selection = window.getSelection();
-        if (selection?.isCollapsed && pendingSelectionRef.current !== null) return;
-        if (
-          root === null ||
-          selection === null ||
-          selection.rangeCount === 0 ||
-          !root.contains(selection.getRangeAt(0).startContainer) ||
-          !root.contains(selection.getRangeAt(0).endContainer)
-        ) {
-          return;
-        }
-        handleSelection();
-      };
-      document.addEventListener('selectionchange', handleDocumentSelectionChange);
-      return () => document.removeEventListener('selectionchange', handleDocumentSelectionChange);
     },
     [handleSelection],
   );
@@ -261,6 +265,7 @@ export function AnnotatedMarkdownView({
         attachmentToken={attachmentToken}
         attachmentRefreshKey={attachmentRefreshKey}
         onReady={handleRendererReady}
+        onSelectionUpdated={handleEditorSelectionUpdated}
       />
     </article>
   );
