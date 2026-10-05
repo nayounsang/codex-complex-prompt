@@ -72,19 +72,24 @@ jobs:
           short_sha="${upstream_sha:0:12}"
           branch="automation/update-younsang-codex-plugin"
 
-          # Keep a declined update's branch intact; use a new branch for a later SHA.
-          closed_stable_pr="$(gh pr list --state closed --head "$branch" --json number --jq '.[0].number // empty')"
-          if [[ -n "$closed_stable_pr" ]]; then
-            branch="${branch}-${short_sha}"
-          fi
+          existing_pr="$(gh pr list --state open --head "$branch" --base main --json number --jq '.[0].number // empty')"
+          closed_pr_info="$(gh pr list --state closed --head "$branch" --base main --limit 100 --json number,mergedAt,closedAt --jq 'sort_by(.closedAt) | last // {}')"
+          closed_pr="$(jq -r '.number // empty' <<< "$closed_pr_info")"
+          closed_pr_merged_at="$(jq -r '.mergedAt // empty' <<< "$closed_pr_info")"
+          reopen_pr=""
 
-          existing_pr="$(gh pr list --state open --head "$branch" --json number --jq '.[0].number // empty')"
-          if [[ -z "$existing_pr" ]]; then
-            closed_pr="$(gh pr list --state closed --head "$branch" --json number --jq '.[0].number // empty')"
-            if [[ -n "$closed_pr" ]]; then
-              echo "An update pull request for $upstream_sha was already closed; leaving that decision in place."
+          if [[ -z "$existing_pr" && -n "$closed_pr" && -z "$closed_pr_merged_at" ]]; then
+            closed_pr_head_sha="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${closed_pr}" --jq '.head.sha')"
+            closed_pr_upstream_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${marketplace_file}?ref=${closed_pr_head_sha}" --jq '.content' | base64 --decode | jq -r '.plugins[] | select(.name == "younsang-codex-plugin") | .source.sha // empty')"
+            if [[ ! "$closed_pr_upstream_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Could not read the pinned plugin SHA from the latest closed update PR."
+              exit 1
+            fi
+            if [[ "$closed_pr_upstream_sha" == "$upstream_sha" ]]; then
+              echo "The latest update PR was closed for this upstream SHA; leaving it closed."
               exit 0
             fi
+            reopen_pr="$closed_pr"
           fi
 
           create_pr() {
@@ -103,6 +108,13 @@ jobs:
 
           if [[ -n "$existing_pr" ]]; then
             gh pr edit "$existing_pr" \
+              --title "chore: update Younsang Codex plugin to ${short_sha}" \
+              --body "Updates the project plugin pin from ${current_sha} to ${upstream_sha}. Review the upstream changes: https://github.com/nayounsang/younsang-codex-plugin/compare/${current_sha}...${upstream_sha}"
+            exit 0
+          fi
+          if [[ -n "$reopen_pr" ]]; then
+            gh pr reopen "$reopen_pr"
+            gh pr edit "$reopen_pr" \
               --title "chore: update Younsang Codex plugin to ${short_sha}" \
               --body "Updates the project plugin pin from ${current_sha} to ${upstream_sha}. Review the upstream changes: https://github.com/nayounsang/younsang-codex-plugin/compare/${current_sha}...${upstream_sha}"
             exit 0
