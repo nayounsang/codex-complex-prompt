@@ -41,7 +41,7 @@ export function VideoEmbedPreview({
         role="img"
         aria-label="Video unavailable"
       >
-        <img src="/image-upload-failed.svg" alt="" />
+        <img src="/video-unavailable.svg" alt="" />
       </div>
     ) : (
       <div

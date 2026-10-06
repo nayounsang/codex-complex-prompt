@@ -391,6 +391,9 @@ button:focus-visible,
   width: 100%;
   height: 100%;
 }
+.video-embed-fallback {
+  background: #f3f4f6;
+}
 .video-embed-fallback img {
   object-fit: contain;
 }
