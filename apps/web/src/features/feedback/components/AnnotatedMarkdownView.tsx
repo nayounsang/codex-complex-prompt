@@ -14,6 +14,13 @@ import {
 } from '../../../shared/markdown/selection-anchor.js';
 import type { FeedbackAnnotation, SelectionAnchor } from '../model/feedback-types.js';
 import { mergeSelectionWithExistingFeedback } from './selection-feedback.js';
+import {
+  getVideoEmbedAffectedParagraphs,
+  haveSameVideoEmbedTargets,
+  updateVideoEmbedTargets,
+  type VideoEmbedTarget,
+} from '../../../shared/markdown/video-embeds.js';
+import { VideoEmbedPreview } from '../../input/components/VideoEmbedPreview.js';
 
 interface AnnotatedMarkdownViewProps {
   readonly markdown: string;
@@ -36,6 +43,7 @@ export function AnnotatedMarkdownView({
 }: AnnotatedMarkdownViewProps): React.JSX.Element {
   const rootRef = useRef<HTMLElement>(null);
   const [rendererRoot, setRendererRoot] = useState<HTMLDivElement | null>(null);
+  const [videoTargets, setVideoTargets] = useState<VideoEmbedTarget[]>([]);
   const pointerSelectingRef = useRef(false);
   const pendingSelectionRef = useRef<SelectionAnchor | null>(null);
   const selectionDismissedRef = useRef(false);
@@ -109,7 +117,7 @@ export function AnnotatedMarkdownView({
     function decorateReadOnlyMarkdown() {
       if (rendererRoot === null) return;
       const feedbackRanges = JSON.parse(decorationRangeKey) as SourceFeedbackRange[];
-      const decorate = (): void => {
+      const decorate = (records?: readonly MutationRecord[]): void => {
         decorateMarkdownRoot(
           rendererRoot,
           renderedMarkdown,
@@ -117,6 +125,22 @@ export function AnnotatedMarkdownView({
           markdown,
           attachmentUrl,
         );
+        const paragraphs =
+          records === undefined
+            ? undefined
+            : getVideoEmbedAffectedParagraphs(rendererRoot, records);
+        const mountRoot = rootRef.current;
+        if (mountRoot === null) return;
+        setVideoTargets((current) => {
+          const next = updateVideoEmbedTargets(
+            rendererRoot,
+            current,
+            markdown,
+            mountRoot,
+            paragraphs,
+          );
+          return haveSameVideoEmbedTargets(current, next) ? current : next;
+        });
       };
       // TODO: Profile large documents; share the Markdown AST/line index and batch renderer churn if costly.
       const observer = new MutationObserver(decorate);
@@ -202,7 +226,9 @@ export function AnnotatedMarkdownView({
         selectionDismissedRef.current = false;
         const target = event.target;
         pointerSelectingRef.current = !(
-          target instanceof Element && target.closest('.mermaid-preview-open') !== null
+          target instanceof Element &&
+          (target.closest('.mermaid-preview-open') !== null ||
+            target.closest('.video-embed-mount') !== null)
         );
       }}
       onKeyDown={() => {
@@ -245,7 +271,12 @@ export function AnnotatedMarkdownView({
       }}
       onMouseUpCapture={(event) => {
         const target = event.target;
-        if (target instanceof Element && target.closest('.mermaid-preview-open') !== null) return;
+        if (
+          target instanceof Element &&
+          (target.closest('.mermaid-preview-open') !== null ||
+            target.closest('.video-embed-mount') !== null)
+        )
+          return;
         pointerSelectingRef.current = false;
         handleSelection();
       }}
@@ -262,6 +293,9 @@ export function AnnotatedMarkdownView({
         attachmentRefreshKey={attachmentRefreshKey}
         onReady={handleRendererReady}
       />
+      {videoTargets.map((target) => (
+        <VideoEmbedPreview key={`${target.id}:${target.source}`} target={target} />
+      ))}
     </article>
   );
 }

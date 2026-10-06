@@ -66,6 +66,10 @@ The built-in templates cover:
 
 Create diagrams with [Excalidraw](https://excalidraw.com/) and insert them into your document. Drawings appear inline and can be edited later.
 
+### Embed videos
+
+Paste or drop a local MP4, MOV, or WebM file into the editor to attach it and show an inline player. Standalone Markdown image references to direct video files and GitHub video attachments are also shown as players. YouTube and other streaming-service URLs remain ordinary links. The original Markdown references stay in the document, and videos the browser cannot play show a placeholder.
+
 ## Manage the installation
 
 Preview the changes before installing:

@@ -17,12 +17,24 @@ export interface TemplateStore {
 }
 
 export interface AttachmentStore {
+  readonly getVideoInfo?: (
+    id: string,
+    extension: string,
+  ) => Promise<{ readonly size: number; readonly mimeType: string } | undefined>;
+  readonly readVideoRange?: (
+    id: string,
+    extension: string,
+    start: number,
+    end: number,
+    expectedSize: number,
+  ) => Promise<Buffer | undefined>;
   readonly save: (input: {
     id?: string;
     image?: string;
+    video?: string;
     png?: string;
     extension?: string;
-    scene: string;
+    scene?: string;
   }) => Promise<string>;
   readonly read: (
     id: string,
@@ -31,6 +43,7 @@ export interface AttachmentStore {
     | {
         readonly id?: string;
         readonly image?: Buffer;
+        readonly video?: Buffer;
         readonly png?: Buffer;
         readonly extension?: string;
         readonly mimeType?: string;

@@ -20,6 +20,14 @@ import {
   createMermaidPreviewTargets,
   haveSameMermaidPreviewTargets,
 } from './mermaid-preview-targets.js';
+import {
+  getVideoEmbedAffectedParagraphs,
+  haveSameVideoEmbedTargets,
+  updateVideoEmbedTargets,
+  type VideoEmbedTarget,
+} from '../../../shared/markdown/video-embeds.js';
+import { VideoEmbedPreview } from './VideoEmbedPreview.js';
+import { isSupportedMediaFile } from '../model/media-files.js';
 import { MermaidDiagramCard, MermaidDiagramDialog } from './MermaidDiagramCard.js';
 import type { MermaidDiagramTarget } from './MermaidDiagramCard.js';
 import {
@@ -45,6 +53,7 @@ export interface MarkdownEditorProps {
   readonly attachmentToken?: string | null;
   readonly attachmentRefreshKey?: number;
   readonly onDraw?: () => void;
+  readonly onMediaFiles?: (files: readonly File[]) => void | Promise<void>;
   readonly onImageFiles?: (files: readonly File[]) => void | Promise<void>;
   readonly onEditDrawing?: (id: string) => void;
   readonly onDeleteDrawing?: (id: string) => void;
@@ -103,6 +112,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       attachmentToken,
       attachmentRefreshKey = 0,
       onDraw,
+      onMediaFiles,
       onImageFiles,
       onEditDrawing,
       onDeleteDrawing,
@@ -121,6 +131,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     );
     const [drawingEditTarget, setDrawingEditTarget] = useState<DrawingEditTarget | null>(null);
     const [mermaidTargets, setMermaidTargets] = useState<MermaidDiagramTarget[]>([]);
+    const [videoTargets, setVideoTargets] = useState<VideoEmbedTarget[]>([]);
     const [mermaidDialogTarget, setMermaidDialogTarget] = useState<MermaidDiagramTarget | null>(
       null,
     );
@@ -178,6 +189,16 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       setMermaidTargets((current) => {
         if (haveSameMermaidPreviewTargets(current, targets)) return current;
         return targets;
+      });
+    };
+    const syncVideoEmbeds = (
+      editorRoot: HTMLDivElement,
+      paragraphs?: readonly HTMLParagraphElement[],
+    ): void => {
+      const mountRoot = rootRef.current ?? editorRoot;
+      setVideoTargets((current) => {
+        const next = updateVideoEmbedTargets(editorRoot, current, undefined, mountRoot, paragraphs);
+        return haveSameVideoEmbedTargets(current, next) ? current : next;
       });
     };
     const replaceMermaidBlock = (target: MermaidDiagramTarget, source?: string): boolean => {
@@ -332,8 +353,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const notifyReady = useEffectEvent((root: HTMLDivElement) => {
       onReady?.(root);
     });
-    const receiveImageFiles = useEffectEvent((files: readonly File[]) => {
-      void onImageFiles?.(files);
+    const receiveMediaFiles = useEffectEvent((files: readonly File[]) => {
+      void (onMediaFiles ?? onImageFiles)?.(files);
     });
 
     useImperativeHandle(
@@ -399,13 +420,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
               if (file !== null) files.push(file);
             }
           }
-          const imageFiles = files.filter(
-            (file) => file.type === '' || file.type.startsWith('image/'),
-          );
-          if (imageFiles.length === 0) return;
+          const mediaFiles = files.filter(isSupportedMediaFile);
+          if (mediaFiles.length === 0) return;
           event.preventDefault();
           event.stopPropagation();
-          receiveImageFiles(imageFiles);
+          receiveMediaFiles(mediaFiles);
         };
         editorRoot.addEventListener('paste', blockFileTransfer, true);
         editorRoot.addEventListener('drop', blockFileTransfer, true);
@@ -428,6 +447,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         let readyTimer: number | undefined;
         let attachmentObserver: MutationObserver | undefined;
         let mermaidObserver: MutationObserver | undefined;
+        let videoObserver: MutationObserver | undefined;
         const syncInitialMarkdown = (): void => {
           if (disposed) return;
           replaceAttachmentImageUrls(
@@ -456,6 +476,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             stableProseMirror.setAttribute('aria-label', getEditorAriaLabel());
             notifyReady(editorRoot);
             syncMermaidPreviews(editorRoot);
+            syncVideoEmbeds(editorRoot);
             mermaidObserver = new MutationObserver((records) => {
               if (hasMermaidRelevantMutations(records)) {
                 syncMermaidPreviews(editorRoot, hasRemovedMermaidPreviewCard(records));
@@ -467,6 +488,16 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
               characterData: true,
               attributes: true,
               attributeFilter: ['class'],
+            });
+            videoObserver = new MutationObserver((records) =>
+              syncVideoEmbeds(editorRoot, getVideoEmbedAffectedParagraphs(editorRoot, records)),
+            );
+            videoObserver.observe(stableProseMirror, {
+              childList: true,
+              subtree: true,
+              characterData: true,
+              attributes: true,
+              attributeFilter: ['href'],
             });
             markdownRef.current = crepe?.getMarkdown() ?? defaultMarkdown;
             notifyMarkdownChange(markdownRef.current);
@@ -494,6 +525,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           editorObserver.disconnect();
           attachmentObserver?.disconnect();
           mermaidObserver?.disconnect();
+          videoObserver?.disconnect();
           editorRoot.removeEventListener('paste', blockFileTransfer, true);
           editorRoot.removeEventListener('drop', blockFileTransfer, true);
           crepeRef.current = null;
@@ -607,6 +639,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             onReplace={replaceCurrentMermaidBlock}
           />
         ))}
+        {videoTargets.map((target) => (
+          <VideoEmbedPreview key={`${target.id}:${target.source}`} target={target} />
+        ))}
         {mermaidDialogTarget !== null && (
           <MermaidDiagramDialog
             key={mermaidDialogTarget.id}
@@ -649,6 +684,12 @@ function replaceAttachmentImageUrls(
     image.dataset['drawingId'] = id;
     image.setAttribute('role', 'button');
     image.setAttribute('aria-label', `Drawing actions: ${image.alt.trim() || 'Drawing'}`);
-    if (image.src !== url) image.src = url;
+    if (['mp4', 'mov', 'webm'].includes(extension)) {
+      image.dataset['videoSource'] = url;
+      const inertImage = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+      if (image.src !== inertImage) image.src = inertImage;
+    } else if (image.src !== url) {
+      image.src = url;
+    }
   }
 }

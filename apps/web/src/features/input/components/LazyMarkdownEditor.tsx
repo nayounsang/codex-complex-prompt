@@ -2,6 +2,7 @@ import { Component, forwardRef, lazy, Suspense, useCallback, useState } from 're
 import { Button } from '@base-ui/react/button';
 
 import type { MarkdownEditorHandle, MarkdownEditorProps } from './MarkdownEditor.js';
+import { isSupportedMediaFile } from '../model/media-files.js';
 
 const MarkdownEditor = lazy(async function loadMarkdownEditor() {
   const module = await import('./MarkdownEditor.js');
@@ -26,7 +27,7 @@ export const LazyMarkdownEditor = forwardRef<MarkdownEditorHandle, LazyMarkdownE
         <MarkdownEditorFallback
           readOnly={props.readOnly ?? false}
           onActivate={requestEditor}
-          onImageFiles={props.onImageFiles}
+          onMediaFiles={props.onMediaFiles ?? props.onImageFiles}
         />
       );
     }
@@ -37,7 +38,7 @@ export const LazyMarkdownEditor = forwardRef<MarkdownEditorHandle, LazyMarkdownE
           fallback={
             <MarkdownEditorFallback
               readOnly={props.readOnly ?? false}
-              onImageFiles={props.onImageFiles}
+              onMediaFiles={props.onMediaFiles ?? props.onImageFiles}
             />
           }
         >
@@ -51,14 +52,14 @@ export const LazyMarkdownEditor = forwardRef<MarkdownEditorHandle, LazyMarkdownE
 interface MarkdownEditorFallbackProps extends Pick<MarkdownEditorProps, 'readOnly'> {
   readonly onActivate?: () => void;
   readonly error?: boolean;
-  readonly onImageFiles?: MarkdownEditorProps['onImageFiles'];
+  readonly onMediaFiles?: MarkdownEditorProps['onMediaFiles'];
 }
 
 function MarkdownEditorFallback({
   readOnly = false,
   onActivate,
   error = false,
-  onImageFiles,
+  onMediaFiles,
 }: MarkdownEditorFallbackProps): React.JSX.Element {
   const activate = onActivate ?? undefined;
   const activateOnPointer = onActivate === undefined || error ? undefined : activate;
@@ -94,11 +95,11 @@ function MarkdownEditorFallback({
         if (file !== null) files.push(file);
       }
     }
-    const images = files.filter((file) => file.type === '' || file.type.startsWith('image/'));
-    if (images.length === 0) return;
+    const media = files.filter(isSupportedMediaFile);
+    if (media.length === 0) return;
     event.preventDefault();
     event.stopPropagation();
-    if (!readOnly) void onImageFiles?.(images);
+    if (!readOnly) void onMediaFiles?.(media);
   }
 }
 
