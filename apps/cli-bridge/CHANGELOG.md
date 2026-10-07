@@ -1,5 +1,13 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.3.6
+
+### Patch Changes
+
+- 4f0774b: Detect WebM attachments when a larger element precedes the EBML DocType.
+- 374eaf2: Keep the attached image delete action at the image's upper-left corner.
+- 4f0774b: Attach local MP4, MOV, and WebM files and render standalone Markdown video references in the editor and feedback view.
+
 ## 0.3.5
 
 ### Patch Changes
