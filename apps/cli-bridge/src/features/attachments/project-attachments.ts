@@ -63,9 +63,17 @@ export function createProjectAttachmentStore(projectDirectory: string): ProjectA
         handle = await open(path, 'r');
         const { size } = await handle.stat();
         if (size <= 0 || size > MAX_ATTACHMENT_VIDEO_BYTES) return undefined;
-        const header = Buffer.alloc(Math.min(size, 4100));
+        const prefix = Buffer.alloc(Math.min(size, 12));
+        const { bytesRead: prefixBytesRead } = await handle.read(prefix, 0, prefix.byteLength, 0);
+        const headerLength =
+          extension === 'webm'
+            ? getEbmlHeaderLength(prefix.subarray(0, prefixBytesRead), size)
+            : Math.min(size, 4100);
+        if (headerLength === undefined) return undefined;
+        const header = Buffer.alloc(headerLength);
         const { bytesRead } = await handle.read(header, 0, header.byteLength, 0);
-        const detected = await identifyVideoBuffer(header.subarray(0, bytesRead));
+        if (bytesRead !== header.byteLength) return undefined;
+        const detected = await identifyVideoBuffer(header);
         if (
           detected === undefined ||
           detected.ext !== extension ||
@@ -381,6 +389,39 @@ async function identifyVideoBuffer(
   const detected = await parser.fromBuffer(buffer);
   if (detected === undefined || !detected.mime.startsWith('video/')) return undefined;
   return { ext: detected.ext, mime: detected.mime };
+}
+
+function getEbmlHeaderLength(prefix: Buffer, fileSize: number): number | undefined {
+  if (
+    prefix.byteLength < 5 ||
+    !prefix.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))
+  ) {
+    return undefined;
+  }
+
+  const firstSizeByte = prefix[4];
+  if (firstSizeByte === undefined) return undefined;
+  let sizeLength = 1;
+  let marker = 0x80;
+  while (sizeLength <= 8 && (firstSizeByte & marker) === 0) {
+    marker >>= 1;
+    sizeLength += 1;
+  }
+  if (sizeLength > 8 || prefix.byteLength < 4 + sizeLength) return undefined;
+
+  let payloadSize = BigInt(firstSizeByte & (marker - 1));
+  for (let index = 1; index < sizeLength; index += 1) {
+    const byte = prefix[4 + index];
+    if (byte === undefined) return undefined;
+    payloadSize = (payloadSize << 8n) | BigInt(byte);
+  }
+  if (payloadSize === (1n << BigInt(sizeLength * 7)) - 1n) return undefined;
+
+  const headerLength = 4n + BigInt(sizeLength) + payloadSize;
+  if (headerLength > BigInt(fileSize) || headerLength > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return undefined;
+  }
+  return Number(headerLength);
 }
 
 async function identifyImageBuffer(
