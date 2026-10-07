@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
+import { autoUpdate, computePosition, offset } from '@floating-ui/dom';
 import { Crepe } from '@milkdown/crepe';
 import type { BlockEditFeatureConfig } from '@milkdown/crepe/feature/block-edit';
 import { editorViewCtx, schemaCtx } from '@milkdown/kit/core';
@@ -306,9 +306,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             return;
           }
           void computePosition(target.image, overlay, {
-            placement: 'bottom-end',
+            placement: 'top-start',
             strategy: 'absolute',
-            middleware: [offset(-32), flip(), shift({ padding: 8 })],
+            middleware: [offset(-32)],
           }).then(({ x, y }) => {
             if (!active || !target.image.isConnected) return;
             setDrawingEditPosition({ top: y, left: x });

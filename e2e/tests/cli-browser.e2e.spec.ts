@@ -241,7 +241,7 @@ test('이미지 안의 삭제 버튼을 눌러 첨부 이미지를 삭제한다'
         await route.fulfill({
           status: 200,
           contentType: 'image/svg+xml',
-          body: '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120" />',
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120" viewBox="0 0 240 120"><rect width="240" height="120" fill="#dbeafe"/><circle cx="48" cy="40" r="18" fill="#fbbf24"/><path d="M0 105 70 42l52 45 34-28 84 46v15H0Z" fill="#22a06b"/></svg>',
         });
       }
     });
@@ -253,18 +253,21 @@ test('이미지 안의 삭제 버튼을 눌러 첨부 이미지를 삭제한다'
 
     const deleteButton = page.getByRole('button', { name: 'Delete drawing' });
     await expect(deleteButton).toBeVisible();
-    const imageBounds = await image.boundingBox();
-    const buttonBounds = await deleteButton.boundingBox();
-    expect(imageBounds).not.toBeNull();
-    expect(buttonBounds).not.toBeNull();
-    expect(buttonBounds!.x).toBeGreaterThanOrEqual(imageBounds!.x);
-    expect(buttonBounds!.y).toBeGreaterThanOrEqual(imageBounds!.y);
-    expect(buttonBounds!.x + buttonBounds!.width).toBeLessThanOrEqual(
-      imageBounds!.x + imageBounds!.width,
-    );
-    expect(buttonBounds!.y + buttonBounds!.height).toBeLessThanOrEqual(
-      imageBounds!.y + imageBounds!.height,
-    );
+    await expect
+      .poll(async () => {
+        const imageBounds = await image.boundingBox();
+        const buttonBounds = await deleteButton.boundingBox();
+        if (imageBounds === null || buttonBounds === null) return false;
+        return (
+          Math.abs(buttonBounds.x - imageBounds.x) <= 1 &&
+          Math.abs(buttonBounds.y - imageBounds.y) <= 1 &&
+          buttonBounds.x >= imageBounds.x &&
+          buttonBounds.y >= imageBounds.y &&
+          buttonBounds.x + buttonBounds.width <= imageBounds.x + imageBounds.width &&
+          buttonBounds.y + buttonBounds.height <= imageBounds.y + imageBounds.height
+        );
+      })
+      .toBe(true);
 
     await deleteButton.hover();
     await expect(deleteButton).toBeVisible();
