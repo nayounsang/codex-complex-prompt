@@ -391,7 +391,7 @@ button:focus-visible,
   height: 100%;
 }
 .video-embed-fallback {
-  background: #f3f4f6;
+  background: #111;
 }
 .video-embed-fallback img {
   position: absolute;
