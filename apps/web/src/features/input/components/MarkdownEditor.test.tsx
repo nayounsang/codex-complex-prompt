@@ -210,7 +210,12 @@ describe('MarkdownEditor', () => {
     editor.append(image);
 
     fireEvent.pointerMove(image);
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete drawing' }));
+    const deleteButton = await screen.findByRole('button', { name: 'Delete drawing' });
+    fireEvent.pointerMove(deleteButton);
+
+    expect(deleteButton).toBeInTheDocument();
+
+    fireEvent.click(deleteButton);
 
     expect(onDeleteDrawing).toHaveBeenCalledExactlyOnceWith('00000000-0000-4000-8000-000000000009');
   });

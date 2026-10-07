@@ -213,6 +213,84 @@ test('이미지 저장을 기다린 뒤 첨부 링크가 포함된 Markdown을 C
   }
 });
 
+test('이미지 안의 삭제 버튼을 눌러 첨부 이미지를 삭제한다', async ({ page }) => {
+  const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-image-delete-'));
+  const browserUrlFile = join(codexHome, 'browser-url.txt');
+  const imageId = '00000000-0000-4000-8000-000000000009';
+  const fakeCodex = startFakeCodex(
+    'prompt',
+    {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'e2e-image-delete-session',
+      cwd: repositoryRoot,
+      prompt: `$complex-prompt Review this image\n\n![image](.complex-prompt/attachments/${imageId}.png)`,
+    },
+    codexHome,
+    browserUrlFile,
+  );
+  let submitted = false;
+
+  try {
+    await page.route('**/_complex-prompt/attachments/**', async (route) => {
+      const request = route.request();
+      if (request.method() === 'HEAD') {
+        await route.fulfill({ status: 200, headers: { 'X-Attachment-Editable': 'false' } });
+      } else if (request.method() === 'DELETE') {
+        await route.fulfill({ status: 204 });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'image/svg+xml',
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120" />',
+        });
+      }
+    });
+    await openFakeCodexBrowser(page, fakeCodex);
+    const editor = page.getByRole('textbox', { name: 'Command' });
+    const image = editor.locator(`img[data-drawing-id="${imageId}"]`);
+    await expect(image).toBeVisible();
+    await image.hover();
+
+    const deleteButton = page.getByRole('button', { name: 'Delete drawing' });
+    await expect(deleteButton).toBeVisible();
+    const imageBounds = await image.boundingBox();
+    const buttonBounds = await deleteButton.boundingBox();
+    expect(imageBounds).not.toBeNull();
+    expect(buttonBounds).not.toBeNull();
+    expect(buttonBounds!.x).toBeGreaterThanOrEqual(imageBounds!.x);
+    expect(buttonBounds!.y).toBeGreaterThanOrEqual(imageBounds!.y);
+    expect(buttonBounds!.x + buttonBounds!.width).toBeLessThanOrEqual(
+      imageBounds!.x + imageBounds!.width,
+    );
+    expect(buttonBounds!.y + buttonBounds!.height).toBeLessThanOrEqual(
+      imageBounds!.y + imageBounds!.height,
+    );
+
+    await deleteButton.hover();
+    await expect(deleteButton).toBeVisible();
+    await deleteButton.click();
+    await expect(image).toHaveCount(0);
+    await page.getByRole('button', { name: 'Send to Codex' }).click();
+
+    const hookResult = await fakeCodex.result;
+    submitted = true;
+    expect(hookResult.exitCode).toBe(0);
+    const response = JSON.parse(hookResult.output) as {
+      readonly hookSpecificOutput: { readonly additionalContext: string };
+    };
+    expect(response.hookSpecificOutput.additionalContext).not.toContain(imageId);
+  } finally {
+    if (!submitted) {
+      await page
+        .getByRole('button', { name: 'Send to Codex' })
+        .click({ timeout: 1_000 })
+        .catch(() => undefined);
+      await Promise.race([fakeCodex.result, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    }
+    await rm(codexHome, { recursive: true, force: true });
+  }
+});
+
 test('이미지 저장 실패 시 fallback 이미지를 보여주고 Markdown에 연결한다', async ({ page }) => {
   const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-image-fallback-'));
   const browserUrlFile = join(codexHome, 'browser-url.txt');

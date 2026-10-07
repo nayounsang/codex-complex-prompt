@@ -306,9 +306,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             return;
           }
           void computePosition(target.image, overlay, {
-            placement: 'top-start',
+            placement: 'bottom-end',
             strategy: 'absolute',
-            middleware: [offset(6), flip(), shift({ padding: 8 })],
+            middleware: [offset(-32), flip(), shift({ padding: 8 })],
           }).then(({ x, y }) => {
             if (!active || !target.image.isConnected) return;
             setDrawingEditPosition({ top: y, left: x });
