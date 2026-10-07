@@ -340,10 +340,7 @@ button:focus-visible,
 }
 .markdown-editor p:has(> img[data-video-source])::after,
 .annotated-markdown p:has(> img[data-video-source])::after,
-.annotated-markdown p:has(> a[href*='.mp4' i])::after,
-.annotated-markdown p:has(> a[href*='.mov' i])::after,
-.annotated-markdown p:has(> a[href*='.webm' i])::after,
-.annotated-markdown p:has(> a[href*='/user-attachments/assets/'])::after {
+.annotated-markdown p.video-embed-target::after {
   display: block;
   width: min(100%, 800px);
   margin-top: 8px;
@@ -354,10 +351,7 @@ button:focus-visible,
 .annotated-markdown p:has(> img[data-video-source]) > img[data-video-source] {
   display: none;
 }
-.annotated-markdown p:has(> a[href*='.mp4' i]),
-.annotated-markdown p:has(> a[href*='.mov' i]),
-.annotated-markdown p:has(> a[href*='.webm' i]),
-.annotated-markdown p:has(> a[href*='/user-attachments/assets/']) {
+.annotated-markdown p.video-embed-target {
   font-size: 0;
   line-height: 0;
 }

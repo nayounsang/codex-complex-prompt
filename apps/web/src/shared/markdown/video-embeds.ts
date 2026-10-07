@@ -35,6 +35,7 @@ export function createVideoEmbedTargets(
         (inertMarkdown === undefined
           ? null
           : getInertMarkdownVideoSource(paragraph, inertMarkdown));
+      paragraph.classList.toggle('video-embed-target', image === null && source !== null);
       const id = videoEmbedIds.get(paragraph);
       let mount =
         id === undefined
