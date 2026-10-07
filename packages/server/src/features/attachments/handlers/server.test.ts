@@ -44,6 +44,177 @@ async function startAttachmentTestServer(
 }
 
 describe('로컬 브리지 서버', () => {
+  it('video 첨부를 편집 장면 없이 저장한다', async () => {
+    let savedInput: Parameters<NonNullable<AttachmentStore['save']>>[0] | undefined;
+    const id = '00000000-0000-4000-8000-000000000038';
+    const { server, token } = await startAttachmentTestServer({
+      save: async (input) => {
+        savedInput = input;
+        return id;
+      },
+    });
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments?token=${encodeURIComponent(token)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video: 'data:video/mp4;base64,AA==', extension: 'mp4' }),
+        },
+      );
+
+      expect(response.status).toBe(201);
+      expect(await response.json()).toEqual({ id });
+      expect(savedInput).toEqual({ video: 'data:video/mp4;base64,AA==', extension: 'mp4' });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('video 업로드에 편집 장면이나 잘못된 확장자를 주면 거부한다', async () => {
+    const { server, token } = await startAttachmentTestServer();
+
+    try {
+      for (const body of [
+        { video: 'data:video/mp4;base64,AA==', scene: '{}' },
+        { video: 'data:video/mp4;base64,AA==', extension: 1 },
+      ]) {
+        const response = await fetch(
+          `${server.url}/_complex-prompt/attachments?token=${encodeURIComponent(token)}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          },
+        );
+
+        expect(response.status).toBe(400);
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('video 저장소의 HEAD 요청에 전체 및 부분 응답 정보를 반환한다', async () => {
+    const { server, token } = await startAttachmentTestServer({
+      getVideoInfo: async () => ({ size: 10, mimeType: 'video/mp4' }),
+    });
+    const url = `${server.url}/_complex-prompt/attachments/00000000-0000-4000-8000-000000000039.mp4?token=${encodeURIComponent(token)}`;
+
+    try {
+      const full = await fetch(url, { method: 'HEAD' });
+      expect(full.status).toBe(200);
+      expect(full.headers.get('content-length')).toBe('10');
+      expect(full.headers.get('accept-ranges')).toBe('bytes');
+
+      const partial = await fetch(url, { method: 'HEAD', headers: { Range: 'bytes=2-4' } });
+      expect(partial.status).toBe(206);
+      expect(partial.headers.get('content-range')).toBe('bytes 2-4/10');
+      expect(partial.headers.get('content-length')).toBe('3');
+
+      const suffix = await fetch(url, { method: 'HEAD', headers: { Range: 'bytes=-2' } });
+      expect(suffix.status).toBe(206);
+      expect(suffix.headers.get('content-range')).toBe('bytes 8-9/10');
+
+      const invalid = await fetch(url, { method: 'HEAD', headers: { Range: 'bytes=40-' } });
+      expect(invalid.status).toBe(416);
+
+      const missingServer = await startAttachmentTestServer({
+        getVideoInfo: async () => undefined,
+      });
+      try {
+        const missing = await fetch(
+          `${missingServer.server.url}/_complex-prompt/attachments/00000000-0000-4000-8000-000000000040.mp4?token=${encodeURIComponent(missingServer.token)}`,
+          { method: 'HEAD' },
+        );
+        expect(missing.status).toBe(404);
+      } finally {
+        await missingServer.server.close();
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('video 저장소에서 GET range를 읽고 누락 및 오류를 처리한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000041';
+    const bytes = Buffer.from('0123456789');
+    const { server, token } = await startAttachmentTestServer({
+      getVideoInfo: async () => ({ size: bytes.length, mimeType: 'video/mp4' }),
+      readVideoRange: async (_id, _extension, start, end) => bytes.subarray(start, end + 1),
+    });
+    const url = `${server.url}/_complex-prompt/attachments/${id}.mp4?token=${encodeURIComponent(token)}`;
+
+    try {
+      const partial = await fetch(url, { headers: { Range: 'bytes=2-4' } });
+      expect(partial.status).toBe(206);
+      expect(partial.headers.get('content-range')).toBe('bytes 2-4/10');
+      expect(Buffer.from(await partial.arrayBuffer())).toEqual(Buffer.from('234'));
+
+      const invalid = await fetch(url, { headers: { Range: 'bytes=-' } });
+      expect(invalid.status).toBe(416);
+
+      const missingChunkServer = await startAttachmentTestServer({
+        getVideoInfo: async () => ({ size: 10, mimeType: 'video/mp4' }),
+        readVideoRange: async () => undefined,
+      });
+      try {
+        const missingChunk = await fetch(
+          `${missingChunkServer.server.url}/_complex-prompt/attachments/${id}.mp4?token=${encodeURIComponent(missingChunkServer.token)}`,
+        );
+        expect(missingChunk.status).toBe(404);
+      } finally {
+        await missingChunkServer.server.close();
+      }
+
+      const failureServer = await startAttachmentTestServer({
+        getVideoInfo: async () => {
+          throw new Error('disk unavailable');
+        },
+        readVideoRange: async () => undefined,
+      });
+      try {
+        const failure = await fetch(
+          `${failureServer.server.url}/_complex-prompt/attachments/${id}.mp4?token=${encodeURIComponent(failureServer.token)}`,
+        );
+        expect(failure.status).toBe(500);
+      } finally {
+        await failureServer.server.close();
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('메모리 video 첨부의 전체 및 부분 GET 요청을 처리한다', async () => {
+    const video = Buffer.from('0123456789');
+    const { server, token } = await startAttachmentTestServer({
+      read: async () => ({ video, extension: 'webm', mimeType: 'video/webm' }),
+    });
+    const url = `${server.url}/_complex-prompt/attachments/00000000-0000-4000-8000-000000000042.webm?token=${encodeURIComponent(token)}`;
+
+    try {
+      const full = await fetch(url);
+      expect(full.status).toBe(200);
+      expect(full.headers.get('content-type')).toBe('video/webm');
+      expect(Buffer.from(await full.arrayBuffer())).toEqual(video);
+
+      const partial = await fetch(url, { headers: { Range: 'bytes=3-' } });
+      expect(partial.status).toBe(206);
+      expect(partial.headers.get('content-range')).toBe('bytes 3-9/10');
+      expect(Buffer.from(await partial.arrayBuffer())).toEqual(Buffer.from('3456789'));
+
+      const suffix = await fetch(url, { headers: { Range: 'bytes=-3' } });
+      expect(Buffer.from(await suffix.arrayBuffer())).toEqual(Buffer.from('789'));
+
+      const invalid = await fetch(url, { headers: { Range: 'items=0-1' } });
+      expect(invalid.status).toBe(416);
+    } finally {
+      await server.close();
+    }
+  });
+
   it('첨부 컬렉션 경로에서 그림 저장 요청을 받는다', async () => {
     const id = '00000000-0000-4000-8000-000000000006';
     let saved = false;

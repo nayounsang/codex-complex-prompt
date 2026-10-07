@@ -12,6 +12,7 @@ import { Dialog } from '@base-ui/react/dialog';
 import {
   countPromptCharacters,
   MAX_ATTACHMENT_IMAGE_BYTES,
+  MAX_ATTACHMENT_VIDEO_BYTES,
   MAX_PROMPT_LENGTH,
 } from '@codex-complex-prompt/protocol';
 
@@ -26,6 +27,7 @@ import { removeMarkdownDrawingReferences } from '../../input/drawing-markdown.js
 import { countMarkdownImageOccurrences } from '../../../shared/markdown/markdown-source-map.js';
 import { MARKDOWN_ATTACHMENT_DIRECTORY } from '../../../shared/markdown/attachment-path.js';
 import { identifyImageFormat } from '../../../shared/image-format.js';
+import { getVideoExtension, getVideoMimeType } from '../../input/model/media-files.js';
 
 const DrawingDialog = lazy(async () => {
   (window as Window & { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH = '/';
@@ -38,7 +40,7 @@ interface ActiveDrawing {
   readonly scene?: string;
 }
 
-interface PendingImageMarkdown {
+interface PendingMediaMarkdown {
   readonly markdown: string;
   // Prevent an older identical image line in the draft from consuming this append.
   readonly occurrence: number;
@@ -58,42 +60,42 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
   const [showEmptyFinishDialog, setShowEmptyFinishDialog] = useState(false);
   const [editorResetVersion, setEditorResetVersion] = useState(0);
   const [attachmentRefreshKey, setAttachmentRefreshKey] = useState(0);
-  const [isWaitingForImageSaves, setIsWaitingForImageSaves] = useState(false);
+  const [isWaitingForMediaSaves, setIsWaitingForMediaSaves] = useState(false);
   const [drawing, setDrawing] = useState<ActiveDrawing | null>(null);
   const editorRef = useRef<MarkdownEditorHandle>(null);
   const currentMarkdownRef = useRef(markdownOverride ?? bridgeSession.initialMarkdown ?? '');
-  const pendingImageMarkdownRef = useRef<PendingImageMarkdown[]>([]);
-  const pendingImageSavesRef = useRef(new Set<Promise<void>>());
-  const isWaitingForImageSavesRef = useRef(false);
+  const pendingMediaMarkdownRef = useRef<PendingMediaMarkdown[]>([]);
+  const pendingMediaSavesRef = useRef(new Set<Promise<void>>());
+  const isWaitingForMediaSavesRef = useRef(false);
   const { feedbackLoop, submit } = bridgeSession;
   const markdown = markdownOverride ?? bridgeSession.initialMarkdown ?? '';
   const updateMarkdownOverride = useCallback((nextMarkdown: string): void => {
     currentMarkdownRef.current = nextMarkdown;
     setMarkdownOverride(nextMarkdown);
   }, []);
-  const includePendingImageMarkdown = useCallback((markdown: string): string => {
-    const pendingImages = [...pendingImageMarkdownRef.current];
+  const includePendingMediaMarkdown = useCallback((markdown: string): string => {
+    const pendingMedia = [...pendingMediaMarkdownRef.current];
     const markdownOccurrences = countMarkdownImageOccurrences(
       markdown,
-      pendingImages.map((image) => image.markdown),
+      pendingMedia.map((media) => media.markdown),
     );
-    const remainingImages: PendingImageMarkdown[] = [];
-    const missingImages: string[] = [];
-    for (const image of pendingImages) {
-      const available = markdownOccurrences.get(image.markdown) ?? 0;
-      if (available < image.occurrence) {
-        remainingImages.push(image);
-        missingImages.push(image.markdown);
+    const remainingMedia: PendingMediaMarkdown[] = [];
+    const missingMedia: string[] = [];
+    for (const media of pendingMedia) {
+      const available = markdownOccurrences.get(media.markdown) ?? 0;
+      if (available < media.occurrence) {
+        remainingMedia.push(media);
+        missingMedia.push(media.markdown);
       }
     }
-    pendingImageMarkdownRef.current = remainingImages;
-    if (missingImages.length === 0) return markdown;
-    return `${markdown.trimEnd()}${markdown.trim() === '' ? '' : '\n\n'}${missingImages.join('\n\n')}`;
+    pendingMediaMarkdownRef.current = remainingMedia;
+    if (missingMedia.length === 0) return markdown;
+    return `${markdown.trimEnd()}${markdown.trim() === '' ? '' : '\n\n'}${missingMedia.join('\n\n')}`;
   }, []);
   const getCurrentMarkdown = useCallback(
     (): string =>
-      includePendingImageMarkdown(editorRef.current?.getMarkdown() ?? currentMarkdownRef.current),
-    [includePendingImageMarkdown],
+      includePendingMediaMarkdown(editorRef.current?.getMarkdown() ?? currentMarkdownRef.current),
+    [includePendingMediaMarkdown],
   );
   useEffect(
     function syncCurrentMarkdownRef() {
@@ -121,7 +123,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
   const isSubmitting =
     bridgeSession.state === 'submitting' ||
     feedbackSubmission.isSubmitting ||
-    isWaitingForImageSaves;
+    isWaitingForMediaSaves;
   const { attachmentUrl, attachmentToken } = bridgeSession;
   const attachmentEndpoint = (id?: string, extension?: string): string | null => {
     if (attachmentUrl === null || attachmentToken === null) return null;
@@ -180,13 +182,49 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     }
   };
 
-  const saveImageFiles = async (files: readonly File[]): Promise<void> => {
+  const saveMediaFiles = async (files: readonly File[]): Promise<void> => {
     const markdownImages: string[] = [];
     let hasSavedAttachments = false;
     for (const file of files) {
       try {
-        if (file.size > MAX_ATTACHMENT_IMAGE_BYTES) {
-          throw new Error('Image files must be 25 MB or smaller.');
+        const videoMimeType = getVideoMimeType(file);
+        const videoExtension = getVideoExtension(file);
+        if (
+          file.size >
+          (videoExtension === null ? MAX_ATTACHMENT_IMAGE_BYTES : MAX_ATTACHMENT_VIDEO_BYTES)
+        ) {
+          throw new Error('Media files must be 25 MB or smaller.');
+        }
+        if (videoMimeType !== null && videoExtension !== null) {
+          const video = await readFileAsDataUrl(file, videoMimeType);
+          const endpoint = attachmentEndpoint();
+          if (endpoint === null)
+            throw new Error('Could not connect to the project attachment store.');
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ video, extension: videoExtension }),
+          });
+          const responseText = await response.text();
+          let result: { id?: string; extension?: string; error?: string };
+          try {
+            result = JSON.parse(responseText) as {
+              id?: string;
+              extension?: string;
+              error?: string;
+            };
+          } catch {
+            throw new Error(
+              responseText.trim() || `Could not save the video (HTTP ${response.status}).`,
+            );
+          }
+          if (!response.ok || result.id === undefined)
+            throw new Error(result.error ?? 'Could not save the video.');
+          hasSavedAttachments = true;
+          markdownImages.push(
+            `![](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.${result.extension ?? videoExtension})`,
+          );
+          continue;
         }
         const sourceMimeType = file.type || 'application/octet-stream';
         const sourceImage = await readFileAsDataUrl(file, sourceMimeType);
@@ -220,8 +258,9 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           `![${escapeMarkdownAlt(file.name)}](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.${result.extension ?? format.extension})`,
         );
       } catch {
+        const isVideo = getVideoMimeType(file) !== null;
         markdownImages.push(
-          `![Image upload failed: ${escapeMarkdownAlt(file.name)}](${IMAGE_UPLOAD_FALLBACK_PATH})`,
+          `![${isVideo ? 'Video' : 'Image'} upload failed: ${escapeMarkdownAlt(file.name)}](${IMAGE_UPLOAD_FALLBACK_PATH})`,
         );
       }
     }
@@ -230,7 +269,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     const appendedOccurrences = new Map<string, number>();
     for (const image of markdownImages) {
       const appended = appendedOccurrences.get(image) ?? 0;
-      pendingImageMarkdownRef.current.push({
+      pendingMediaMarkdownRef.current.push({
         markdown: image,
         occurrence: (currentOccurrences.get(image) ?? 0) + appended + 1,
       });
@@ -242,45 +281,45 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     setEditorResetVersion((version) => version + 1);
   };
 
-  const handleImageFiles = (files: readonly File[]): Promise<void> => {
-    const save = saveImageFiles(files);
-    pendingImageSavesRef.current.add(save);
-    void save.then(() => pendingImageSavesRef.current.delete(save));
+  const handleMediaFiles = (files: readonly File[]): Promise<void> => {
+    const save = saveMediaFiles(files);
+    pendingMediaSavesRef.current.add(save);
+    void save.then(() => pendingMediaSavesRef.current.delete(save));
     return save.then(() => undefined);
   };
 
-  const waitForPendingImageSaves = useCallback(async (): Promise<void> => {
-    if (pendingImageSavesRef.current.size === 0) return;
-    isWaitingForImageSavesRef.current = true;
-    setIsWaitingForImageSaves(true);
+  const waitForPendingMediaSaves = useCallback(async (): Promise<void> => {
+    if (pendingMediaSavesRef.current.size === 0) return;
+    isWaitingForMediaSavesRef.current = true;
+    setIsWaitingForMediaSaves(true);
     try {
-      while (pendingImageSavesRef.current.size > 0) {
-        const saves = [...pendingImageSavesRef.current];
+      while (pendingMediaSavesRef.current.size > 0) {
+        const saves = [...pendingMediaSavesRef.current];
         await Promise.all(saves);
       }
     } finally {
-      isWaitingForImageSavesRef.current = false;
-      setIsWaitingForImageSaves(false);
+      isWaitingForMediaSavesRef.current = false;
+      setIsWaitingForMediaSaves(false);
     }
   }, []);
 
-  const withPromptAfterImageSaves = useCallback(
+  const withPromptAfterMediaSaves = useCallback(
     (onPromptReady: (prompt: string) => void): void => {
-      if (isWaitingForImageSavesRef.current) return;
-      if (pendingImageSavesRef.current.size === 0) {
+      if (isWaitingForMediaSavesRef.current) return;
+      if (pendingMediaSavesRef.current.size === 0) {
         onPromptReady(getCurrentMarkdown());
         return;
       }
-      void waitForPendingImageSaves().then(() => onPromptReady(getCurrentMarkdown()));
+      void waitForPendingMediaSaves().then(() => onPromptReady(getCurrentMarkdown()));
     },
-    [getCurrentMarkdown, waitForPendingImageSaves],
+    [getCurrentMarkdown, waitForPendingMediaSaves],
   );
 
-  const sendFeedbackAfterImageSaves = useCallback((): void => {
-    withPromptAfterImageSaves((prompt) => {
+  const sendFeedbackAfterMediaSaves = useCallback((): void => {
+    withPromptAfterMediaSaves((prompt) => {
       void sendFeedback(prompt);
     });
-  }, [sendFeedback, withPromptAfterImageSaves]);
+  }, [sendFeedback, withPromptAfterMediaSaves]);
 
   const deleteDrawing = async (id: string): Promise<void> => {
     const endpoint = attachmentEndpoint(id);
@@ -301,10 +340,10 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
 
   const handleMarkdownChange = useCallback(
     (nextMarkdown: string): void => {
-      updateMarkdownOverride(includePendingImageMarkdown(nextMarkdown));
+      updateMarkdownOverride(includePendingMediaMarkdown(nextMarkdown));
       setValidationError(null);
     },
-    [includePendingImageMarkdown, updateMarkdownOverride],
+    [includePendingMediaMarkdown, updateMarkdownOverride],
   );
 
   const applyTemplate = useCallback(
@@ -317,7 +356,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
   );
 
   const submitMarkdown = useCallback((): void => {
-    withPromptAfterImageSaves((prompt) => {
+    withPromptAfterMediaSaves((prompt) => {
       if (countPromptCharacters(prompt.trim()) > MAX_PROMPT_LENGTH) {
         setValidationError(
           `Markdown commands must be ${MAX_PROMPT_LENGTH.toLocaleString()} characters or fewer.`,
@@ -327,12 +366,12 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       setValidationError(null);
       void submit(prompt);
     });
-  }, [submit, withPromptAfterImageSaves]);
+  }, [submit, withPromptAfterMediaSaves]);
 
   const handlePromptSubmit = useCallback((): void => {
-    if (isWaitingForImageSavesRef.current) return;
+    if (isWaitingForMediaSavesRef.current) return;
     if (feedbackLoop) {
-      withPromptAfterImageSaves((prompt) => {
+      withPromptAfterMediaSaves((prompt) => {
         if (countPromptCharacters(prompt.trim()) > MAX_PROMPT_LENGTH) {
           setValidationError(
             `Markdown commands must be ${MAX_PROMPT_LENGTH.toLocaleString()} characters or fewer.`,
@@ -358,7 +397,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     feedbackLoop,
     submit,
     submitMarkdown,
-    withPromptAfterImageSaves,
+    withPromptAfterMediaSaves,
   ]);
 
   const handleApproveAnyway = useCallback((): void => {
@@ -378,7 +417,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           onSubmit: () => {
             void handlePromptSubmit();
           },
-          onSendFeedback: sendFeedbackAfterImageSaves,
+          onSendFeedback: sendFeedbackAfterMediaSaves,
         }}
         editor={{
           markdown,
@@ -403,7 +442,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           onDelete: feedback.removeFeedback,
         }}
         drawings={{
-          onImageFiles: handleImageFiles,
+          onMediaFiles: handleMediaFiles,
           onDraw: () => {
             void openDrawing();
           },
@@ -458,7 +497,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           onSendFeedback={() => {
             setShowSubmitDialog(false);
             setMode('feedback');
-            sendFeedbackAfterImageSaves();
+            sendFeedbackAfterMediaSaves();
           }}
           onApproveAnyway={handleApproveAnyway}
         />

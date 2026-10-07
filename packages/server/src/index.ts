@@ -209,6 +209,7 @@ function serveAttachmentRequest(
         let input: {
           id?: unknown;
           image?: unknown;
+          video?: unknown;
           png?: unknown;
           extension?: unknown;
           scene?: unknown;
@@ -228,8 +229,12 @@ function serveAttachmentRequest(
           );
         }
         if (
-          (typeof input.image !== 'string' && typeof input.png !== 'string') ||
-          typeof input.scene !== 'string' ||
+          (typeof input.image !== 'string' &&
+            typeof input.png !== 'string' &&
+            typeof input.video !== 'string') ||
+          (typeof input.video === 'string'
+            ? input.scene !== undefined
+            : typeof input.scene !== 'string') ||
           (input.id !== undefined && typeof input.id !== 'string') ||
           (input.extension !== undefined && typeof input.extension !== 'string')
         )
@@ -242,11 +247,14 @@ function serveAttachmentRequest(
               : 'png';
         const id = await attachmentStore.save({
           ...(typeof input.id === 'string' ? { id: input.id } : {}),
+          ...(typeof input.video === 'string' ? { video: input.video } : {}),
           ...(typeof input.image === 'string'
             ? { image: input.image }
-            : { png: input.png as string }),
+            : typeof input.video === 'string'
+              ? {}
+              : { png: input.png as string }),
           ...(extension === undefined ? {} : { extension }),
-          scene: input.scene,
+          ...(typeof input.scene === 'string' ? { scene: input.scene } : {}),
         });
         return id;
       })
@@ -272,6 +280,47 @@ function serveAttachmentRequest(
     return true;
   }
   if (request.method === 'HEAD') {
+    if (
+      kind !== undefined &&
+      isVideoExtension(kind) &&
+      attachmentStore.getVideoInfo !== undefined
+    ) {
+      void attachmentStore
+        .getVideoInfo(id, kind)
+        .then((info) => {
+          if (info === undefined) {
+            response.writeHead(404, { 'Cache-Control': 'no-store' }).end();
+            return;
+          }
+          const range = parseVideoRange(request.headers.range, info.size);
+          if (range === null) {
+            response
+              .writeHead(416, {
+                'Accept-Ranges': 'bytes',
+                'Content-Range': `bytes */${info.size}`,
+                'Cache-Control': 'no-store',
+              })
+              .end();
+            return;
+          }
+          const partial = request.headers.range !== undefined;
+          response
+            .writeHead(partial ? 206 : 200, {
+              'Content-Type': info.mimeType,
+              'Content-Length': String(range.end - range.start + 1),
+              'Accept-Ranges': 'bytes',
+              ...(partial
+                ? { 'Content-Range': `bytes ${range.start}-${range.end}/${info.size}` }
+                : {}),
+              'Cache-Control': 'no-store',
+              'X-Content-Type-Options': 'nosniff',
+              'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+            })
+            .end();
+        })
+        .catch(() => response.writeHead(500).end());
+      return true;
+    }
     if (kind === 'json' && attachmentStore.readScene !== undefined) {
       void attachmentStore
         .readScene(id)
@@ -338,6 +387,59 @@ function serveAttachmentRequest(
       .catch(() => response.writeHead(500).end());
     return true;
   }
+  if (
+    kind !== undefined &&
+    isVideoExtension(kind) &&
+    attachmentStore.getVideoInfo !== undefined &&
+    attachmentStore.readVideoRange !== undefined
+  ) {
+    void attachmentStore
+      .getVideoInfo(id, kind)
+      .then(async (info) => {
+        if (info === undefined) {
+          response.writeHead(404).end();
+          return;
+        }
+        const range = parseVideoRange(request.headers.range, info.size);
+        if (range === null) {
+          response
+            .writeHead(416, {
+              'Accept-Ranges': 'bytes',
+              'Content-Range': `bytes */${info.size}`,
+              'Cache-Control': 'no-store',
+            })
+            .end();
+          return;
+        }
+        const chunk = await attachmentStore.readVideoRange?.(
+          id,
+          kind,
+          range.start,
+          range.end,
+          info.size,
+        );
+        if (chunk === undefined) {
+          response.writeHead(404).end();
+          return;
+        }
+        const partial = request.headers.range !== undefined;
+        response
+          .writeHead(partial ? 206 : 200, {
+            'Content-Type': info.mimeType,
+            'Content-Length': String(chunk.byteLength),
+            'Accept-Ranges': 'bytes',
+            ...(partial
+              ? { 'Content-Range': `bytes ${range.start}-${range.end}/${info.size}` }
+              : {}),
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+          })
+          .end(chunk);
+      })
+      .catch(() => response.writeHead(500).end());
+    return true;
+  }
   void attachmentStore
     .read(id, kind)
     .then((attachment) => {
@@ -345,8 +447,37 @@ function serveAttachmentRequest(
         response.writeHead(404).end();
         return;
       }
-      const image = attachment.image ?? attachment.png;
-      if (kind !== 'json' && image !== undefined) {
+      const media = attachment.video ?? attachment.image ?? attachment.png;
+      if (kind !== 'json' && media !== undefined) {
+        if (attachment.video !== undefined) {
+          const range = parseVideoRange(request.headers.range, attachment.video.byteLength);
+          if (range === null) {
+            response
+              .writeHead(416, {
+                'Accept-Ranges': 'bytes',
+                'Content-Range': `bytes */${attachment.video.byteLength}`,
+                'Cache-Control': 'no-store',
+              })
+              .end();
+            return;
+          }
+          const { start, end } = range;
+          const chunk = attachment.video.subarray(start, end + 1);
+          response
+            .writeHead(request.headers.range === undefined ? 200 : 206, {
+              'Content-Type': attachment.mimeType ?? 'application/octet-stream',
+              'Content-Length': String(chunk.byteLength),
+              'Accept-Ranges': 'bytes',
+              ...(request.headers.range === undefined
+                ? {}
+                : { 'Content-Range': `bytes ${start}-${end}/${attachment.video.byteLength}` }),
+              'Cache-Control': 'no-store',
+              'X-Content-Type-Options': 'nosniff',
+              'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+            })
+            .end(chunk);
+          return;
+        }
         response
           .writeHead(200, {
             'Content-Type':
@@ -355,7 +486,7 @@ function serveAttachmentRequest(
             'X-Content-Type-Options': 'nosniff',
             'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'",
           })
-          .end(image);
+          .end(media);
         return;
       }
       if (kind === 'json' && attachment.scene !== undefined) {
@@ -371,6 +502,29 @@ function serveAttachmentRequest(
     })
     .catch(() => response.writeHead(500).end());
   return true;
+}
+
+function parseVideoRange(
+  header: string | undefined,
+  length: number,
+): { readonly start: number; readonly end: number } | null {
+  if (header === undefined) return { start: 0, end: length - 1 };
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header);
+  if (match === null || length === 0) return null;
+  const requestedStart = match[1] === '' ? undefined : Number(match[1]);
+  const requestedEnd = match[2] === '' ? undefined : Number(match[2]);
+  if (requestedStart === undefined && requestedEnd === undefined) return null;
+  const start = requestedStart ?? Math.max(0, length - (requestedEnd ?? 0));
+  const end =
+    requestedStart === undefined ? length - 1 : Math.min(requestedEnd ?? length - 1, length - 1);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start > end) {
+    return null;
+  }
+  return { start, end };
+}
+
+function isVideoExtension(extension: string): boolean {
+  return extension === 'mp4' || extension === 'mov' || extension === 'webm';
 }
 
 async function readRequestBody(request: IncomingMessage, maxBytes: number): Promise<string> {

@@ -334,6 +334,64 @@ button:focus-visible,
 .markdown-editor .milkdown .milkdown-code-block:has(> .mermaid-preview-mount) .codemirror-host {
   display: none;
 }
+.markdown-editor,
+.annotated-markdown {
+  position: relative;
+}
+.markdown-editor p:has(> img[data-video-source])::after,
+.annotated-markdown p:has(> img[data-video-source])::after,
+.annotated-markdown p.video-embed-target::after {
+  display: block;
+  width: min(100%, 800px);
+  margin-top: 8px;
+  aspect-ratio: 16 / 9;
+  content: '';
+}
+.markdown-editor p:has(> img[data-video-source]) > img[data-video-source],
+.annotated-markdown p:has(> img[data-video-source]) > img[data-video-source] {
+  display: none;
+}
+.annotated-markdown p.video-embed-target {
+  font-size: 0;
+  line-height: 0;
+}
+.video-embed-mount {
+  display: contents;
+}
+.video-embed-frame {
+  position: fixed;
+  z-index: 1;
+  display: block;
+  width: min(100%, 800px);
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  background: #111;
+}
+.video-embed-source {
+  display: none;
+}
+.video-embed-player {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: contain;
+}
+.video-embed-fallback img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.video-embed-fallback {
+  background: #111;
+}
+.video-embed-fallback img {
+  position: absolute;
+  inset: 0;
+  object-fit: contain;
+}
 .mermaid-preview-mount {
   position: relative;
   min-height: 220px;
