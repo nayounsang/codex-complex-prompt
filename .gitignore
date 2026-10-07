@@ -14,3 +14,4 @@ complex-prompt/
 .env.*
 !.env.example
 .playwright-mcp
+/artifacts/pr-visual-evidence/
