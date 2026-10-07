@@ -114,12 +114,14 @@ describe('프로젝트 그림 첨부 저장소', () => {
     await mkdir(join(projectDirectory, '.complex-prompt'), { recursive: true });
     await writeFile(directory, 'not a directory');
     const id = '00000000-0000-4000-8000-000000000050';
+    const readScene = store.readScene;
+    if (readScene === undefined) throw new Error('readScene must be available.');
 
     await expect(store.getVideoInfo(id, 'mp4')).rejects.toMatchObject({ code: 'ENOTDIR' });
     await expect(store.readVideoRange(id, 'mp4', 0, 1, 2)).rejects.toMatchObject({
       code: 'ENOTDIR',
     });
-    await expect(store.readScene(id)).rejects.toMatchObject({ code: 'ENOTDIR' });
+    await expect(readScene(id)).rejects.toMatchObject({ code: 'ENOTDIR' });
   });
 
   it('동영상만 저장된 첨부는 Excalidraw 장면이 있는 것으로 표시하지 않는다', async () => {
@@ -251,10 +253,12 @@ describe('프로젝트 그림 첨부 저장소', () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
     const id = '00000000-0000-4000-8000-000000000052';
+    const readScene = store.readScene;
+    if (readScene === undefined) throw new Error('readScene must be available.');
 
     await expect(store.read(id, 'json')).resolves.toBeUndefined();
-    await expect(store.readScene(id)).resolves.toBeUndefined();
-    await expect(store.readScene('../outside')).resolves.toBeUndefined();
+    await expect(readScene(id)).resolves.toBeUndefined();
+    await expect(readScene('../outside')).resolves.toBeUndefined();
     await expect(store.read(id, '../png')).resolves.toBeUndefined();
     await expect(store.readVideoRange(id, 'mp4', 0, 0, 1)).resolves.toBeUndefined();
   });
