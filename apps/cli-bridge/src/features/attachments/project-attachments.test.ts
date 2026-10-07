@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import { MAX_ATTACHMENT_VIDEO_BYTES } from '@codex-complex-prompt/protocol';
 
 import {
   createProjectAttachmentStore,
@@ -15,6 +16,8 @@ const PNG_DATA =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
 const PNG_DATA_URL = `data:image/png;base64,${PNG_DATA}`;
 const GIF_DATA = 'R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+const VIDEO_DATA = 'AAAAGGZ0eXBpc29tAAACAGlzb21pc28y';
+const VIDEO_DATA_URL = `data:video/mp4;base64,${VIDEO_DATA}`;
 
 afterEach(async () => {
   await Promise.all(
@@ -31,6 +34,163 @@ async function createProjectDirectory(): Promise<string> {
 }
 
 describe('프로젝트 그림 첨부 저장소', () => {
+  it('MP4를 저장하고 정보와 지정한 byte range를 읽는다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const id = '00000000-0000-4000-8000-000000000043';
+    const bytes = Buffer.from(VIDEO_DATA, 'base64');
+    await store.save({ id, video: VIDEO_DATA_URL, extension: 'mp4' });
+
+    await expect(store.getVideoInfo(id, 'mp4')).resolves.toEqual({
+      size: bytes.byteLength,
+      mimeType: 'video/mp4',
+    });
+    await expect(store.readVideoRange(id, 'mp4', 4, 7, bytes.byteLength)).resolves.toEqual(
+      bytes.subarray(4, 8),
+    );
+    await expect(store.read(id, 'mp4')).resolves.toMatchObject({
+      id,
+      video: bytes,
+      extension: 'mp4',
+      mimeType: 'video/mp4',
+    });
+    await expect(store.read(id, 'json')).resolves.toBeUndefined();
+  });
+
+  it('동영상 정보와 range 읽기는 잘못된 ID, 확장자, 범위를 거부한다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const id = '00000000-0000-4000-8000-000000000044';
+    const bytes = Buffer.from(VIDEO_DATA, 'base64');
+    await store.save({ id, video: VIDEO_DATA_URL, extension: 'mp4' });
+
+    await expect(store.getVideoInfo('../outside', 'mp4')).resolves.toBeUndefined();
+    await expect(store.getVideoInfo(id, '../mp4')).resolves.toBeUndefined();
+    await expect(store.getVideoInfo(id, 'webm')).resolves.toBeUndefined();
+    await expect(
+      store.getVideoInfo('00000000-0000-4000-8000-000000000045', 'mp4'),
+    ).resolves.toBeUndefined();
+    await expect(
+      store.readVideoRange('../outside', 'mp4', 0, 1, bytes.length),
+    ).resolves.toBeUndefined();
+    await expect(store.readVideoRange(id, '../mp4', 0, 1, bytes.length)).resolves.toBeUndefined();
+    await expect(store.readVideoRange(id, 'mp4', 0.5, 1, bytes.length)).resolves.toBeUndefined();
+    await expect(
+      store.readVideoRange(id, 'mp4', 0, Number.NaN, bytes.length),
+    ).resolves.toBeUndefined();
+    await expect(store.readVideoRange(id, 'mp4', -1, 1, bytes.length)).resolves.toBeUndefined();
+    await expect(store.readVideoRange(id, 'mp4', 2, 1, bytes.length)).resolves.toBeUndefined();
+    await expect(
+      store.readVideoRange(id, 'mp4', 0, bytes.length, bytes.length),
+    ).resolves.toBeUndefined();
+    await expect(store.readVideoRange(id, 'mp4', 0, 1, bytes.length + 1)).resolves.toBeUndefined();
+  });
+
+  it('크기가 비었거나 상한을 넘거나 내용이 손상된 video 파일을 거부한다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const directory = join(projectDirectory, '.complex-prompt', 'attachments');
+    await mkdir(directory, { recursive: true });
+    const emptyId = '00000000-0000-4000-8000-000000000047';
+    const oversizedId = '00000000-0000-4000-8000-000000000048';
+    const corruptId = '00000000-0000-4000-8000-000000000049';
+    await writeFile(join(directory, `${emptyId}.mp4`), Buffer.alloc(0));
+    await writeFile(
+      join(directory, `${oversizedId}.mp4`),
+      Buffer.alloc(MAX_ATTACHMENT_VIDEO_BYTES + 1),
+    );
+    await writeFile(join(directory, `${corruptId}.mp4`), 'not a video');
+
+    await expect(store.getVideoInfo(emptyId, 'mp4')).resolves.toBeUndefined();
+    await expect(store.getVideoInfo(oversizedId, 'mp4')).resolves.toBeUndefined();
+    await expect(store.getVideoInfo(corruptId, 'mp4')).resolves.toBeUndefined();
+    await expect(store.read(corruptId, 'mp4')).resolves.toBeUndefined();
+  });
+
+  it('동영상 경로의 실제 파일 오류를 호출자에게 전달한다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const directory = join(projectDirectory, '.complex-prompt', 'attachments');
+    await mkdir(join(projectDirectory, '.complex-prompt'), { recursive: true });
+    await writeFile(directory, 'not a directory');
+    const id = '00000000-0000-4000-8000-000000000050';
+
+    await expect(store.getVideoInfo(id, 'mp4')).rejects.toMatchObject({ code: 'ENOTDIR' });
+    await expect(store.readVideoRange(id, 'mp4', 0, 1, 2)).rejects.toMatchObject({
+      code: 'ENOTDIR',
+    });
+    await expect(store.readScene(id)).rejects.toMatchObject({ code: 'ENOTDIR' });
+  });
+
+  it('동영상만 저장된 첨부는 Excalidraw 장면이 있는 것으로 표시하지 않는다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const id = '00000000-0000-4000-8000-000000000051';
+    await store.save({ id, video: VIDEO_DATA_URL, extension: 'mp4' });
+
+    await expect(store.hasSceneData(id)).resolves.toBe(false);
+  });
+
+  it('동영상 데이터 URI, 실제 형식, 지정한 확장자가 일치하지 않으면 저장을 거부한다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+
+    await expect(store.save({ video: 'not a video', extension: 'mp4' })).rejects.toThrow(
+      'The attachment must be an encoded video.',
+    );
+    await expect(store.save({ video: 'data:video/mp4;base64,', extension: 'mp4' })).rejects.toThrow(
+      'The video content is invalid or its MIME type does not match.',
+    );
+    await expect(
+      store.save({ video: 'data:video/webm;base64,AA==', extension: 'webm' }),
+    ).rejects.toThrow('The video content is invalid or its MIME type does not match.');
+    await expect(store.save({ video: VIDEO_DATA_URL, extension: 'webm' })).rejects.toThrow(
+      'Video extension does not match its content.',
+    );
+    await expect(store.save({ video: VIDEO_DATA_URL, extension: '../mp4' })).rejects.toThrow(
+      'Video extension does not match its content.',
+    );
+    await expect(
+      store.save({ video: VIDEO_DATA_URL, extension: 'mp4', scene: '{}' }),
+    ).rejects.toThrow('Invalid video attachment request.');
+    await expect(store.save({ video: VIDEO_DATA_URL })).rejects.toThrow(
+      'Invalid video attachment request.',
+    );
+  });
+
+  it('크기 제한을 넘는 동영상 데이터를 저장하지 않는다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const oversizedDataUri = `data:video/mp4;base64,${'A'.repeat(
+      Math.ceil((MAX_ATTACHMENT_VIDEO_BYTES + 2) / 3) * 4 + 129,
+    )}`;
+
+    await expect(store.save({ video: oversizedDataUri, extension: 'mp4' })).rejects.toThrow(
+      'Video attachments must be 25 MB or smaller.',
+    );
+    const oversizedBytesData = `data:video/mp4;base64,${'A'.repeat(
+      Math.ceil((MAX_ATTACHMENT_VIDEO_BYTES + 1) / 3) * 4,
+    )}`;
+    await expect(store.save({ video: oversizedBytesData, extension: 'mp4' })).rejects.toThrow(
+      'Video attachments must be 25 MB or smaller.',
+    );
+  });
+
+  it('동영상 교체 시 이전 이미지 파일을 제거하고 삭제 후 다시 읽을 수 없다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const id = '00000000-0000-4000-8000-000000000046';
+    await store.save({ id, png: PNG_DATA_URL, scene: '{}' });
+
+    await store.save({ id, video: VIDEO_DATA_URL, extension: 'mp4' });
+
+    await expect(store.read(id, 'png')).resolves.toBeUndefined();
+    await expect(store.getVideoInfo(id, 'mp4')).resolves.toBeDefined();
+    await expect(store.delete(id)).resolves.toBe(true);
+    await expect(store.getVideoInfo(id, 'mp4')).resolves.toBeUndefined();
+    await expect(store.readVideoRange(id, 'mp4', 0, 1, 24)).resolves.toBeUndefined();
+  });
+
   it('PNG와 Excalidraw 편집 데이터가 모두 저장된 그림을 편집 가능하다고 응답한다', async () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
@@ -84,6 +244,19 @@ describe('프로젝트 그림 첨부 저장소', () => {
       mimeType: 'image/png',
       scene,
     });
+    await expect(store.read(id, 'json')).resolves.toEqual({ id, scene });
+  });
+
+  it('장면 확장자 읽기와 장면 전용 API는 없는 파일에 undefined를 반환한다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const id = '00000000-0000-4000-8000-000000000052';
+
+    await expect(store.read(id, 'json')).resolves.toBeUndefined();
+    await expect(store.readScene(id)).resolves.toBeUndefined();
+    await expect(store.readScene('../outside')).resolves.toBeUndefined();
+    await expect(store.read(id, '../png')).resolves.toBeUndefined();
+    await expect(store.readVideoRange(id, 'mp4', 0, 0, 1)).resolves.toBeUndefined();
   });
 
   it('저장한 GIF 첨부를 원본 바이트와 GIF 확장자로 다시 읽는다', async () => {
@@ -323,6 +496,15 @@ describe('프로젝트 그림 첨부 저장소', () => {
     await writeFile(attachmentDirectory, 'not a directory');
 
     await expect(store.hasSceneData(id)).rejects.toMatchObject({ code: 'ENOTDIR' });
+  });
+
+  it('아직 생성되지 않은 첨부 저장소에서 장면 확인과 삭제를 안전하게 처리한다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const id = '00000000-0000-4000-8000-000000000053';
+
+    await expect(store.hasSceneData(id)).resolves.toBe(false);
+    await expect(store.delete(id)).resolves.toBe(false);
   });
 
   it('빈 PNG 데이터를 거부한다', async () => {
