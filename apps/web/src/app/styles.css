@@ -385,7 +385,6 @@ button:focus-visible,
   border: 0;
   object-fit: contain;
 }
-.video-embed-fallback,
 .video-embed-fallback img {
   display: block;
   width: 100%;
@@ -395,6 +394,8 @@ button:focus-visible,
   background: #f3f4f6;
 }
 .video-embed-fallback img {
+  position: absolute;
+  inset: 0;
   object-fit: contain;
 }
 .mermaid-preview-mount {
