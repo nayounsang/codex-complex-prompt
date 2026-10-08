@@ -27,6 +27,7 @@ import { useFeedbackAnnotations } from '../../feedback/hooks/useFeedbackAnnotati
 import { useFeedbackSubmission } from '../../feedback/hooks/useFeedbackSubmission.js';
 import { useProjectTemplates } from '../../templates/hooks/useProjectTemplates.js';
 import { parseAttachmentResponse } from '../infrastructure/attachment-response.js';
+import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../../shared/markdown/ui-replacements.js';
 import { removeMarkdownDrawingReferences } from '../../input/drawing-markdown.js';
 import { countMarkdownImageOccurrences } from '../../../shared/markdown/markdown-source-map.js';
 import { MARKDOWN_ATTACHMENT_DIRECTORY } from '../../../shared/markdown/attachment-path.js';
@@ -202,7 +203,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     const placeholderMarker =
       selectedPlaceholderStart < 0 || selectedPlaceholderMarker === undefined
         ? undefined
-        : `![media-upload-pending-${globalThis.crypto.randomUUID()}]()`;
+        : `![${MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.pendingPrefix}${globalThis.crypto.randomUUID()}]()`;
     if (
       selectedPlaceholderStart >= 0 &&
       selectedPlaceholderMarker !== undefined &&

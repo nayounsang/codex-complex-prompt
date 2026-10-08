@@ -1,4 +1,5 @@
 import { createMarkdownAttachmentImagePattern } from '../../shared/markdown/attachment-path.js';
+import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../shared/markdown/ui-replacements.js';
 
 export interface MarkdownDrawingReference {
   readonly id: string;
@@ -15,7 +16,7 @@ export function findMarkdownDrawingReferences(markdown: string): MarkdownDrawing
       if (id !== undefined && !drawingsById.has(id.toLowerCase())) {
         drawingsById.set(id.toLowerCase(), {
           id,
-          label: match[1]?.trim() || 'Drawing',
+          label: match[1]?.trim() || MARKDOWN_UI_REPLACEMENT_MODEL.drawing.fallbackLabel,
         });
       }
     }

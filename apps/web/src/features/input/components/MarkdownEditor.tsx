@@ -28,6 +28,7 @@ import {
   type VideoEmbedTarget,
 } from '../../../shared/markdown/video-embeds.js';
 import { VideoEmbedPreview } from './VideoEmbedPreview.js';
+import { addMarkdownEditorAdvancedMenu } from './markdown-editor-menu.js';
 import { isSupportedMediaFile } from '../model/media-files.js';
 import { MermaidDiagramCard, MermaidDiagramDialog } from './MermaidDiagramCard.js';
 import type { MermaidDiagramTarget } from './MermaidDiagramCard.js';
@@ -36,6 +37,7 @@ import {
   getMarkdownAttachmentId,
   getMarkdownAttachmentExtension,
 } from '../../../shared/markdown/attachment-path.js';
+import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../../shared/markdown/ui-replacements.js';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
 
@@ -77,18 +79,6 @@ const crepeFeatures = {
   [Crepe.Feature.ImageBlock]: false,
 };
 
-const drawingIcon =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 16.5 9.8-9.8a2.1 2.1 0 0 1 3 3L7 19.5 3.5 20.5 4 16.5Z"/><path d="m12.5 8 3 3"/></svg>';
-const diagramIcon =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="6" rx="1"/><rect x="14" y="15" width="7" height="6" rx="1"/><path d="M10 6h4a3 3 0 0 1 3 3v6M7 9v6h7"/></svg>';
-const mediaIcon =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></svg>';
-type BlockEditBuilder = Parameters<NonNullable<BlockEditFeatureConfig['buildMenu']>>[0];
-type AdvancedMenuItem = Parameters<ReturnType<BlockEditBuilder['getGroup']>['addItem']>[1];
-function addAdvancedMenuItem(builder: BlockEditBuilder, id: string, item: AdvancedMenuItem): void {
-  builder.getGroup('advanced').addItem(id, item);
-}
-
 function syncMediaPlaceholderAccessibility(root: HTMLElement, readOnly: boolean): void {
   const placeholders = Array.from(
     root.querySelectorAll<HTMLParagraphElement>('.ProseMirror p:has(> img[src=""])'),
@@ -111,6 +101,7 @@ function syncMediaPlaceholderAccessibility(root: HTMLElement, readOnly: boolean)
   root.querySelectorAll<HTMLParagraphElement>('p[data-media-placeholder]').forEach((paragraph) => {
     if (readOnly || !currentPlaceholders.has(paragraph)) {
       paragraph.removeAttribute('data-media-placeholder');
+      paragraph.removeAttribute('data-markdown-ui-replacement');
       paragraph.removeAttribute('role');
       paragraph.removeAttribute('tabindex');
       paragraph.removeAttribute('aria-label');
@@ -120,8 +111,13 @@ function syncMediaPlaceholderAccessibility(root: HTMLElement, readOnly: boolean)
   if (readOnly) return;
   dedicatedPlaceholders.forEach((paragraph) => {
     const image = paragraph.querySelector(':scope > img[src=""]');
-    const isUploading = image?.getAttribute('alt')?.startsWith('media-upload-pending-') === true;
+    const isUploading =
+      image
+        ?.getAttribute('alt')
+        ?.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.pendingPrefix) === true;
     paragraph.setAttribute('data-media-placeholder', 'true');
+    paragraph.dataset['markdownUiReplacement'] =
+      MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.kind;
     paragraph.setAttribute('role', 'button');
     paragraph.setAttribute('tabindex', isUploading ? '-1' : '0');
     paragraph.setAttribute('aria-label', isUploading ? 'Uploading media' : 'Add media');
@@ -196,7 +192,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     };
     const markMediaPlaceholder = (image: HTMLImageElement): void => {
       const originalAlt = image.getAttribute('alt') ?? '';
-      const placeholderId = `media-placeholder-${globalThis.crypto.randomUUID()}`;
+      const placeholderId = `${MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.markerPrefix}${globalThis.crypto.randomUUID()}`;
       if (!setMediaPlaceholderAlt(image, placeholderId)) return;
       activeMediaPlaceholderMarkerRef.current = { id: placeholderId, originalAlt };
     };
@@ -312,7 +308,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         if (
           node === null ||
           node.type.name !== 'code_block' ||
-          String(node.attrs['language']).toLowerCase() !== 'mermaid' ||
+          String(node.attrs['language']).toLowerCase() !==
+            MARKDOWN_UI_REPLACEMENT_MODEL.mermaid.language ||
           node.textContent !== target.source
         )
           return;
@@ -320,7 +317,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           source === undefined
             ? schema.nodes['paragraph']?.create()
             : schema.nodes['code_block']?.create(
-                { ...node.attrs, language: 'mermaid' },
+                { ...node.attrs, language: MARKDOWN_UI_REPLACEMENT_MODEL.mermaid.language },
                 source === '' ? undefined : schema.text(source),
               );
         if (replacement === undefined) return;
@@ -391,7 +388,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       const placeholder = target.closest('.ProseMirror p[data-media-placeholder="true"]');
       if (placeholder !== null && !readOnly) {
         const image = placeholder.querySelector(':scope > img[src=""]');
-        if (image?.getAttribute('alt')?.startsWith('media-upload-pending-') === true) {
+        if (
+          image
+            ?.getAttribute('alt')
+            ?.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.pendingPrefix) === true
+        ) {
           event.preventDefault();
           return;
         }
@@ -413,7 +414,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             : null;
         if (placeholder !== null) {
           const image = placeholder.querySelector(':scope > img[src=""]');
-          if (image?.getAttribute('alt')?.startsWith('media-upload-pending-') === true) {
+          if (
+            image
+              ?.getAttribute('alt')
+              ?.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.pendingPrefix) === true
+          ) {
             event.preventDefault();
             return;
           }
@@ -489,6 +494,45 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         else void receiveFiles?.(files, options);
       },
     );
+    const insertMermaidDiagram = (): void => {
+      const editor = crepeRef.current?.editor;
+      if (editor === undefined) return;
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const schema = ctx.get(schemaCtx);
+        const codeBlock = schema.nodes['code_block'];
+        if (codeBlock === undefined) return;
+        const block = codeBlock.create({
+          language: MARKDOWN_UI_REPLACEMENT_MODEL.mermaid.language,
+        });
+        const transaction = view.state.tr.replaceSelectionWith(block);
+        view.dispatch(transaction);
+        view.focus();
+      });
+    };
+    const insertMediaPlaceholder = (): void => {
+      const editor = crepeRef.current?.editor;
+      if (editor === undefined) return;
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const image = ctx.get(schemaCtx).nodes['image'];
+        const paragraph = ctx.get(schemaCtx).nodes['paragraph'];
+        if (image === undefined || paragraph === undefined) return;
+        const blankImage = image.create({ src: '', alt: '' });
+        const imageParagraph = paragraph.create(null, blankImage);
+        let transaction = view.state.tr.replaceSelectionWith(imageParagraph).scrollIntoView();
+        const selection = transaction.selection.$from;
+        if (selection.depth > 0) {
+          const imagePosition = selection.before(selection.depth) + 1;
+          if (transaction.doc.nodeAt(imagePosition)?.type.name === 'image') {
+            transaction = transaction.setSelection(
+              NodeSelection.create(transaction.doc, imagePosition),
+            );
+          }
+        }
+        view.dispatch(transaction);
+      });
+    };
 
     useImperativeHandle(
       forwardedRef,
@@ -507,59 +551,10 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           slashMenu: {},
           buildMenu: (builder) => {
             const actions = drawingActionsRef.current;
-            if (!actions.enabled) return;
-            addAdvancedMenuItem(builder, 'draw', {
-              label: 'Draw',
-              icon: drawingIcon,
-              onRun: () => actions.onDraw?.(),
-            });
-            addAdvancedMenuItem(builder, 'diagram', {
-              label: 'Diagram',
-              icon: diagramIcon,
-              onRun: () => {
-                const editor = crepeRef.current?.editor;
-                if (editor === undefined) return;
-                editor.action((ctx) => {
-                  const view = ctx.get(editorViewCtx);
-                  const schema = ctx.get(schemaCtx);
-                  const codeBlock = schema.nodes['code_block'];
-                  if (codeBlock === undefined) return;
-                  const block = codeBlock.create({ language: 'mermaid' });
-                  const transaction = view.state.tr.replaceSelectionWith(block);
-                  view.dispatch(transaction);
-                  view.focus();
-                });
-              },
-            });
-            addAdvancedMenuItem(builder, 'media', {
-              label: 'Media',
-              icon: mediaIcon,
-              onRun: () => {
-                const editor = crepeRef.current?.editor;
-                if (editor !== undefined) {
-                  editor.action((ctx) => {
-                    const view = ctx.get(editorViewCtx);
-                    const image = ctx.get(schemaCtx).nodes['image'];
-                    const paragraph = ctx.get(schemaCtx).nodes['paragraph'];
-                    if (image === undefined || paragraph === undefined) return;
-                    const blankImage = image.create({ src: '', alt: '' });
-                    const imageParagraph = paragraph.create(null, blankImage);
-                    let transaction = view.state.tr
-                      .replaceSelectionWith(imageParagraph)
-                      .scrollIntoView();
-                    const selection = transaction.selection.$from;
-                    if (selection.depth > 0) {
-                      const imagePosition = selection.before(selection.depth) + 1;
-                      if (transaction.doc.nodeAt(imagePosition)?.type.name === 'image') {
-                        transaction = transaction.setSelection(
-                          NodeSelection.create(transaction.doc, imagePosition),
-                        );
-                      }
-                    }
-                    view.dispatch(transaction);
-                  });
-                }
-              },
+            addMarkdownEditorAdvancedMenu(builder, actions.enabled, {
+              draw: () => actions.onDraw?.(),
+              diagram: insertMermaidDiagram,
+              media: insertMediaPlaceholder,
             });
           },
         };
@@ -880,6 +875,7 @@ function replaceAttachmentImageUrls(
     );
     image.tabIndex = 0;
     image.dataset['drawingId'] = id;
+    image.dataset['markdownUiReplacement'] = MARKDOWN_UI_REPLACEMENT_MODEL.drawing.kind;
     image.setAttribute('role', 'button');
     image.setAttribute('aria-label', `Drawing actions: ${image.alt.trim() || 'Drawing'}`);
     if (['mp4', 'mov', 'webm'].includes(extension)) {

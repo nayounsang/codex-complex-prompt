@@ -1,3 +1,5 @@
+import { MARKDOWN_UI_REPLACEMENT_MODEL } from './ui-replacements.js';
+
 export interface VideoEmbedTarget {
   readonly id: string;
   readonly mount: HTMLDivElement;
@@ -22,7 +24,10 @@ export function createVideoEmbedTargets(
       const children = Array.from(paragraph.childNodes).filter(
         (child) =>
           child.nodeName !== 'BR' &&
-          !(child instanceof HTMLElement && child.classList.contains('video-embed-mount')) &&
+          !(
+            child instanceof HTMLElement &&
+            child.classList.contains(MARKDOWN_UI_REPLACEMENT_MODEL.video.mountClassName)
+          ) &&
           !(
             child instanceof HTMLImageElement && child.classList.contains('ProseMirror-separator')
           ) &&
@@ -49,8 +54,9 @@ export function createVideoEmbedTargets(
       if (id === undefined) videoEmbedIds.set(paragraph, videoEmbedId);
       if (mount === null) {
         mount = document.createElement('div');
-        mount.className = 'video-embed-mount';
+        mount.className = MARKDOWN_UI_REPLACEMENT_MODEL.video.mountClassName;
         mount.contentEditable = 'false';
+        mount.dataset['markdownUiReplacement'] = MARKDOWN_UI_REPLACEMENT_MODEL.video.kind;
         mountContainer.append(mount);
       }
       mount.dataset['videoEmbedId'] = videoEmbedId;
@@ -67,7 +73,9 @@ export function getVideoEmbedAffectedParagraphs(
   const paragraphs = new Set<HTMLParagraphElement>();
   const includeParagraph = (node: Node): void => {
     const element = node instanceof Element ? node : node.parentElement;
-    const paragraph = element?.classList.contains('video-embed-mount')
+    const paragraph = element?.classList.contains(
+      MARKDOWN_UI_REPLACEMENT_MODEL.video.mountClassName,
+    )
       ? element.previousElementSibling
       : element?.closest('p');
     if (paragraph instanceof HTMLParagraphElement && root.contains(paragraph)) {
@@ -184,6 +192,6 @@ function getInertMarkdownVideoSource(
 }
 
 function hasStandaloneVideoReference(markdown: string, source: string): boolean {
-  const sourceLine = `![](${source})`;
+  const sourceLine = MARKDOWN_UI_REPLACEMENT_MODEL.video.standaloneMarkdown(source);
   return markdown.split(/\r\n|\n|\r/).some((line) => line.trim() === sourceLine);
 }

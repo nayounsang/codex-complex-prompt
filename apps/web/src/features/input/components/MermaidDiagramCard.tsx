@@ -5,6 +5,7 @@ import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
 import { MermaidPreviewErrorBoundary } from './MermaidPreviewErrorBoundary.js';
 import type { MermaidPreviewTarget } from './mermaid-preview-targets.js';
+import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../../shared/markdown/ui-replacements.js';
 
 const MermaidPreview = lazy(async () => {
   const module = await import('./MermaidSdkComponents.js');
@@ -31,7 +32,10 @@ export function MermaidDiagramCard({
   onReplace,
 }: MermaidDiagramCardProps): React.JSX.Element {
   return createPortal(
-    <div className="mermaid-preview-card">
+    <div
+      className="mermaid-preview-card"
+      data-markdown-ui-replacement={MARKDOWN_UI_REPLACEMENT_MODEL.mermaid.kind}
+    >
       <div className="mermaid-preview-open">
         <div className="mermaid-preview-content" aria-hidden="true">
           {target.source.trim() === '' ? (
