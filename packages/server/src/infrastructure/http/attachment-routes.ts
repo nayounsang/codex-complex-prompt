@@ -1,12 +1,13 @@
-import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import {
-  AttachmentCreateRequestSchema,
-  AttachmentTooLargeError,
-  AttachmentValidationError,
-  DrawingSceneSchema,
-} from '@codex-complex-prompt/protocol';
+import { DrawingSceneSchema } from '@codex-complex-prompt/protocol';
 import type { AttachmentStore } from '../../shared/types.js';
+import { handleAttachmentCreateRequest } from './attachment-create-route.js';
+import {
+  isLoopbackOrigin,
+  isVideoExtension,
+  parseVideoRange,
+  tokensEqual,
+} from './attachment-route-utils.js';
 
 export function serveAttachmentRequest(
   request: IncomingMessage,
@@ -49,50 +50,7 @@ export function serveAttachmentRequest(
     return true;
   }
   if (request.method === 'POST' && match[1] === undefined) {
-    void readRequestBody(request, 36 * 1024 * 1024)
-      .then(async (body) => {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(body);
-        } catch (error) {
-          throw new AttachmentValidationError(
-            `Attachment request JSON is invalid: ${
-              error instanceof Error ? error.message : 'unknown parse error'
-            }`,
-          );
-        }
-        const result = AttachmentCreateRequestSchema.safeParse(parsed);
-        if (!result.success) throw new AttachmentValidationError('Invalid attachment request.');
-        const input = result.data;
-        const extension = input.extension ?? (input.image !== undefined ? undefined : 'png');
-        const id = await attachmentStore.save({
-          ...(input.id === undefined ? {} : { id: input.id }),
-          ...(input.video === undefined ? {} : { video: input.video }),
-          ...(input.image !== undefined
-            ? { image: input.image }
-            : input.video !== undefined
-              ? {}
-              : input.png === undefined
-                ? {}
-                : { png: input.png }),
-          ...(extension === undefined ? {} : { extension }),
-          ...(input.scene === undefined ? {} : { scene: input.scene }),
-        });
-        return id;
-      })
-      .then((id) =>
-        response.writeHead(201, { 'Content-Type': 'application/json' }).end(JSON.stringify({ id })),
-      )
-      .catch((error: unknown) => {
-        const isTooLarge = error instanceof AttachmentTooLargeError;
-        const isInvalidRequest = error instanceof AttachmentValidationError;
-        const status = isTooLarge ? 413 : isInvalidRequest ? 400 : 500;
-        const message =
-          isTooLarge || isInvalidRequest ? error.message : 'Attachment could not be saved.';
-        response
-          .writeHead(status, { 'Content-Type': 'application/json' })
-          .end(JSON.stringify({ error: message }));
-      });
+    handleAttachmentCreateRequest(request, response, attachmentStore);
     return true;
   }
   const id = match[1];
@@ -319,59 +277,4 @@ export function serveAttachmentRequest(
     })
     .catch(() => response.writeHead(500).end());
   return true;
-}
-
-function parseVideoRange(
-  header: string | undefined,
-  length: number,
-): { readonly start: number; readonly end: number } | null {
-  if (header === undefined) return { start: 0, end: length - 1 };
-  const match = /^bytes=(\d*)-(\d*)$/.exec(header);
-  if (match === null || length === 0) return null;
-  const requestedStart = match[1] === '' ? undefined : Number(match[1]);
-  const requestedEnd = match[2] === '' ? undefined : Number(match[2]);
-  if (requestedStart === undefined && requestedEnd === undefined) return null;
-  const start = requestedStart ?? Math.max(0, length - (requestedEnd ?? 0));
-  const end =
-    requestedStart === undefined ? length - 1 : Math.min(requestedEnd ?? length - 1, length - 1);
-  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start > end) {
-    return null;
-  }
-  return { start, end };
-}
-
-function isVideoExtension(extension: string): boolean {
-  return extension === 'mp4' || extension === 'mov' || extension === 'webm';
-}
-
-async function readRequestBody(request: IncomingMessage, maxBytes: number): Promise<string> {
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for await (const chunk of request) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    size += buffer.byteLength;
-    if (size > maxBytes) {
-      throw new AttachmentTooLargeError('The attachment request exceeds the request size limit.');
-    }
-    chunks.push(buffer);
-  }
-  return Buffer.concat(chunks).toString('utf8');
-}
-
-function tokensEqual(expected: string, provided: string): boolean {
-  const expectedBytes = Buffer.from(expected);
-  const providedBytes = Buffer.from(provided);
-  return (
-    expectedBytes.byteLength === providedBytes.byteLength &&
-    timingSafeEqual(expectedBytes, providedBytes)
-  );
-}
-
-function isLoopbackOrigin(origin: string): boolean {
-  try {
-    const hostname = new URL(origin).hostname.replace(/^\[|\]$/g, '').toLowerCase();
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-  } catch {
-    return false;
-  }
 }
