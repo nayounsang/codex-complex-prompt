@@ -43,7 +43,7 @@ export function DrawingDialog({
   let scene:
     | {
         elements?: readonly ExcalidrawElement[];
-        appState?: Record<string, unknown>;
+        appState?: Record<string, unknown> | null;
         files?: BinaryFiles;
       }
     | undefined;
@@ -68,7 +68,7 @@ export function DrawingDialog({
       : {
           ...(scene.elements === undefined ? {} : { elements: scene.elements }),
           ...(scene.files === undefined ? {} : { files: scene.files }),
-          appState: { ...scene.appState, currentItemFontFamily: FONT_FAMILY.Excalifont },
+          appState: { ...(scene.appState ?? {}), currentItemFontFamily: FONT_FAMILY.Excalifont },
         };
 
   const saveDrawing = async (): Promise<void> => {

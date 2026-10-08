@@ -210,6 +210,9 @@ describe('첨부 요청 스키마', () => {
 
   it('drawing scene을 편집할 수 있는 형태인지 검증한다', () => {
     expect(DrawingSceneSchema.safeParse({ elements: [], files: {} }).success).toBe(true);
+    expect(DrawingSceneSchema.safeParse({ elements: [], appState: null, files: {} }).success).toBe(
+      true,
+    );
     expect(DrawingSceneSchema.safeParse({ elements: 'invalid' }).success).toBe(false);
     expect(DrawingSceneSchema.safeParse(null).success).toBe(false);
   });

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -131,6 +131,62 @@ test('입력한 Markdown을 Codex에 전달하고 3초 뒤 브라우저 종료�
     expect(response.hookSpecificOutput.additionalContext).toContain(submittedMarkdown);
     await expectBrowserCloseAfterThreeSeconds(page, submittedAt);
   } finally {
+    await rm(codexHome, { recursive: true, force: true });
+  }
+});
+
+test('null appState가 저장된 Excalidraw 장면을 편집할 수 있다', async ({ page }) => {
+  const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-null-app-state-'));
+  const projectDirectory = join(codexHome, 'project');
+  const browserUrlFile = join(codexHome, 'browser-url.txt');
+  const attachmentId = '00000000-0000-4000-8000-000000000041';
+  const attachmentDirectory = join(projectDirectory, '.complex-prompt', 'attachments');
+  await mkdir(attachmentDirectory, { recursive: true });
+  await writeFile(
+    join(attachmentDirectory, `${attachmentId}.png`),
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  );
+  await writeFile(
+    join(attachmentDirectory, `${attachmentId}.excalidraw.json`),
+    JSON.stringify({ elements: [], appState: null, files: {} }),
+  );
+  const fakeCodex = startFakeCodex(
+    'prompt',
+    {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'e2e-null-app-state-session',
+      cwd: projectDirectory,
+      prompt: `$complex-prompt ![Drawing](.complex-prompt/attachments/${attachmentId}.png)`,
+    },
+    codexHome,
+    browserUrlFile,
+  );
+  let submitted = false;
+
+  try {
+    await openFakeCodexBrowser(page, fakeCodex);
+    const editor = page.getByRole('textbox', { name: 'Command' });
+    const drawing = editor.getByRole('button', { name: 'Drawing actions: Drawing' });
+    await expect(drawing).toBeVisible();
+    await drawing.hover();
+    await page.getByRole('button', { name: 'Edit drawing' }).click();
+    await expect(page.getByRole('heading', { name: 'Draw' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Insert' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Close' }).click();
+    await page.getByRole('button', { name: 'Send to Codex' }).click();
+    submitted = true;
+    expect((await fakeCodex.result).exitCode).toBe(0);
+  } finally {
+    if (!submitted) {
+      await page
+        .getByRole('button', { name: 'Send to Codex' })
+        .click({ timeout: 1_000 })
+        .catch(() => undefined);
+      await Promise.race([fakeCodex.result, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    }
     await rm(codexHome, { recursive: true, force: true });
   }
 });

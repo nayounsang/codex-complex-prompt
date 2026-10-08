@@ -23,10 +23,16 @@ export const AttachmentCreateRequestSchema = z
     }
   });
 
+/**
+ * Mirrors the persisted subset of Excalidraw's `ImportedDataState` from
+ * `@excalidraw/excalidraw/data/types`. This app requires an elements array to
+ * enable editing, while preserving Excalidraw's nullable appState contract.
+ * Keep this shared schema aligned when Excalidraw changes.
+ */
 export const DrawingSceneSchema = z
   .object({
     elements: z.array(z.unknown()),
-    appState: z.record(z.unknown()).optional(),
+    appState: z.record(z.unknown()).nullable().optional(),
     files: z.record(z.unknown()).optional(),
   })
   .passthrough();
