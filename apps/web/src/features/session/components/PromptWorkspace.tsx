@@ -191,6 +191,10 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     files: readonly File[],
     options?: MediaFileOptions,
   ): Promise<string> => {
+    if (options !== undefined && files.length !== 1) {
+      return 'Media upload failed';
+    }
+
     const initialMarkdown = getCurrentMarkdown();
     const selectedPlaceholderMarker =
       options === undefined ? undefined : `![${options.placeholderId}]()`;
@@ -318,10 +322,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     const next =
       placeholderStart < 0 || placeholderMarker === undefined
         ? `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}${markdownImages.join('\n\n')}`
-        : `${currentMarkdown.slice(0, placeholderStart)}${markdownImages[0] ?? ''}${currentMarkdown.slice(placeholderStart + placeholderMarker.length)}${markdownImages
-            .slice(1)
-            .map((image) => `\n\n${image}`)
-            .join('')}`;
+        : `${currentMarkdown.slice(0, placeholderStart)}${markdownImages[0]}${currentMarkdown.slice(placeholderStart + placeholderMarker.length)}`;
     updateMarkdownOverride(next);
     setEditorResetVersion((version) => version + 1);
     return hasFailedMediaUploads
