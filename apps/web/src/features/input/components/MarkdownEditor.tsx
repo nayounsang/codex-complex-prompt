@@ -76,6 +76,23 @@ function addAdvancedMenuItem(builder: BlockEditBuilder, id: string, item: Advanc
   builder.getGroup('advanced').addItem(id, item);
 }
 
+function getElementSelectorWithin(root: HTMLElement, element: HTMLElement): string | null {
+  const path: string[] = [];
+  let current: HTMLElement = element;
+  while (current !== root) {
+    const parent = current.parentElement;
+    if (parent === null) return null;
+    const siblings = Array.from(parent.children).filter(
+      (sibling) => sibling.tagName === current.tagName,
+    );
+    const siblingIndex = siblings.indexOf(current) + 1;
+    if (siblingIndex === 0) return null;
+    path.unshift(`${current.tagName.toLowerCase()}:nth-of-type(${siblingIndex})`);
+    current = parent;
+  }
+  return path.join(' > ');
+}
+
 interface DrawingEditTarget {
   readonly id: string;
   readonly image: HTMLImageElement;
@@ -124,7 +141,6 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
   ): React.JSX.Element {
     const rootRef = useRef<HTMLDivElement>(null);
     const hostRef = useRef<HTMLDivElement>(null);
-    const mediaPlaceholderRef = useRef<HTMLButtonElement>(null);
     const mediaFileInputRef = useRef<HTMLInputElement>(null);
     const crepeRef = useRef<Crepe | null>(null);
     const markdownRef = useRef(defaultMarkdown);
@@ -142,12 +158,12 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const [drawingEditPosition, setDrawingEditPosition] = useState({ top: 0, left: 0 });
     const drawingActionsOverlayRef = useRef<HTMLDivElement>(null);
     const [initializationError, setInitializationError] = useState<Error | null>(null);
-    const [showMediaPlaceholder, setShowMediaPlaceholder] = useState(false);
-    const [mediaPlaceholderPosition, setMediaPlaceholderPosition] = useState({ top: 18, left: 20 });
-    const [mediaPlaceholderAnchor, setMediaPlaceholderAnchor] = useState<{
-      readonly left: number;
+    const [mediaPlaceholder, setMediaPlaceholder] = useState<{
       readonly top: number;
-      readonly bottom: number;
+      readonly left: number;
+      readonly width: number;
+      readonly height: number;
+      readonly blockSelector: string;
     } | null>(null);
     const drawingActionsRef = useRef({
       onDraw,
@@ -167,25 +183,6 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       hoveredImageRef.current = null;
       setDrawingEditTarget(null);
     };
-    useLayoutEffect(
-      function positionMediaPlaceholder() {
-        const button = mediaPlaceholderRef.current;
-        const host = hostRef.current;
-        if (!showMediaPlaceholder || mediaPlaceholderAnchor === null || button === null) return;
-        if (host === null) return;
-        const left = Math.min(
-          Math.max(8, mediaPlaceholderAnchor.left),
-          Math.max(8, host.clientWidth - button.offsetWidth - 8),
-        );
-        const below = mediaPlaceholderAnchor.bottom + 8;
-        const top =
-          below + button.offsetHeight <= host.clientHeight - 8
-            ? below
-            : Math.max(8, mediaPlaceholderAnchor.top - button.offsetHeight - 8);
-        setMediaPlaceholderPosition({ top, left });
-      },
-      [mediaPlaceholderAnchor, showMediaPlaceholder],
-    );
     const syncMermaidPreviews = (
       editorRoot: HTMLDivElement,
       recoverRemovedPreview = false,
@@ -433,26 +430,42 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
               icon: mediaIcon,
               onRun: () => {
                 const editor = crepeRef.current?.editor;
-                const editorRoot = rootRef.current;
                 const host = hostRef.current;
-                if (editor !== undefined && editorRoot !== null && host !== null) {
+                if (editor !== undefined && host !== null) {
                   editor.action((ctx) => {
                     const view = ctx.get(editorViewCtx);
-                    const coords = view.coordsAtPos(view.state.selection.from);
-                    const hostBounds = host.getBoundingClientRect();
-                    const anchor = {
-                      left: coords.left - hostBounds.left,
-                      top: coords.top - hostBounds.top,
-                      bottom: coords.bottom - hostBounds.top,
-                    };
-                    setMediaPlaceholderAnchor(anchor);
-                    setMediaPlaceholderPosition({
-                      top: anchor.bottom + 8,
-                      left: Math.max(8, anchor.left),
+                    const paragraph = ctx.get(schemaCtx).nodes['paragraph'];
+                    if (paragraph === undefined) return;
+                    const transaction = view.state.tr
+                      .replaceSelectionWith(paragraph.create())
+                      .scrollIntoView();
+                    view.dispatch(transaction);
+
+                    const selection = view.state.selection.$from;
+                    if (selection.depth === 0) return;
+                    const position = selection.before(selection.depth);
+                    window.requestAnimationFrame(() => {
+                      const blockNode = view.nodeDOM(position);
+                      const block =
+                        blockNode instanceof HTMLElement ? blockNode.closest('p') : null;
+                      if (block === null) return;
+
+                      const hostBounds = host.getBoundingClientRect();
+                      const blockBounds = block.getBoundingClientRect();
+                      const width = blockBounds.width;
+                      const height = width * (9 / 16);
+                      const blockSelector = getElementSelectorWithin(view.dom, block);
+                      if (blockSelector === null) return;
+                      setMediaPlaceholder({
+                        top: blockBounds.top - hostBounds.top,
+                        left: blockBounds.left - hostBounds.left,
+                        width,
+                        height,
+                        blockSelector,
+                      });
                     });
                   });
                 }
-                setShowMediaPlaceholder(true);
               },
             });
           },
@@ -623,22 +636,29 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           aria-label={ariaLabel}
           aria-disabled={readOnly}
         />
-        {showMediaPlaceholder && !readOnly && (
-          <button
-            ref={mediaPlaceholderRef}
-            type="button"
-            className="media-picker-placeholder"
-            style={{ top: mediaPlaceholderPosition.top, left: mediaPlaceholderPosition.left }}
-            onPointerDown={(event) => event.preventDefault()}
-            onClick={() => mediaFileInputRef.current?.click()}
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none">
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <circle cx="8.5" cy="9" r="1.5" />
-              <path d="m21 15-5-5L5 20" />
-            </svg>
-            <span>Click to add media</span>
-          </button>
+        {mediaPlaceholder !== null && !readOnly && (
+          <>
+            <style>{`.markdown-editor .ProseMirror ${mediaPlaceholder.blockSelector} { height: ${mediaPlaceholder.height}px; }`}</style>
+            <button
+              type="button"
+              className="media-picker-placeholder"
+              style={{
+                top: mediaPlaceholder.top,
+                left: mediaPlaceholder.left,
+                width: mediaPlaceholder.width,
+                height: mediaPlaceholder.height,
+              }}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => mediaFileInputRef.current?.click()}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <circle cx="8.5" cy="9" r="1.5" />
+                <path d="m21 15-5-5L5 20" />
+              </svg>
+              <span>Add media</span>
+            </button>
+          </>
         )}
         <input
           ref={mediaFileInputRef}
@@ -654,7 +674,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             const files = Array.from(event.currentTarget.files ?? []).filter(isSupportedMediaFile);
             event.currentTarget.value = '';
             if (files.length === 0) return;
-            setShowMediaPlaceholder(false);
+            setMediaPlaceholder(null);
             receiveMediaFiles(files);
           }}
         />
