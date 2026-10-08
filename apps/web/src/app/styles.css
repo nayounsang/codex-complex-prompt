@@ -181,7 +181,7 @@ button:focus-visible,
   border: 0;
 }
 
-.markdown-editor .ProseMirror p:has(> img[src='']) {
+.markdown-editor .ProseMirror p[data-media-placeholder='true'] {
   display: flex;
   width: min(100%, 800px);
   aspect-ratio: 16 / 9;
@@ -202,39 +202,45 @@ button:focus-visible,
     color 120ms ease;
 }
 
-.markdown-editor .ProseMirror p:has(> img[src=''])::before {
+.markdown-editor .ProseMirror p[data-media-placeholder='true']::before {
   content: '+';
   font-size: 28px;
   line-height: 1;
 }
 
-.markdown-editor .ProseMirror p:has(> img[src=''])::after {
+.markdown-editor .ProseMirror p[data-media-placeholder='true']::after {
   content: 'Add media';
 }
 
-.markdown-editor .ProseMirror p:has(> img[src='']) > img[src=''] {
+.markdown-editor .ProseMirror p[data-media-placeholder='true'] > img[src=''] {
   display: none;
 }
 
-.markdown-editor .ProseMirror p:has(> img[src='']):hover {
+.markdown-editor .ProseMirror p[data-media-placeholder='true']:hover {
   border-color: #8a8983;
   color: #292824;
   background: #f0f0ed;
 }
 
-.markdown-editor .ProseMirror p:has(> img[src=''][alt^='media-upload-pending-']) {
+.markdown-editor
+  .ProseMirror
+  p[data-media-placeholder='true']:has(> img[src=''][alt^='media-upload-pending-']) {
   cursor: progress;
 }
 
-.markdown-editor .ProseMirror p:has(> img[src=''][alt^='media-upload-pending-'])::before {
+.markdown-editor
+  .ProseMirror
+  p[data-media-placeholder='true']:has(> img[src=''][alt^='media-upload-pending-'])::before {
   display: none;
 }
 
-.markdown-editor .ProseMirror p:has(> img[src=''][alt^='media-upload-pending-'])::after {
+.markdown-editor
+  .ProseMirror
+  p[data-media-placeholder='true']:has(> img[src=''][alt^='media-upload-pending-'])::after {
   content: 'Uploading media…';
 }
 
-.markdown-editor .ProseMirror p:has(> img[src='']):focus-visible {
+.markdown-editor .ProseMirror p[data-media-placeholder='true']:focus-visible {
   outline: 2px solid #2383e2;
   outline-offset: 2px;
 }

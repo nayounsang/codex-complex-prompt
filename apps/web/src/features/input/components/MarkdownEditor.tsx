@@ -44,7 +44,12 @@ export interface MarkdownEditorHandle {
 }
 
 export interface MediaFileOptions {
-  readonly emptyImageIndex: number;
+  readonly placeholderId: string;
+}
+
+interface ActiveMediaPlaceholderMarker {
+  readonly id: string;
+  readonly originalAlt: string;
 }
 
 export interface MarkdownEditorProps {
@@ -84,15 +89,25 @@ function addAdvancedMenuItem(builder: BlockEditBuilder, id: string, item: Advanc
   builder.getGroup('advanced').addItem(id, item);
 }
 
-function getEmptyImageMarkdownIndex(root: HTMLElement, image: Element): number {
-  return Array.from(root.querySelectorAll('.ProseMirror img[src=""]')).indexOf(image);
-}
-
 function syncMediaPlaceholderAccessibility(root: HTMLElement, readOnly: boolean): void {
   const placeholders = Array.from(
     root.querySelectorAll<HTMLParagraphElement>('.ProseMirror p:has(> img[src=""])'),
   );
-  const currentPlaceholders = new Set(placeholders);
+  const dedicatedPlaceholders = placeholders.filter((paragraph) => {
+    const image = paragraph.querySelector(':scope > img[src=""]');
+    return (
+      image instanceof HTMLImageElement &&
+      Array.from(paragraph.childNodes).every(
+        (child) =>
+          child === image ||
+          (child instanceof HTMLImageElement &&
+            child.classList.contains('ProseMirror-separator')) ||
+          (child.nodeType === Node.TEXT_NODE && (child.textContent ?? '').trim() === '') ||
+          (child instanceof HTMLBRElement && child.classList.contains('ProseMirror-trailingBreak')),
+      )
+    );
+  });
+  const currentPlaceholders = new Set(dedicatedPlaceholders);
   root.querySelectorAll<HTMLParagraphElement>('p[data-media-placeholder]').forEach((paragraph) => {
     if (readOnly || !currentPlaceholders.has(paragraph)) {
       paragraph.removeAttribute('data-media-placeholder');
@@ -103,7 +118,7 @@ function syncMediaPlaceholderAccessibility(root: HTMLElement, readOnly: boolean)
     }
   });
   if (readOnly) return;
-  placeholders.forEach((paragraph) => {
+  dedicatedPlaceholders.forEach((paragraph) => {
     const image = paragraph.querySelector(':scope > img[src=""]');
     const isUploading = image?.getAttribute('alt')?.startsWith('media-upload-pending-') === true;
     paragraph.setAttribute('data-media-placeholder', 'true');
@@ -164,7 +179,48 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const rootRef = useRef<HTMLDivElement>(null);
     const hostRef = useRef<HTMLDivElement>(null);
     const mediaFileInputRef = useRef<HTMLInputElement>(null);
-    const emptyImageIndexOnChangeRef = useRef(-1);
+    const activeMediaPlaceholderMarkerRef = useRef<ActiveMediaPlaceholderMarker | null>(null);
+    const setMediaPlaceholderAlt = (image: HTMLImageElement, alt: string): boolean => {
+      const editor = crepeRef.current?.editor;
+      if (editor === undefined) return false;
+      let updated = false;
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const position = view.posAtDOM(image, 0);
+        const node = view.state.doc.nodeAt(position);
+        if (node?.type.name !== 'image') return;
+        view.dispatch(view.state.tr.setNodeMarkup(position, undefined, { ...node.attrs, alt }));
+        updated = true;
+      });
+      return updated;
+    };
+    const markMediaPlaceholder = (image: HTMLImageElement): void => {
+      const originalAlt = image.getAttribute('alt') ?? '';
+      const placeholderId = `media-placeholder-${globalThis.crypto.randomUUID()}`;
+      if (!setMediaPlaceholderAlt(image, placeholderId)) return;
+      activeMediaPlaceholderMarkerRef.current = { id: placeholderId, originalAlt };
+    };
+    const restoreMediaPlaceholder = (marker: ActiveMediaPlaceholderMarker | null): void => {
+      if (marker === null) return;
+      const root = rootRef.current;
+      const image = Array.from(
+        root?.querySelectorAll<HTMLImageElement>('.ProseMirror img[src=""]') ?? [],
+      ).find((candidate) => candidate.getAttribute('alt') === marker.id);
+      if (image !== undefined) setMediaPlaceholderAlt(image, marker.originalAlt);
+    };
+    const restoreCanceledMediaPlaceholder = useEffectEvent(
+      function restoreCanceledMediaPlaceholderMarker(): void {
+        restoreMediaPlaceholder(activeMediaPlaceholderMarkerRef.current);
+        activeMediaPlaceholderMarkerRef.current = null;
+      },
+    );
+    useEffect(function restoreMarkerWhenMediaPickerIsCanceled() {
+      const input = mediaFileInputRef.current;
+      if (input === null) return;
+      const handleCancel = (): void => restoreCanceledMediaPlaceholder();
+      input.addEventListener('cancel', handleCancel);
+      return () => input.removeEventListener('cancel', handleCancel);
+    }, []);
     const crepeRef = useRef<Crepe | null>(null);
     const markdownRef = useRef(defaultMarkdown);
     const hoveredImageRef = useRef<HTMLImageElement | null>(null);
@@ -332,7 +388,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const handleEditorClickCapture = (event: React.MouseEvent<HTMLDivElement>): void => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const placeholder = target.closest('.ProseMirror p:has(> img[src=""])');
+      const placeholder = target.closest('.ProseMirror p[data-media-placeholder="true"]');
       if (placeholder !== null && !readOnly) {
         const image = placeholder.querySelector(':scope > img[src=""]');
         if (image?.getAttribute('alt')?.startsWith('media-upload-pending-') === true) {
@@ -340,9 +396,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           return;
         }
         event.preventDefault();
-        const root = rootRef.current;
-        emptyImageIndexOnChangeRef.current =
-          image === null || root === null ? -1 : getEmptyImageMarkdownIndex(root, image);
+        if (image instanceof HTMLImageElement) markMediaPlaceholder(image);
         mediaFileInputRef.current?.click();
         return;
       }
@@ -354,7 +408,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       if (!readOnly) {
         const target = event.target;
         const placeholder =
-          target instanceof Element ? target.closest('.ProseMirror p:has(> img[src=""])') : null;
+          target instanceof Element
+            ? target.closest('.ProseMirror p[data-media-placeholder="true"]')
+            : null;
         if (placeholder !== null) {
           const image = placeholder.querySelector(':scope > img[src=""]');
           if (image?.getAttribute('alt')?.startsWith('media-upload-pending-') === true) {
@@ -362,9 +418,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             return;
           }
           event.preventDefault();
-          const root = rootRef.current;
-          emptyImageIndexOnChangeRef.current =
-            image === null || root === null ? -1 : getEmptyImageMarkdownIndex(root, image);
+          if (image instanceof HTMLImageElement) markMediaPlaceholder(image);
           mediaFileInputRef.current?.click();
           return;
         }
@@ -429,7 +483,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       onReady?.(root);
     });
     const receiveMediaFiles = useEffectEvent(
-      (files: readonly File[], options?: { readonly emptyImageIndex: number }) => {
+      (files: readonly File[], options?: MediaFileOptions) => {
         const receiveFiles = onMediaFiles ?? onImageFiles;
         if (options === undefined) void receiveFiles?.(files);
         else void receiveFiles?.(files, options);
@@ -595,7 +649,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
               childList: true,
               subtree: true,
               attributes: true,
-              attributeFilter: ['src'],
+              attributeFilter: ['alt', 'src'],
             });
             mermaidObserver = new MutationObserver((records) => {
               if (hasMermaidRelevantMutations(records)) {
@@ -693,8 +747,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           ref={mediaFileInputRef}
           className="sr-only"
           type="file"
-          accept="image/*,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
-          multiple
+          accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/bmp,image/tiff,image/svg+xml,video/mp4,video/quicktime,video/webm,.png,.jpg,.jpeg,.gif,.webp,.avif,.bmp,.tif,.tiff,.svg,.mp4,.mov,.webm"
           aria-label="Choose image or video files"
           aria-hidden="true"
           tabIndex={-1}
@@ -702,10 +755,13 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           onChange={(event) => {
             const files = Array.from(event.currentTarget.files ?? []).filter(isSupportedMediaFile);
             event.currentTarget.value = '';
-            const emptyImageIndex = emptyImageIndexOnChangeRef.current;
-            emptyImageIndexOnChangeRef.current = -1;
-            if (files.length === 0) return;
-            receiveMediaFiles(files, emptyImageIndex < 0 ? undefined : { emptyImageIndex });
+            const marker = activeMediaPlaceholderMarkerRef.current;
+            activeMediaPlaceholderMarkerRef.current = null;
+            if (files.length === 0) {
+              restoreMediaPlaceholder(marker);
+              return;
+            }
+            receiveMediaFiles(files, marker === null ? undefined : { placeholderId: marker.id });
           }}
         />
         {drawingEditTarget !== null && !readOnly && (

@@ -27,10 +27,7 @@ import { useFeedbackAnnotations } from '../../feedback/hooks/useFeedbackAnnotati
 import { useFeedbackSubmission } from '../../feedback/hooks/useFeedbackSubmission.js';
 import { useProjectTemplates } from '../../templates/hooks/useProjectTemplates.js';
 import { removeMarkdownDrawingReferences } from '../../input/drawing-markdown.js';
-import {
-  countMarkdownImageOccurrences,
-  getEmptyImageSourceRanges,
-} from '../../../shared/markdown/markdown-source-map.js';
+import { countMarkdownImageOccurrences } from '../../../shared/markdown/markdown-source-map.js';
 import { MARKDOWN_ATTACHMENT_DIRECTORY } from '../../../shared/markdown/attachment-path.js';
 import { identifyImageFormat } from '../../../shared/image-format.js';
 import { getVideoExtension, getVideoMimeType } from '../../input/model/media-files.js';
@@ -195,17 +192,23 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     options?: MediaFileOptions,
   ): Promise<string> => {
     const initialMarkdown = getCurrentMarkdown();
-    const placeholderRange =
-      options?.emptyImageIndex === undefined
-        ? undefined
-        : getEmptyImageSourceRanges(initialMarkdown)[options.emptyImageIndex];
+    const selectedPlaceholderMarker =
+      options === undefined ? undefined : `![${options.placeholderId}]()`;
+    const selectedPlaceholderStart =
+      selectedPlaceholderMarker === undefined
+        ? -1
+        : initialMarkdown.indexOf(selectedPlaceholderMarker);
     const placeholderMarker =
-      placeholderRange === undefined
+      selectedPlaceholderStart < 0 || selectedPlaceholderMarker === undefined
         ? undefined
         : `![media-upload-pending-${globalThis.crypto.randomUUID()}]()`;
-    if (placeholderRange !== undefined && placeholderMarker !== undefined) {
+    if (
+      selectedPlaceholderStart >= 0 &&
+      selectedPlaceholderMarker !== undefined &&
+      placeholderMarker !== undefined
+    ) {
       updateMarkdownOverride(
-        `${initialMarkdown.slice(0, placeholderRange.start)}${placeholderMarker}${initialMarkdown.slice(placeholderRange.end)}`,
+        `${initialMarkdown.slice(0, selectedPlaceholderStart)}${placeholderMarker}${initialMarkdown.slice(selectedPlaceholderStart + selectedPlaceholderMarker.length)}`,
       );
       setEditorResetVersion((version) => version + 1);
     }
