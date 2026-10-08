@@ -3,6 +3,7 @@ import { AlertDialog } from '@base-ui/react/alert-dialog';
 import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
 import { Select } from '@base-ui/react/select';
+import { SvgIcon } from '../../../shared/icons/SvgIcon.js';
 
 import {
   MAX_PROMPT_LENGTH,
@@ -158,9 +159,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                           openEditor(template);
                         }}
                       >
-                        <svg viewBox="0 0 16 16" aria-hidden="true">
-                          <path d="m10.7 2.3 3 3M2.5 13.5l2.8-.6 7.9-7.9a1.4 1.4 0 0 0-2-2l-7.9 7.9-.8 2.6Z" />
-                        </svg>
+                        <SvgIcon name="templateEdit" />
                       </button>
                       <button
                         type="button"
@@ -173,9 +172,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                           openDeleteConfirmation(template);
                         }}
                       >
-                        <svg viewBox="0 0 16 16" aria-hidden="true">
-                          <path d="M2.5 4.5h11m-9.5 0 .6 9h5.8l.6-9M6 4.5V2.8h4v1.7m-3.5 2v4.5m3-4.5v4.5" />
-                        </svg>
+                        <SvgIcon name="templateDelete" />
                       </button>
                     </span>
                   </div>

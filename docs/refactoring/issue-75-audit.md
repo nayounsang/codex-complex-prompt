@@ -33,13 +33,13 @@ This checklist tracks the repository-wide validation, editor modeling, SVG, and 
 
 ## SVG asset inventory
 
-| Source                                                                                      | Required outcome                                                                                                                              | Status |
-| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| `apps/web/src/features/input/components/MarkdownEditor.tsx` inline icon strings and JSX SVG | Move reusable icon markup to a consistent feature asset/icon source while preserving Milkdown's string-icon API and JSX sizing/accessibility. | open   |
-| `apps/web/src/features/input/DrawingDialog.tsx`                                             | Move decorative SVG markup to the same web asset/icon convention.                                                                             | open   |
-| `apps/web/src/features/input/components/MermaidDiagramCard.tsx`                             | Move custom SVG markup to the same web asset/icon convention.                                                                                 | open   |
-| `apps/web/src/features/templates/components/TemplateManager.tsx`                            | Move action SVG markup to the same web asset/icon convention.                                                                                 | open   |
-| `apps/web/public/*.svg`                                                                     | Confirm these are intentionally standalone illustrations/favicon assets and retain them as public assets.                                     | open   |
+| Source                                                                                      | Required outcome                                                                                                                              | Status                                                          |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `apps/web/src/features/input/components/MarkdownEditor.tsx` inline icon strings and JSX SVG | Move reusable icon markup to a consistent feature asset/icon source while preserving Milkdown's string-icon API and JSX sizing/accessibility. | done: SVG assets imported through `?raw` for Milkdown and React |
+| `apps/web/src/features/input/DrawingDialog.tsx`                                             | Move decorative SVG markup to the same web asset/icon convention.                                                                             | done: `SvgIcon` shared asset                                    |
+| `apps/web/src/features/input/components/MermaidDiagramCard.tsx`                             | Move custom SVG markup to the same web asset/icon convention.                                                                                 | done: `SvgIcon` shared asset                                    |
+| `apps/web/src/features/templates/components/TemplateManager.tsx`                            | Move action SVG markup to the same web asset/icon convention.                                                                                 | done: `SvgIcon` shared assets                                   |
+| `apps/web/public/*.svg`                                                                     | Confirm these are intentionally standalone illustrations/favicon assets and retain them as public assets.                                     | done: public illustrations and favicon remain standalone        |
 
 ## Large production source files
 

@@ -29,6 +29,7 @@ import {
 } from '../../../shared/markdown/video-embeds.js';
 import { VideoEmbedPreview } from './VideoEmbedPreview.js';
 import { addMarkdownEditorAdvancedMenu } from './markdown-editor-menu.js';
+import { SvgIcon } from '../../../shared/icons/SvgIcon.js';
 import { isSupportedMediaFile } from '../model/media-files.js';
 import { MermaidDiagramCard, MermaidDiagramDialog } from './MermaidDiagramCard.js';
 import type { MermaidDiagramTarget } from './MermaidDiagramCard.js';
@@ -775,20 +776,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => drawingActionsRef.current.onEditDrawing?.(drawingEditTarget.id)}
                 >
-                  <svg
-                    aria-hidden="true"
-                    viewBox="0 0 24 24"
-                    width="18"
-                    height="18"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="m4 16.5 9.8-9.8a2.1 2.1 0 0 1 3 3L7 19.5 3.5 20.5 4 16.5Z" />
-                    <path d="m12.5 8 3 3" />
-                  </svg>
+                  <SvgIcon name="pencil" />
                 </button>
               )}
             {drawingActionsRef.current.onDeleteDrawing !== undefined && (
@@ -803,22 +791,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
                   clearDrawingEditTarget();
                 }}
               >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  width="18"
-                  height="18"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M3 6h18" />
-                  <path d="M8 6V4h8v2" />
-                  <path d="m19 6-1 14H6L5 6" />
-                  <path d="M10 11v5M14 11v5" />
-                </svg>
+                <SvgIcon name="trash" />
               </button>
             )}
           </div>

@@ -11,6 +11,7 @@ import type {
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import { useRef, useState } from 'react';
 import '@excalidraw/excalidraw/index.css';
+import { SvgIcon } from '../../shared/icons/SvgIcon.js';
 
 export interface DrawingDialogProps {
   readonly open: boolean;
@@ -147,18 +148,7 @@ export function DrawingDialog({
                 disabled={saving}
                 onClick={onClose}
               >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  width="20"
-                  height="20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                >
-                  <path d="m6 6 12 12M18 6 6 18" />
-                </svg>
+                <SvgIcon name="close" />
               </Button>
             </div>
             <div className="drawing-canvas">
