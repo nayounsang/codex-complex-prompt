@@ -3,22 +3,25 @@ import { dirname, join } from 'node:path';
 
 import { defaultCodexHome } from '../../../shared/codex-home.js';
 import { CODEX_HOOK_TIMEOUT_SECONDS } from '../../../shared/hook-timeouts.js';
-import { containsPlannotator } from './plannotator-command-detection.js';
 import {
-  CodexCommandHookSchema,
-  CodexHookGroupSchema,
-  CodexHookGroupListSchema,
-  CodexHookGroupsSchema,
-  CodexHooksFileSchema,
-  PlannotatorHookPayloadSchema,
-} from './schema.js';
-
-export const CODEX_COMPLEX_PROMPT_HOOK_MARKER = 'Codex Complex Prompt command editor';
-export const CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER = 'Codex Complex Prompt feedback editor';
-export const CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER =
-  'Codex Complex Prompt conditional Plannotator hook';
-export const CODEX_COMPLEX_PROMPT_LEGACY_STOP_HOOK_MARKER = 'Codex Complex Prompt browser review';
-const LEGACY_STOP_HOOK_COMMAND_SUFFIX = ' hook stop';
+  containsOwnCommand,
+  getHooks,
+  parseHookGroupList,
+  removeLegacyStopHooks,
+  removeOwnCommands,
+} from './hook-config-groups.js';
+import { wrapPlannotatorCommands, restorePlannotatorCommands } from './plannotator-hook-config.js';
+import {
+  CODEX_COMPLEX_PROMPT_HOOK_MARKER,
+  CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
+} from './hook-config-constants.js';
+export {
+  CODEX_COMPLEX_PROMPT_HOOK_MARKER,
+  CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER,
+  CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER,
+  CODEX_COMPLEX_PROMPT_LEGACY_STOP_HOOK_MARKER,
+} from './hook-config-constants.js';
+import { CodexHooksFileSchema } from './schema.js';
 
 export interface CodexHookConfigOptions {
   readonly configPath?: string;
@@ -147,221 +150,6 @@ async function writeHooksConfig(
     mkdir(dirname(configPath), { recursive: true }),
   );
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
-}
-
-/* c8 ignore start -- these helpers defend against malformed third-party config shapes. */
-function getHooks(config: Record<string, unknown>): Record<string, unknown> {
-  const value = config['hooks'];
-  if (value === undefined) return {};
-  const result = CodexHookGroupsSchema.safeParse(value);
-  if (!result.success) {
-    throw new Error('Codex hooks configuration must contain an object under "hooks".');
-  }
-  return { ...result.data };
-}
-
-function parseHookGroupList(value: unknown): unknown[] {
-  const result = CodexHookGroupListSchema.safeParse(value);
-  return result.success ? [...result.data] : [];
-}
-
-function containsOwnCommand(
-  group: unknown,
-  command: string,
-  marker = CODEX_COMPLEX_PROMPT_HOOK_MARKER,
-): boolean {
-  const parsedGroup = parseHookGroup(group);
-  if (parsedGroup === undefined) return false;
-  const handlers = parsedGroup.handlers;
-  if (handlers === undefined) return false;
-  return handlers.some((handler) => {
-    const parsedHandler = CodexCommandHookSchema.safeParse(handler);
-    return (
-      parsedHandler.success &&
-      (parsedHandler.data.command === command || parsedHandler.data.statusMessage === marker)
-    );
-  });
-}
-
-function wrapPlannotatorCommands(
-  group: unknown,
-  wrapperCommand: string,
-  wrapperCommandWindows: string | undefined,
-): unknown {
-  const parsedGroup = parseHookGroup(group);
-  if (parsedGroup === undefined) return group;
-  const { record, handlers } = parsedGroup;
-  if (handlers === undefined) return record;
-  const typedHandlers: unknown[] = handlers;
-  let changed = false;
-  const nextHandlers = typedHandlers.map((handler) => {
-    const parsedHandler = CodexCommandHookSchema.safeParse(handler);
-    if (!parsedHandler.success || parsedHandler.data.command === undefined) return handler;
-    const item = parsedHandler.data as Record<string, unknown>;
-    if (item['statusMessage'] === CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER) {
-      const original =
-        getPlannotatorPayload(parsedHandler.data.command) ??
-        (typeof item['commandWindows'] === 'string'
-          ? getPlannotatorPayload(item['commandWindows'])
-          : undefined);
-      if (original === undefined) return handler;
-      changed = true;
-      return wrapPlannotatorPayload(item, original, wrapperCommand, wrapperCommandWindows);
-    }
-    const windowsCommand = parsedHandler.data.commandWindows;
-    const original = {
-      command: parsedHandler.data.command,
-      ...(typeof windowsCommand === 'string' ? { commandWindows: windowsCommand } : {}),
-      statusMessage: parsedHandler.data.statusMessage,
-    };
-    const wrapsCommand = containsPlannotator(original.command);
-    const wrapsWindowsCommand =
-      wrapperCommandWindows !== undefined &&
-      containsPlannotator(original.commandWindows ?? original.command);
-    if (!wrapsCommand && !wrapsWindowsCommand) return handler;
-    changed = true;
-    return wrapPlannotatorPayload(item, original, wrapperCommand, wrapperCommandWindows);
-  });
-  return changed ? { ...record, hooks: nextHandlers } : record;
-}
-
-function wrapPlannotatorPayload(
-  item: Record<string, unknown>,
-  original: { command: string; commandWindows?: string; statusMessage?: unknown },
-  wrapperCommand: string,
-  wrapperCommandWindows: string | undefined,
-): Record<string, unknown> {
-  const payload = Buffer.from(JSON.stringify(original), 'utf8').toString('base64url');
-  const wrapsCommand = containsPlannotator(original.command);
-  const wrapsWindowsCommand =
-    wrapperCommandWindows !== undefined &&
-    containsPlannotator(original.commandWindows ?? original.command);
-  return {
-    ...item,
-    ...(wrapsCommand ? { command: `${wrapperCommand} ${payload}` } : {}),
-    ...(wrapsWindowsCommand ? { commandWindows: `${wrapperCommandWindows} ${payload}` } : {}),
-    statusMessage: CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER,
-  };
-}
-
-function getPlannotatorPayload(
-  command: string,
-): { command: string; commandWindows?: string; statusMessage?: unknown } | undefined {
-  const payloadSeparator = command.lastIndexOf(' ');
-  if (payloadSeparator < 0) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(
-      Buffer.from(command.slice(payloadSeparator + 1), 'base64url').toString('utf8'),
-    );
-    const result = PlannotatorHookPayloadSchema.safeParse(parsed);
-    if (!result.success) return undefined;
-    const value = result.data;
-    return {
-      command: value.command,
-      ...(typeof value.commandWindows === 'string' ? { commandWindows: value.commandWindows } : {}),
-      statusMessage: value.statusMessage,
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-function restorePlannotatorCommands(group: unknown): unknown {
-  const parsedGroup = parseHookGroup(group);
-  if (parsedGroup === undefined) return group;
-  const { record, handlers } = parsedGroup;
-  if (handlers === undefined) return record;
-  const typedHandlers: unknown[] = handlers;
-  let changed = false;
-  const nextHandlers = typedHandlers.map((handler) => {
-    const parsedHandler = CodexCommandHookSchema.safeParse(handler);
-    if (!parsedHandler.success) return handler;
-    const item = parsedHandler.data as Record<string, unknown>;
-    if (
-      item['statusMessage'] !== CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER ||
-      parsedHandler.data.command === undefined
-    )
-      return handler;
-    const decoded =
-      getPlannotatorPayload(parsedHandler.data.command ?? '') ??
-      (typeof parsedHandler.data.commandWindows === 'string'
-        ? getPlannotatorPayload(parsedHandler.data.commandWindows)
-        : undefined);
-    if (decoded === undefined) return handler;
-    changed = true;
-    const restored: Record<string, unknown> = { ...item, command: decoded.command };
-    if (decoded.commandWindows !== undefined) restored['commandWindows'] = decoded.commandWindows;
-    else delete restored['commandWindows'];
-    if (typeof decoded.statusMessage === 'string')
-      restored['statusMessage'] = decoded.statusMessage;
-    else delete restored['statusMessage'];
-    return restored;
-  });
-  return changed ? { ...record, hooks: nextHandlers } : record;
-}
-
-function removeOwnCommands(
-  group: unknown,
-  command: string,
-  marker = CODEX_COMPLEX_PROMPT_HOOK_MARKER,
-): Record<string, unknown> | undefined {
-  const parsedGroup = parseHookGroup(group);
-  if (parsedGroup === undefined) return group as undefined;
-  const { record, handlers } = parsedGroup;
-  if (handlers === undefined) return record;
-  const remaining = handlers.filter((handler) => {
-    const parsedHandler = CodexCommandHookSchema.safeParse(handler);
-    return !(
-      parsedHandler.success &&
-      (parsedHandler.data.command === command || parsedHandler.data.statusMessage === marker)
-    );
-  });
-  return remaining.length === 0 ? undefined : { ...record, hooks: remaining };
-}
-
-function removeLegacyStopHooks(hooks: Record<string, unknown>): void {
-  const stopHooks = hooks['Stop'];
-  const parsedStopHooks = CodexHookGroupListSchema.safeParse(stopHooks);
-  if (!parsedStopHooks.success) return;
-  hooks['Stop'] = parsedStopHooks.data
-    .map((group: unknown) => removeHandlers(group, isLegacyStopHook))
-    .filter((group: Record<string, unknown> | undefined) => group !== undefined);
-}
-
-function removeHandlers(
-  group: unknown,
-  shouldRemove: (handler: unknown) => boolean,
-): Record<string, unknown> | undefined {
-  const parsedGroup = parseHookGroup(group);
-  if (parsedGroup === undefined) return group as undefined;
-  const { record, handlers } = parsedGroup;
-  if (handlers === undefined) return record;
-  const remaining = handlers.filter((handler) => !shouldRemove(handler));
-  return remaining.length === 0 ? undefined : { ...record, hooks: remaining };
-}
-
-function parseHookGroup(
-  group: unknown,
-): { readonly record: Record<string, unknown>; readonly handlers?: unknown[] } | undefined {
-  const result = CodexHookGroupSchema.safeParse(group);
-  if (!result.success) return undefined;
-  const hooks = CodexHookGroupListSchema.safeParse(result.data['hooks']);
-  return {
-    record: result.data,
-    ...(hooks.success ? { handlers: hooks.data } : {}),
-  };
-}
-
-function isLegacyStopHook(handler: unknown): boolean {
-  const result = CodexCommandHookSchema.safeParse(handler);
-  if (!result.success) return false;
-  if (result.data.statusMessage === CODEX_COMPLEX_PROMPT_LEGACY_STOP_HOOK_MARKER) return true;
-  const command = result.data.command;
-  return (
-    typeof command === 'string' &&
-    command.includes('complex-prompt') &&
-    command.endsWith(LEGACY_STOP_HOOK_COMMAND_SUFFIX)
-  );
 }
 
 function isMissingFile(error: unknown): boolean {
