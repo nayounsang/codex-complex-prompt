@@ -17,14 +17,20 @@ import {
 } from '@codex-complex-prompt/protocol';
 
 import type { BridgeSession } from '../hooks/useBridgeSession.js';
-import type { MarkdownEditorHandle } from '../../input/components/MarkdownEditor.js';
+import type {
+  MarkdownEditorHandle,
+  MediaFileOptions,
+} from '../../input/components/MarkdownEditor.js';
 import { PromptSessionShell } from '../../../app/components/PromptSessionShell.js';
 import { SubmitFeedbackDialog } from '../../../app/components/SubmitFeedbackDialog.js';
 import { useFeedbackAnnotations } from '../../feedback/hooks/useFeedbackAnnotations.js';
 import { useFeedbackSubmission } from '../../feedback/hooks/useFeedbackSubmission.js';
 import { useProjectTemplates } from '../../templates/hooks/useProjectTemplates.js';
 import { removeMarkdownDrawingReferences } from '../../input/drawing-markdown.js';
-import { countMarkdownImageOccurrences } from '../../../shared/markdown/markdown-source-map.js';
+import {
+  countMarkdownImageOccurrences,
+  getEmptyImageSourceRanges,
+} from '../../../shared/markdown/markdown-source-map.js';
 import { MARKDOWN_ATTACHMENT_DIRECTORY } from '../../../shared/markdown/attachment-path.js';
 import { identifyImageFormat } from '../../../shared/image-format.js';
 import { getVideoExtension, getVideoMimeType } from '../../input/model/media-files.js';
@@ -61,11 +67,13 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
   const [editorResetVersion, setEditorResetVersion] = useState(0);
   const [attachmentRefreshKey, setAttachmentRefreshKey] = useState(0);
   const [isWaitingForMediaSaves, setIsWaitingForMediaSaves] = useState(false);
+  const [mediaUploadStatus, setMediaUploadStatus] = useState('');
   const [drawing, setDrawing] = useState<ActiveDrawing | null>(null);
   const editorRef = useRef<MarkdownEditorHandle>(null);
   const currentMarkdownRef = useRef(markdownOverride ?? bridgeSession.initialMarkdown ?? '');
   const pendingMediaMarkdownRef = useRef<PendingMediaMarkdown[]>([]);
   const pendingMediaSavesRef = useRef(new Set<Promise<void>>());
+  const pendingMediaSaveResultsRef = useRef(new Map<Promise<void>, string>());
   const isWaitingForMediaSavesRef = useRef(false);
   const { feedbackLoop, submit } = bridgeSession;
   const markdown = markdownOverride ?? bridgeSession.initialMarkdown ?? '';
@@ -182,9 +190,28 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     }
   };
 
-  const saveMediaFiles = async (files: readonly File[]): Promise<void> => {
+  const saveMediaFiles = async (
+    files: readonly File[],
+    options?: MediaFileOptions,
+  ): Promise<string> => {
+    const initialMarkdown = getCurrentMarkdown();
+    const placeholderRange =
+      options?.emptyImageIndex === undefined
+        ? undefined
+        : getEmptyImageSourceRanges(initialMarkdown)[options.emptyImageIndex];
+    const placeholderMarker =
+      placeholderRange === undefined
+        ? undefined
+        : `![media-upload-pending-${globalThis.crypto.randomUUID()}]()`;
+    if (placeholderRange !== undefined && placeholderMarker !== undefined) {
+      updateMarkdownOverride(
+        `${initialMarkdown.slice(0, placeholderRange.start)}${placeholderMarker}${initialMarkdown.slice(placeholderRange.end)}`,
+      );
+      setEditorResetVersion((version) => version + 1);
+    }
     const markdownImages: string[] = [];
     let hasSavedAttachments = false;
+    let hasFailedMediaUploads = false;
     for (const file of files) {
       try {
         const videoMimeType = getVideoMimeType(file);
@@ -258,13 +285,20 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           `![${escapeMarkdownAlt(file.name)}](${MARKDOWN_ATTACHMENT_DIRECTORY}/${result.id}.${result.extension ?? format.extension})`,
         );
       } catch {
+        hasFailedMediaUploads = true;
         const isVideo = getVideoMimeType(file) !== null;
         markdownImages.push(
           `![${isVideo ? 'Video' : 'Image'} upload failed: ${escapeMarkdownAlt(file.name)}](${IMAGE_UPLOAD_FALLBACK_PATH})`,
         );
       }
     }
-    const currentMarkdown = getCurrentMarkdown();
+    const editorMarkdown = getCurrentMarkdown();
+    const currentMarkdown =
+      placeholderMarker !== undefined &&
+      !editorMarkdown.includes(placeholderMarker) &&
+      currentMarkdownRef.current.includes(placeholderMarker)
+        ? currentMarkdownRef.current
+        : editorMarkdown;
     const currentOccurrences = countMarkdownImageOccurrences(currentMarkdown, markdownImages);
     const appendedOccurrences = new Map<string, number>();
     for (const image of markdownImages) {
@@ -276,16 +310,50 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       appendedOccurrences.set(image, appended + 1);
     }
     if (hasSavedAttachments) setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
-    const next = `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}${markdownImages.join('\n\n')}`;
+    const placeholderStart =
+      placeholderMarker === undefined ? -1 : currentMarkdown.indexOf(placeholderMarker);
+    const next =
+      placeholderStart < 0 || placeholderMarker === undefined
+        ? `${currentMarkdown.trimEnd()}${currentMarkdown.trim() === '' ? '' : '\n\n'}${markdownImages.join('\n\n')}`
+        : `${currentMarkdown.slice(0, placeholderStart)}${markdownImages[0] ?? ''}${currentMarkdown.slice(placeholderStart + placeholderMarker.length)}${markdownImages
+            .slice(1)
+            .map((image) => `\n\n${image}`)
+            .join('')}`;
     updateMarkdownOverride(next);
     setEditorResetVersion((version) => version + 1);
+    return hasFailedMediaUploads
+      ? hasSavedAttachments
+        ? 'Some media uploads failed'
+        : 'Media upload failed'
+      : 'Media upload complete';
   };
 
-  const handleMediaFiles = (files: readonly File[]): Promise<void> => {
-    const save = saveMediaFiles(files);
-    pendingMediaSavesRef.current.add(save);
-    void save.then(() => pendingMediaSavesRef.current.delete(save));
-    return save.then(() => undefined);
+  const handleMediaFiles = (files: readonly File[], options?: MediaFileOptions): Promise<void> => {
+    const save = saveMediaFiles(files, options);
+    const trackedSave = save.then(() => undefined);
+    pendingMediaSavesRef.current.add(trackedSave);
+    setMediaUploadStatus('Uploading media');
+    const finish = (status: string): void => {
+      pendingMediaSavesRef.current.delete(trackedSave);
+      pendingMediaSaveResultsRef.current.set(trackedSave, status);
+      if (pendingMediaSavesRef.current.size > 0) {
+        setMediaUploadStatus('Uploading media');
+        return;
+      }
+      const results = [...pendingMediaSaveResultsRef.current.values()];
+      pendingMediaSaveResultsRef.current.clear();
+      const hasFailures = results.some((result) => result !== 'Media upload complete');
+      const hasSuccesses = results.some((result) => result !== 'Media upload failed');
+      setMediaUploadStatus(
+        hasFailures && hasSuccesses
+          ? 'Some media uploads failed'
+          : hasFailures
+            ? 'Media upload failed'
+            : 'Media upload complete',
+      );
+    };
+    void save.then(finish, () => finish('Media upload failed'));
+    return trackedSave;
   };
 
   const waitForPendingMediaSaves = useCallback(async (): Promise<void> => {
@@ -443,6 +511,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
         }}
         drawings={{
           onMediaFiles: handleMediaFiles,
+          mediaUploadStatus,
           onDraw: () => {
             void openDrawing();
           },

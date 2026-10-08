@@ -181,24 +181,20 @@ button:focus-visible,
   border: 0;
 }
 
-.markdown-editor-host {
-  position: relative;
-}
-
-.media-picker-placeholder {
-  position: absolute;
-  z-index: 10;
+.markdown-editor .ProseMirror p:has(> img[src='']) {
   display: flex;
-  flex-direction: column;
+  width: min(100%, 800px);
+  aspect-ratio: 16 / 9;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 24px;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 12px;
+  padding: 20px;
   border: 1px dashed #c8c7c2;
   border-radius: 8px;
   color: #686762;
   background: #f7f7f5;
-  font: inherit;
   cursor: pointer;
   transition:
     border-color 120ms ease,
@@ -206,25 +202,45 @@ button:focus-visible,
     color 120ms ease;
 }
 
-.media-picker-placeholder svg {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 auto;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.markdown-editor .ProseMirror p:has(> img[src=''])::before {
+  content: '+';
+  font-size: 28px;
+  line-height: 1;
 }
 
-.media-picker-placeholder:hover {
+.markdown-editor .ProseMirror p:has(> img[src=''])::after {
+  content: 'Add media';
+}
+
+.markdown-editor .ProseMirror p:has(> img[src='']) > img[src=''] {
+  display: none;
+}
+
+.markdown-editor .ProseMirror p:has(> img[src='']):hover {
   border-color: #8a8983;
   color: #292824;
   background: #f0f0ed;
 }
 
-.media-picker-placeholder:focus-visible {
+.markdown-editor .ProseMirror p:has(> img[src=''][alt^='media-upload-pending-']) {
+  cursor: progress;
+}
+
+.markdown-editor .ProseMirror p:has(> img[src=''][alt^='media-upload-pending-'])::before {
+  display: none;
+}
+
+.markdown-editor .ProseMirror p:has(> img[src=''][alt^='media-upload-pending-'])::after {
+  content: 'Uploading media…';
+}
+
+.markdown-editor .ProseMirror p:has(> img[src='']):focus-visible {
   outline: 2px solid #2383e2;
   outline-offset: 2px;
+}
+
+.markdown-editor-host {
+  position: relative;
 }
 
 .markdown-editor {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { LazyMarkdownEditor } from './LazyMarkdownEditor.js';
-import type { MarkdownEditorHandle } from './MarkdownEditor.js';
+import type { MarkdownEditorHandle, MediaFileOptions } from './MarkdownEditor.js';
 
 interface EditModeViewProps {
   readonly initialMarkdown: string;
@@ -13,7 +13,10 @@ interface EditModeViewProps {
   readonly attachmentToken: string | null;
   readonly attachmentRefreshKey: number;
   readonly onDraw: () => void;
-  readonly onMediaFiles: (files: readonly File[]) => void | Promise<void>;
+  readonly onMediaFiles: (
+    files: readonly File[],
+    options?: MediaFileOptions,
+  ) => void | Promise<void>;
   readonly onEditDrawing: (id: string) => void;
   readonly onDeleteDrawing: (id: string) => void;
 }

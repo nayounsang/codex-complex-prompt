@@ -5,7 +5,10 @@ import type {
 import { FeedbackModeView } from '../../features/feedback/components/FeedbackModeView.js';
 import { EditModeView } from '../../features/input/components/EditModeView.js';
 import { PromptHeader } from './PromptHeader.js';
-import type { MarkdownEditorHandle } from '../../features/input/components/MarkdownEditor.js';
+import type {
+  MarkdownEditorHandle,
+  MediaFileOptions,
+} from '../../features/input/components/MarkdownEditor.js';
 import type { PromptTemplate } from '@codex-complex-prompt/protocol';
 
 interface PromptSessionShellProps {
@@ -55,7 +58,11 @@ interface PromptSessionShellProps {
   };
   readonly drawings: {
     readonly onDraw: () => void;
-    readonly onMediaFiles: (files: readonly File[]) => void | Promise<void>;
+    readonly onMediaFiles: (
+      files: readonly File[],
+      options?: MediaFileOptions,
+    ) => void | Promise<void>;
+    readonly mediaUploadStatus: string;
     readonly onEdit: (id: string) => void;
     readonly onDelete: (id: string) => void;
     readonly attachmentUrl: string | null;
@@ -68,6 +75,9 @@ export function PromptSessionShell(props: PromptSessionShellProps): React.JSX.El
   const { session, editor, feedback, templates, drawings } = props;
   return (
     <>
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {drawings.mediaUploadStatus}
+      </span>
       <PromptHeader
         mode={session.mode}
         isConnected={session.isConnected}
