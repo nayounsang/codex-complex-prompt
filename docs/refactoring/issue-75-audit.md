@@ -57,7 +57,7 @@ Candidates over 300 lines at the start of this work; split only along existing d
 | `apps/cli-bridge/src/index.ts`                                        |   374 | Separate command routing from CLI entrypoint only where this preserves package exports and startup semantics.                | done: hook command parsing and command construction extracted; CLI suite passes                 |     |
 | `apps/web/src/features/session/hooks/useBridgeSession.ts`             |   320 | Separate transport/session state transitions from hook lifecycle if boundaries remain explicit.                              | done: session contracts and bridge URL validation extracted; web checks pass                    |     |
 | `apps/cli-bridge/src/features/templates/storage/project-templates.ts` |   305 | Separate storage/filesystem helpers from frontmatter serialization and parsing.                                              | done: template definitions and frontmatter conversion extracted; 19 tests pass                  |     |
-| `apps/web/src/features/feedback/components/AnnotatedMarkdownView.tsx` |   301 | Separate annotation rendering from DOM interaction glue if existing behavior tests can follow the boundary.                  | open                                                                                            |
+| `apps/web/src/features/feedback/components/AnnotatedMarkdownView.tsx` |   301 | Separate annotation rendering from DOM interaction glue if existing behavior tests can follow the boundary.                  | done: native selection lifecycle extracted into a dedicated hook; 63 UI tests pass              |     |
 
 ## Completion evidence
 
