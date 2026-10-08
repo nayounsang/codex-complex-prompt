@@ -7,11 +7,23 @@ import {
   locateMappedText,
 } from './markdown-source-map.js';
 
+function isSelectionRangeInside(root: HTMLElement, range: Range): boolean {
+  return root.contains(range.startContainer) && root.contains(range.endContainer);
+}
+
+function isValidSourceRange(start: number, end: number): boolean {
+  return Number.isFinite(start) && Number.isFinite(end) && start >= 0 && start < end;
+}
+
+function isValidImageSourceRange(start: number, end: number): boolean {
+  return Number.isInteger(start) && Number.isInteger(end) && isValidSourceRange(start, end);
+}
+
 export function getSelectionAnchor(root: HTMLElement): SelectionAnchor | null {
   const selection = window.getSelection();
   if (selection === null || selection.rangeCount === 0 || selection.isCollapsed) return null;
   const range = selection.getRangeAt(0);
-  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+  if (!isSelectionRangeInside(root, range)) return null;
   const start = textOffset(root, range.startContainer, range.startOffset);
   const end = textOffset(root, range.endContainer, range.endOffset);
   if (start >= end) return null;
@@ -59,7 +71,7 @@ export function getCodeBlockSelectionAnchor(
   const selection = window.getSelection();
   if (selection === null || selection.rangeCount === 0 || selection.isCollapsed) return null;
   const range = selection.getRangeAt(0);
-  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+  if (!isSelectionRangeInside(root, range)) return null;
 
   const startBlock = closestCodeBlock(range.startContainer);
   const endBlock = closestCodeBlock(range.endContainer);
@@ -76,7 +88,7 @@ export function getCodeBlockSelectionAnchor(
     startBlock.dataset['codeSourceStart'] = String(start);
     startBlock.dataset['codeSourceEnd'] = String(end);
   }
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return null;
+  if (!isValidSourceRange(start, end)) return null;
   const selectionStart = codeBlockTextOffset(range.startContainer, range.startOffset, markdown);
   const selectionEnd = codeBlockTextOffset(range.endContainer, range.endOffset, markdown);
   if (selectionStart === null || selectionEnd === null || selectionStart >= selectionEnd)
@@ -101,7 +113,7 @@ export function getImageSelectionAnchor(
   if (!root.contains(image)) return null;
   const start = Number(image.dataset['feedbackSourceStart']);
   const end = Number(image.dataset['feedbackSourceEnd']);
-  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start >= end) return null;
+  if (!isValidImageSourceRange(start, end)) return null;
   const quote = markdown.slice(start, end);
   if (quote === '') return null;
   return {

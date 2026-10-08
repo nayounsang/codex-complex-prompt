@@ -18,6 +18,23 @@ import {
 } from '../../../shared/markdown/video-embeds.js';
 import { VideoEmbedPreview } from '../../input/components/VideoEmbedPreview.js';
 
+function isPreviewControlTarget(target: Element): boolean {
+  return (
+    target.closest('.mermaid-preview-open') !== null ||
+    target.closest('.video-embed-mount') !== null
+  );
+}
+
+function getMermaidSelectionAnchor(target: Element, markdown: string): SelectionAnchor | null {
+  const diagram = target.closest('.mermaid-preview-open');
+  const codeBlock = diagram?.closest<HTMLElement>('.milkdown-code-block');
+  if (codeBlock === null || codeBlock === undefined) return null;
+  const start = Number(codeBlock.dataset['codeSourceStart']);
+  const end = Number(codeBlock.dataset['codeSourceEnd']);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= end) return null;
+  return { quote: markdown.slice(start, end), start, end, rect: codeBlock.getBoundingClientRect() };
+}
+
 interface AnnotatedMarkdownViewProps {
   readonly markdown: string;
   readonly annotations: readonly FeedbackAnnotation[];
@@ -130,9 +147,7 @@ export function AnnotatedMarkdownView({
         selectionDismissedRef.current = false;
         const target = event.target;
         pointerSelectingRef.current = !(
-          target instanceof Element &&
-          (target.closest('.mermaid-preview-open') !== null ||
-            target.closest('.video-embed-mount') !== null)
+          target instanceof Element && isPreviewControlTarget(target)
         );
       }}
       onKeyDown={() => {
@@ -152,20 +167,10 @@ export function AnnotatedMarkdownView({
       onClickCapture={(event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
-        const diagram = target.closest('.mermaid-preview-open');
-        if (diagram !== null) {
-          const codeBlock = diagram.closest<HTMLElement>('.milkdown-code-block');
-          if (codeBlock === null) return;
-          const start = Number(codeBlock.dataset['codeSourceStart']);
-          const end = Number(codeBlock.dataset['codeSourceEnd']);
-          if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return;
-          const anchor: SelectionAnchor = {
-            quote: markdown.slice(start, end),
-            start,
-            end,
-            rect: codeBlock.getBoundingClientRect(),
-          };
-          publishSelection(mergeSelectionWithExistingFeedback(anchor, annotations, markdown));
+        if (target.closest('.mermaid-preview-open') !== null) {
+          const anchor = getMermaidSelectionAnchor(target, markdown);
+          if (anchor !== null)
+            publishSelection(mergeSelectionWithExistingFeedback(anchor, annotations, markdown));
           return;
         }
         const image = target.closest<HTMLImageElement>(
@@ -175,12 +180,7 @@ export function AnnotatedMarkdownView({
       }}
       onMouseUpCapture={(event) => {
         const target = event.target;
-        if (
-          target instanceof Element &&
-          (target.closest('.mermaid-preview-open') !== null ||
-            target.closest('.video-embed-mount') !== null)
-        )
-          return;
+        if (target instanceof Element && isPreviewControlTarget(target)) return;
         pointerSelectingRef.current = false;
         handleSelection();
       }}

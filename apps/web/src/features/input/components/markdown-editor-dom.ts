@@ -12,24 +12,41 @@ export interface DrawingEditTarget {
   readonly editable: boolean;
 }
 
-export function syncMediaPlaceholderAccessibility(root: HTMLElement, readOnly: boolean): void {
-  const placeholders = Array.from(
-    root.querySelectorAll<HTMLParagraphElement>('.ProseMirror p:has(> img[src=""])'),
+function isIgnorableMediaPlaceholderChild(child: ChildNode, image: HTMLImageElement): boolean {
+  return (
+    child === image ||
+    (child instanceof HTMLImageElement && child.classList.contains('ProseMirror-separator')) ||
+    (child.nodeType === Node.TEXT_NODE && (child.textContent ?? '').trim() === '') ||
+    (child instanceof HTMLBRElement && child.classList.contains('ProseMirror-trailingBreak'))
   );
-  const dedicatedPlaceholders = placeholders.filter((paragraph) => {
-    const image = paragraph.querySelector(':scope > img[src=""]');
-    return (
-      image instanceof HTMLImageElement &&
-      Array.from(paragraph.childNodes).every(
-        (child) =>
-          child === image ||
-          (child instanceof HTMLImageElement &&
-            child.classList.contains('ProseMirror-separator')) ||
-          (child.nodeType === Node.TEXT_NODE && (child.textContent ?? '').trim() === '') ||
-          (child instanceof HTMLBRElement && child.classList.contains('ProseMirror-trailingBreak')),
-      )
-    );
-  });
+}
+
+function isDedicatedMediaPlaceholder(paragraph: HTMLParagraphElement): boolean {
+  const image = paragraph.querySelector(':scope > img');
+  return (
+    image instanceof HTMLImageElement &&
+    image.getAttribute('src') === '' &&
+    Array.from(paragraph.childNodes).every((child) =>
+      isIgnorableMediaPlaceholderChild(child, image),
+    )
+  );
+}
+
+function isMediaPlaceholderUploading(paragraph: HTMLParagraphElement): boolean {
+  const image = paragraph.querySelector(':scope > img');
+  return (
+    image instanceof HTMLImageElement &&
+    image.getAttribute('src') === '' &&
+    image
+      .getAttribute('alt')
+      ?.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.pendingPrefix) === true
+  );
+}
+
+export function syncMediaPlaceholderAccessibility(root: HTMLElement, readOnly: boolean): void {
+  const dedicatedPlaceholders = Array.from(
+    root.querySelectorAll<HTMLParagraphElement>('.ProseMirror p'),
+  ).filter(isDedicatedMediaPlaceholder);
   const currentPlaceholders = new Set(dedicatedPlaceholders);
   root.querySelectorAll<HTMLParagraphElement>('p[data-media-placeholder]').forEach((paragraph) => {
     if (readOnly || !currentPlaceholders.has(paragraph)) {
@@ -43,11 +60,7 @@ export function syncMediaPlaceholderAccessibility(root: HTMLElement, readOnly: b
   });
   if (readOnly) return;
   dedicatedPlaceholders.forEach((paragraph) => {
-    const image = paragraph.querySelector(':scope > img[src=""]');
-    const isUploading =
-      image
-        ?.getAttribute('alt')
-        ?.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.pendingPrefix) === true;
+    const isUploading = isMediaPlaceholderUploading(paragraph);
     paragraph.setAttribute('data-media-placeholder', 'true');
     paragraph.dataset['markdownUiReplacement'] =
       MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.kind;
