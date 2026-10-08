@@ -51,7 +51,7 @@ export function App(): React.JSX.Element {
       {settingsOpen && (
         <FeedbackSettingsDialog
           sendFeedbackToSubagent={sendFeedbackToSubagent}
-          onChange={updateSubagentSetting}
+          onSave={updateSubagentSetting}
           onClose={() => setSettingsOpen(false)}
         />
       )}
