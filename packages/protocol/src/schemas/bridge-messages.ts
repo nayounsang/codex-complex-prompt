@@ -1,15 +1,8 @@
 import { z } from 'zod';
 
-import {
-  isPromptWithinLimit,
-  promptLengthValidation,
-  promptStringSchema,
-} from '../prompt/limits.js';
-import {
-  PromptTemplateSchema,
-  TemplateRequestSchema,
-  TemplateResultSchema,
-} from '../templates/schema.js';
+import { isPromptWithinLimit, promptLengthValidation } from '../prompt/limits.js';
+import { promptStringSchema } from './prompt.js';
+import { PromptTemplateSchema, TemplateRequestSchema, TemplateResultSchema } from './templates.js';
 
 export const SessionHandshakeSchema = z.object({
   type: z.literal('session.handshake'),

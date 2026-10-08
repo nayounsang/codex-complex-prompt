@@ -6,7 +6,12 @@ import {
   type ServerResponse,
 } from 'node:http';
 
-import { AttachmentTooLargeError, AttachmentValidationError } from '@codex-complex-prompt/protocol';
+import {
+  AttachmentCreateRequestSchema,
+  AttachmentTooLargeError,
+  AttachmentValidationError,
+  DrawingSceneSchema,
+} from '@codex-complex-prompt/protocol';
 
 import { WebSocketServer } from 'ws';
 
@@ -206,55 +211,32 @@ function serveAttachmentRequest(
   if (request.method === 'POST' && match[1] === undefined) {
     void readRequestBody(request, 36 * 1024 * 1024)
       .then(async (body) => {
-        let input: {
-          id?: unknown;
-          image?: unknown;
-          video?: unknown;
-          png?: unknown;
-          extension?: unknown;
-          scene?: unknown;
-        };
+        let parsed: unknown;
         try {
-          const parsed: unknown = JSON.parse(body);
-          if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            throw new AttachmentValidationError('Invalid attachment request.');
-          }
-          input = parsed;
+          parsed = JSON.parse(body);
         } catch (error) {
-          if (error instanceof AttachmentValidationError) throw error;
           throw new AttachmentValidationError(
             `Attachment request JSON is invalid: ${
               error instanceof Error ? error.message : 'unknown parse error'
             }`,
           );
         }
-        if (
-          (typeof input.image !== 'string' &&
-            typeof input.png !== 'string' &&
-            typeof input.video !== 'string') ||
-          (typeof input.video === 'string'
-            ? input.scene !== undefined
-            : typeof input.scene !== 'string') ||
-          (input.id !== undefined && typeof input.id !== 'string') ||
-          (input.extension !== undefined && typeof input.extension !== 'string')
-        )
-          throw new AttachmentValidationError('Invalid attachment request.');
-        const extension =
-          typeof input.extension === 'string'
-            ? input.extension
-            : typeof input.image === 'string'
-              ? undefined
-              : 'png';
+        const result = AttachmentCreateRequestSchema.safeParse(parsed);
+        if (!result.success) throw new AttachmentValidationError('Invalid attachment request.');
+        const input = result.data;
+        const extension = input.extension ?? (input.image !== undefined ? undefined : 'png');
         const id = await attachmentStore.save({
-          ...(typeof input.id === 'string' ? { id: input.id } : {}),
-          ...(typeof input.video === 'string' ? { video: input.video } : {}),
-          ...(typeof input.image === 'string'
+          ...(input.id === undefined ? {} : { id: input.id }),
+          ...(input.video === undefined ? {} : { video: input.video }),
+          ...(input.image !== undefined
             ? { image: input.image }
-            : typeof input.video === 'string'
+            : input.video !== undefined
               ? {}
-              : { png: input.png as string }),
+              : input.png === undefined
+                ? {}
+                : { png: input.png }),
           ...(extension === undefined ? {} : { extension }),
-          ...(typeof input.scene === 'string' ? { scene: input.scene } : {}),
+          ...(input.scene === undefined ? {} : { scene: input.scene }),
         });
         return id;
       })
@@ -331,12 +313,7 @@ function serveAttachmentRequest(
           }
           let editable = false;
           try {
-            const value: unknown = JSON.parse(scene);
-            editable =
-              value !== null &&
-              typeof value === 'object' &&
-              'elements' in value &&
-              Array.isArray(value.elements);
+            editable = DrawingSceneSchema.safeParse(JSON.parse(scene)).success;
           } catch {
             editable = false;
           }
