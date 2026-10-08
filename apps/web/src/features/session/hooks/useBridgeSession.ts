@@ -1,85 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type {
-  PromptSubmitMode,
-  PromptTemplate,
-  ServerMessage,
-} from '@codex-complex-prompt/protocol';
+import type { PromptSubmitMode, ServerMessage } from '@codex-complex-prompt/protocol';
 
 import { connectBridgeTransport } from '../infrastructure/bridge-transport.js';
+import { getInitialConnection, parseBridgeUrl } from './bridge-url.js';
+import type {
+  BridgeSession,
+  ConnectionState,
+  PromptResult,
+  TemplateChangeRequest,
+  TemplateResult,
+} from './bridge-session-types.js';
+export type {
+  BridgeSession,
+  ConnectionState,
+  PromptResult,
+  TemplateChangeRequest,
+  TemplateResult,
+} from './bridge-session-types.js';
 
 const COMMAND_WINDOW_CLOSE_DELAY_MS = 3_000;
-
-export type ConnectionState =
-  'connecting' | 'connected' | 'submitting' | 'success' | 'error' | 'disconnected';
-
-export interface BridgeSession {
-  readonly state: ConnectionState;
-  readonly error: string | null;
-  readonly closeInSeconds: number | null;
-  readonly bridgeUrl: string | null;
-  readonly initialMarkdown: string | null;
-  readonly feedbackLoop: boolean;
-  readonly attachmentUrl: string | null;
-  readonly attachmentToken: string | null;
-  readonly templateSnapshot: {
-    readonly templates: readonly PromptTemplate[];
-    readonly error: string | null;
-  } | null;
-  readonly requestTemplateChange: (request: TemplateChangeRequest) => Promise<TemplateResult>;
-  readonly submit: (prompt: string, mode?: PromptSubmitMode) => Promise<PromptResult>;
-}
-
-export type TemplateChangeRequest =
-  | { readonly type: 'template.save'; readonly template: PromptTemplate }
-  | { readonly type: 'template.delete'; readonly id: string };
-
-export interface PromptResult {
-  readonly status: 'accepted' | 'failed';
-  readonly error?: string;
-  readonly prompt?: string;
-}
-
-export interface TemplateResult {
-  readonly status: 'accepted' | 'failed';
-  readonly templates?: readonly PromptTemplate[];
-  readonly error?: string;
-}
-
-interface BridgeUrlResult {
-  readonly url: URL | null;
-  readonly error: string | null;
-}
-
-function parseBridgeUrl(bridge: string): BridgeUrlResult {
-  let url: URL;
-  try {
-    url = new URL(bridge);
-  } catch {
-    return { url: null, error: 'The bridge URL is invalid.' };
-  }
-  if (!['http:', 'https:'].includes(url.protocol)) {
-    return { url: null, error: 'The bridge URL must use HTTP or HTTPS.' };
-  }
-  const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  const isLoopbackHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-  if (!isLoopbackHost) {
-    return { url: null, error: 'The bridge URL must point to a loopback host.' };
-  }
-  return { url, error: null };
-}
-
-function getInitialConnection(): { state: ConnectionState; error: string | null } {
-  if (typeof window === 'undefined') return { state: 'connecting', error: null };
-  const searchParams = new URLSearchParams(window.location.search);
-  if (searchParams.get('token') === null) {
-    return { state: 'error', error: 'This page needs a bridge session token.' };
-  }
-  const bridgeResult = parseBridgeUrl(searchParams.get('bridge') ?? window.location.origin);
-  return bridgeResult.error === null
-    ? { state: 'connecting', error: null }
-    : { state: 'error', error: bridgeResult.error };
-}
 
 export function useBridgeSession(): BridgeSession {
   const [state, setState] = useState<ConnectionState>(() => getInitialConnection().state);
