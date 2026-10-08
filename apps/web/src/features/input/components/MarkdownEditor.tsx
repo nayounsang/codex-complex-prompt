@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { autoUpdate, computePosition, offset } from '@floating-ui/dom';
-import { Crepe } from '@milkdown/crepe';
+import type { Crepe } from '@milkdown/crepe';
 import { editorViewCtx, schemaCtx } from '@milkdown/kit/core';
 import type { VideoEmbedTarget } from '../../../shared/markdown/video-embeds.js';
 import { MarkdownEditorAuxiliaryViews } from './MarkdownEditorAuxiliaryViews.js';

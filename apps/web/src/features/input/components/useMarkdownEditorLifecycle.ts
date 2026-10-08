@@ -321,6 +321,8 @@ export function useMarkdownEditorLifecycle({
         if (crepe !== null) void crepe.destroy();
       };
     },
+    // Effect-event callbacks and refs are intentionally read at event time, not used as lifecycle triggers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [attachmentRefreshKey, attachmentToken, attachmentUrl, defaultMarkdown],
   );
 }
