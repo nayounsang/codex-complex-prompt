@@ -113,6 +113,13 @@ function commandSegmentContainsPlannotator(segment: string[]): boolean {
       segment[executableIndex + 1]?.toLowerCase() === 'hook'
     );
   }
+  if (commandName === 'env') {
+    const executableIndex = getEnvExecutableIndex(segment, commandIndex + 1);
+    return (
+      executableIndex !== undefined &&
+      commandSegmentContainsPlannotator(segment.slice(executableIndex))
+    );
+  }
   if (['sh', 'bash', 'dash', 'zsh', 'ksh'].includes(commandName)) {
     const commandFlagIndex = segment.findIndex(
       (argument, index) => index > commandIndex && argument === '-c',
@@ -131,6 +138,34 @@ function getNpxExecutableIndex(segment: string[], startIndex: number): number | 
     if (!argument.startsWith('-')) return index;
     if (['-p', '--package'].includes(argument)) index += 2;
     else index += 1;
+  }
+  return undefined;
+}
+
+function getEnvExecutableIndex(segment: string[], startIndex: number): number | undefined {
+  let index = startIndex;
+  while (index < segment.length) {
+    const argument = segment[index] ?? '';
+    if (argument === '--') return index + 1 < segment.length ? index + 1 : undefined;
+    if (['-i', '--ignore-environment'].includes(argument) || isShellAssignment(argument)) {
+      index += 1;
+      continue;
+    }
+    if (['-u', '--unset', '-C', '--chdir', '-a', '--argv0'].includes(argument)) {
+      if (index + 1 >= segment.length) return undefined;
+      index += 2;
+      continue;
+    }
+    if (
+      argument.startsWith('--unset=') ||
+      argument.startsWith('--chdir=') ||
+      argument.startsWith('--argv0=')
+    ) {
+      index += 1;
+      continue;
+    }
+    if (argument.startsWith('-')) return undefined;
+    return index;
   }
   return undefined;
 }

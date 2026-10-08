@@ -8,7 +8,15 @@ describe('Plannotator command detection', () => {
     ['case-insensitive executable suffix', '"C:\\tools\\PLANNOTATOR.EXE" hook stop'],
     ['npx package option', 'npx --yes --package plannotator plannotator hook stop'],
     ['npx separator', 'npx -- plannotator hook stop'],
-    ['environment assignment', 'MODE=review plannotator hook stop'],
+    ['shell environment assignment', 'MODE=review plannotator hook stop'],
+    ['env command assignment', 'env MODE=review plannotator hook stop'],
+    ['env command options', 'env -i -- plannotator hook stop'],
+    ['env command value options', 'env -u HOME -C /tmp -a cli MODE=review plannotator hook stop'],
+    [
+      'env command long options',
+      'env --unset=HOME --chdir=/tmp --argv0=cli MODE=review plannotator hook stop',
+    ],
+    ['env separator', 'env -- plannotator hook stop'],
     ['shell command string', "sh -c 'plannotator hook stop'"],
     ['command after a separator', 'echo ready && plannotator hook stop'],
     ['command after a newline', 'echo ready\nplannotator hook stop'],
@@ -26,6 +34,11 @@ describe('Plannotator command detection', () => {
     ['hash embedded in a word', 'echo text# plannotator hook stop'],
     ['empty segments', '&& ; ||'],
     ['npx options without a package command', 'npx --yes --package'],
+    ['env options without a command', 'env -u'],
+    ['env option without its value', 'env -C'],
+    ['env assignments without a command', 'env MODE=review'],
+    ['unknown env option', 'env --not-an-env-option plannotator hook stop'],
+    ['env separator without a command', 'env --'],
   ])('ignores %s', (_label, command) => {
     expect(containsPlannotator(command)).toBe(false);
   });

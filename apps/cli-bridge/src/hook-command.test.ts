@@ -123,11 +123,13 @@ describe('hook command dispatch', () => {
     await expect(runHookCommand(['hook', 'plannotator-stop', 'not-json'])).rejects.toThrow();
   });
 
-  it('leaves unknown commands and invalid argument counts unhandled', async () => {
-    await expect(runHookCommand(['version'])).resolves.toBe(false);
-    await expect(runHookCommand(['hook', 'prompt', 'extra'])).resolves.toBe(false);
-    await expect(runHookCommand(['hook', 'stop', 'extra'])).resolves.toBe(false);
-    await expect(runHookCommand(['hook', 'plannotator-stop'])).resolves.toBe(false);
+  it.each([
+    ['an unknown command', ['version']],
+    ['prompt with an extra argument', ['hook', 'prompt', 'extra']],
+    ['stop with an extra argument', ['hook', 'stop', 'extra']],
+    ['Plannotator stop without its payload', ['hook', 'plannotator-stop']],
+  ])('leaves %s unhandled', async (_label, args) => {
+    await expect(runHookCommand(args)).resolves.toBe(false);
   });
 });
 
@@ -141,13 +143,16 @@ describe('hook command serialization', () => {
     expect(hookWindowsCommand('prompt')).toBe('complex-prompt hook prompt');
   });
 
-  it('quotes shell and Windows entrypoints', () => {
+  it('quotes shell entrypoints containing a single quote', () => {
     Reflect.set(process.argv, '1', "cli's entry.js");
 
     expect(hookPromptCommand()).toBe("'cli'\\''s entry.js' hook prompt");
     expect(hookStopCommand()).toBe("'cli'\\''s entry.js' hook stop");
     expect(hookPlannotatorStopCommand()).toBe("'cli'\\''s entry.js' hook plannotator-stop");
+  });
 
+  it('quotes Windows entrypoints and executables containing double quotes', () => {
+    Reflect.set(process.argv, '1', "cli's entry.js");
     const originalExecPath = Object.getOwnPropertyDescriptor(process, 'execPath');
     Object.defineProperty(process, 'execPath', { configurable: true, value: 'C:\\node"path.exe' });
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
