@@ -2,4 +2,4 @@
 '@codex-complex-prompt/cli-bridge': patch
 ---
 
-Validate hook configuration, persisted state, templates, and attachment responses at their input boundaries. Model Markdown editor replacements and move custom editor icons into bundled SVG assets.
+Validate CLI hook, configuration, state, template, and attachment inputs at their boundaries. Preserve the editor's Markdown behavior while modeling its UI replacements and menu actions, bundle reusable editor icons as SVG assets, and separate the editor, attachment, template, feedback, and server responsibilities into focused modules.
