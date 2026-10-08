@@ -187,7 +187,11 @@ export function useBridgeSession(): BridgeSession {
   );
 
   const submit = useCallback(
-    (prompt: string, mode: PromptSubmitMode = 'edit'): Promise<PromptResult> => {
+    (
+      prompt: string,
+      mode: PromptSubmitMode = 'edit',
+      options: { readonly sendFeedbackToSubagent?: boolean } = {},
+    ): Promise<PromptResult> => {
       const socket = socketRef.current;
       /* c8 ignore next -- the button disables this path when no authenticated socket exists. */
       if (
@@ -210,6 +214,9 @@ export function useBridgeSession(): BridgeSession {
             submissionId,
             prompt: prompt.trim(),
             ...(mode === 'edit' ? {} : { mode }),
+            ...(mode === 'feedback' && options.sendFeedbackToSubagent === true
+              ? { sendFeedbackToSubagent: true }
+              : {}),
           }),
         );
       } catch {
