@@ -1,11 +1,14 @@
+import { findMarkdownTableEnd, isMarkdownTableHeader } from './markdown-table-source.js';
+
 export interface SourceCharacter {
   readonly char: string;
   readonly start: number;
   readonly end: number;
 }
 
-const tableSeparatorPattern = /^\s*\|?(?:\s*:?-+:?\s*\|)+\s*$/;
 const blockStartPattern = /^\s*(?:#{1,6}\s|[-+*]\s|\d+[.]\s|>\s?|```)/;
+
+export { getMarkdownTableRanges } from './markdown-table-source.js';
 
 export function getVisibleSourceMap(markdown: string): SourceCharacter[] {
   const lines = markdown.split('\n');
@@ -46,8 +49,8 @@ export function getVisibleSourceMap(markdown: string): SourceCharacter[] {
       continue;
     }
 
-    if (isTableHeader(line, lines[index + 1] ?? '')) {
-      const tableEnd = findTableEnd(lines, index);
+    if (isMarkdownTableHeader(line, lines[index + 1] ?? '')) {
+      const tableEnd = findMarkdownTableEnd(lines, index);
       for (let tableLine = index; tableLine < tableEnd; tableLine += 1) {
         if (tableLine === index + 1) continue;
         appendTableRow(
@@ -106,7 +109,7 @@ export function getVisibleSourceMap(markdown: string): SourceCharacter[] {
       index + 1 < lines.length &&
       (lines[index + 1] ?? '').trim() !== '' &&
       !blockStartPattern.test(lines[index + 1] ?? '') &&
-      !isTableHeader(lines[index + 1] ?? '', lines[index + 2] ?? '')
+      !isMarkdownTableHeader(lines[index + 1] ?? '', lines[index + 2] ?? '')
     ) {
       index += 1;
     }
@@ -235,53 +238,8 @@ function appendCharacter(
   if (char !== '') target.push({ char, start, end });
 }
 
-function isTableHeader(line: string, separator: string): boolean {
-  return line.includes('|') && tableSeparatorPattern.test(separator);
-}
-
-function findTableEnd(lines: readonly string[], start: number): number {
-  let index = start + 2;
-  while (
-    index < lines.length &&
-    (lines[index] ?? '').trim() !== '' &&
-    (lines[index] ?? '').includes('|')
-  ) {
-    index += 1;
-  }
-  return index;
-}
-
-export function getMarkdownTableRanges(
-  markdown: string,
-): Array<{ readonly start: number; readonly end: number }> {
-  const lines = markdown.split('\n');
-  const lineStarts: number[] = [];
-  let offset = 0;
-  for (const line of lines) {
-    lineStarts.push(offset);
-    offset += line.length + 1;
-  }
-
-  const ranges: Array<{ readonly start: number; readonly end: number }> = [];
-  let index = 0;
-  while (index < lines.length) {
-    if (!isTableHeader(lines[index] ?? '', lines[index + 1] ?? '')) {
-      index += 1;
-      continue;
-    }
-    const endLine = findTableEnd(lines, index);
-    const lastLine = Math.max(index, endLine - 1);
-    const start = lineStarts[index] ?? markdown.length;
-    const end = (lineStarts[lastLine] ?? start) + (lines[lastLine]?.length ?? 0);
-    ranges.push({ start, end });
-    index = endLine;
-  }
-  return ranges;
-}
-
 function appendTableRow(line: string, lineStart: number, target: SourceCharacter[]): void {
-  const cells = splitTableCells(line);
-  for (const cell of cells) {
+  for (const cell of splitTableCells(line)) {
     appendInline(cell.text, lineStart + cell.start, target);
   }
 }
