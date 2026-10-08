@@ -1,5 +1,14 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.3.7
+
+### Patch Changes
+
+- 173582c: Validate CLI hook, configuration, state, template, and attachment inputs at their boundaries. Preserve the editor's Markdown behavior while modeling its UI replacements and menu actions, bundle reusable editor icons as SVG assets, and separate the editor, attachment, template, feedback, and server responsibilities into focused modules.
+- 173582c: Use the unist visitor for Markdown AST traversal in the bundled editor.
+- 2aa6ee3: Add image and video insertion through an empty media placeholder in the published browser UI.
+- 173582c: Allow Excalidraw scenes with a null app state to remain editable.
+
 ## 0.3.6
 
 ### Patch Changes
