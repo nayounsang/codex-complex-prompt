@@ -11,6 +11,7 @@ import { autoUpdate, computePosition, offset } from '@floating-ui/dom';
 import { Crepe } from '@milkdown/crepe';
 import type { BlockEditFeatureConfig } from '@milkdown/crepe/feature/block-edit';
 import { editorViewCtx, schemaCtx } from '@milkdown/kit/core';
+import { NodeSelection } from '@milkdown/kit/prose/state';
 import { createAttachmentImageUrl } from '../../../attachment-image-url.js';
 import {
   hasMermaidRelevantMutations,
@@ -42,6 +43,15 @@ export interface MarkdownEditorHandle {
   getMarkdown: () => string;
 }
 
+export interface MediaFileOptions {
+  readonly placeholderId: string;
+}
+
+interface ActiveMediaPlaceholderMarker {
+  readonly id: string;
+  readonly originalAlt: string;
+}
+
 export interface MarkdownEditorProps {
   readonly defaultMarkdown?: string;
   readonly readOnly?: boolean;
@@ -53,7 +63,10 @@ export interface MarkdownEditorProps {
   readonly attachmentToken?: string | null;
   readonly attachmentRefreshKey?: number;
   readonly onDraw?: () => void;
-  readonly onMediaFiles?: (files: readonly File[]) => void | Promise<void>;
+  readonly onMediaFiles?: (
+    files: readonly File[],
+    options?: MediaFileOptions,
+  ) => void | Promise<void>;
   readonly onImageFiles?: (files: readonly File[]) => void | Promise<void>;
   readonly onEditDrawing?: (id: string) => void;
   readonly onDeleteDrawing?: (id: string) => void;
@@ -68,10 +81,53 @@ const drawingIcon =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 16.5 9.8-9.8a2.1 2.1 0 0 1 3 3L7 19.5 3.5 20.5 4 16.5Z"/><path d="m12.5 8 3 3"/></svg>';
 const diagramIcon =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="6" rx="1"/><rect x="14" y="15" width="7" height="6" rx="1"/><path d="M10 6h4a3 3 0 0 1 3 3v6M7 9v6h7"/></svg>';
+const mediaIcon =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></svg>';
 type BlockEditBuilder = Parameters<NonNullable<BlockEditFeatureConfig['buildMenu']>>[0];
 type AdvancedMenuItem = Parameters<ReturnType<BlockEditBuilder['getGroup']>['addItem']>[1];
 function addAdvancedMenuItem(builder: BlockEditBuilder, id: string, item: AdvancedMenuItem): void {
   builder.getGroup('advanced').addItem(id, item);
+}
+
+function syncMediaPlaceholderAccessibility(root: HTMLElement, readOnly: boolean): void {
+  const placeholders = Array.from(
+    root.querySelectorAll<HTMLParagraphElement>('.ProseMirror p:has(> img[src=""])'),
+  );
+  const dedicatedPlaceholders = placeholders.filter((paragraph) => {
+    const image = paragraph.querySelector(':scope > img[src=""]');
+    return (
+      image instanceof HTMLImageElement &&
+      Array.from(paragraph.childNodes).every(
+        (child) =>
+          child === image ||
+          (child instanceof HTMLImageElement &&
+            child.classList.contains('ProseMirror-separator')) ||
+          (child.nodeType === Node.TEXT_NODE && (child.textContent ?? '').trim() === '') ||
+          (child instanceof HTMLBRElement && child.classList.contains('ProseMirror-trailingBreak')),
+      )
+    );
+  });
+  const currentPlaceholders = new Set(dedicatedPlaceholders);
+  root.querySelectorAll<HTMLParagraphElement>('p[data-media-placeholder]').forEach((paragraph) => {
+    if (readOnly || !currentPlaceholders.has(paragraph)) {
+      paragraph.removeAttribute('data-media-placeholder');
+      paragraph.removeAttribute('role');
+      paragraph.removeAttribute('tabindex');
+      paragraph.removeAttribute('aria-label');
+      paragraph.removeAttribute('aria-disabled');
+    }
+  });
+  if (readOnly) return;
+  dedicatedPlaceholders.forEach((paragraph) => {
+    const image = paragraph.querySelector(':scope > img[src=""]');
+    const isUploading = image?.getAttribute('alt')?.startsWith('media-upload-pending-') === true;
+    paragraph.setAttribute('data-media-placeholder', 'true');
+    paragraph.setAttribute('role', 'button');
+    paragraph.setAttribute('tabindex', isUploading ? '-1' : '0');
+    paragraph.setAttribute('aria-label', isUploading ? 'Uploading media' : 'Add media');
+    if (isUploading) paragraph.setAttribute('aria-disabled', 'true');
+    else paragraph.removeAttribute('aria-disabled');
+  });
 }
 
 interface DrawingEditTarget {
@@ -122,6 +178,49 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
   ): React.JSX.Element {
     const rootRef = useRef<HTMLDivElement>(null);
     const hostRef = useRef<HTMLDivElement>(null);
+    const mediaFileInputRef = useRef<HTMLInputElement>(null);
+    const activeMediaPlaceholderMarkerRef = useRef<ActiveMediaPlaceholderMarker | null>(null);
+    const setMediaPlaceholderAlt = (image: HTMLImageElement, alt: string): boolean => {
+      const editor = crepeRef.current?.editor;
+      if (editor === undefined) return false;
+      let updated = false;
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const position = view.posAtDOM(image, 0);
+        const node = view.state.doc.nodeAt(position);
+        if (node?.type.name !== 'image') return;
+        view.dispatch(view.state.tr.setNodeMarkup(position, undefined, { ...node.attrs, alt }));
+        updated = true;
+      });
+      return updated;
+    };
+    const markMediaPlaceholder = (image: HTMLImageElement): void => {
+      const originalAlt = image.getAttribute('alt') ?? '';
+      const placeholderId = `media-placeholder-${globalThis.crypto.randomUUID()}`;
+      if (!setMediaPlaceholderAlt(image, placeholderId)) return;
+      activeMediaPlaceholderMarkerRef.current = { id: placeholderId, originalAlt };
+    };
+    const restoreMediaPlaceholder = (marker: ActiveMediaPlaceholderMarker | null): void => {
+      if (marker === null) return;
+      const root = rootRef.current;
+      const image = Array.from(
+        root?.querySelectorAll<HTMLImageElement>('.ProseMirror img[src=""]') ?? [],
+      ).find((candidate) => candidate.getAttribute('alt') === marker.id);
+      if (image !== undefined) setMediaPlaceholderAlt(image, marker.originalAlt);
+    };
+    const restoreCanceledMediaPlaceholder = useEffectEvent(
+      function restoreCanceledMediaPlaceholderMarker(): void {
+        restoreMediaPlaceholder(activeMediaPlaceholderMarkerRef.current);
+        activeMediaPlaceholderMarkerRef.current = null;
+      },
+    );
+    useEffect(function restoreMarkerWhenMediaPickerIsCanceled() {
+      const input = mediaFileInputRef.current;
+      if (input === null) return;
+      const handleCancel = (): void => restoreCanceledMediaPlaceholder();
+      input.addEventListener('cancel', handleCancel);
+      return () => input.removeEventListener('cancel', handleCancel);
+    }, []);
     const crepeRef = useRef<Crepe | null>(null);
     const markdownRef = useRef(defaultMarkdown);
     const hoveredImageRef = useRef<HTMLImageElement | null>(null);
@@ -289,11 +388,41 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const handleEditorClickCapture = (event: React.MouseEvent<HTMLDivElement>): void => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      const placeholder = target.closest('.ProseMirror p[data-media-placeholder="true"]');
+      if (placeholder !== null && !readOnly) {
+        const image = placeholder.querySelector(':scope > img[src=""]');
+        if (image?.getAttribute('alt')?.startsWith('media-upload-pending-') === true) {
+          event.preventDefault();
+          return;
+        }
+        event.preventDefault();
+        if (image instanceof HTMLImageElement) markMediaPlaceholder(image);
+        mediaFileInputRef.current?.click();
+        return;
+      }
       const image = target.closest('img');
       if (image instanceof HTMLImageElement) handleDrawingImageHover(image);
     };
     const handleEditorKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>): void => {
       if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (!readOnly) {
+        const target = event.target;
+        const placeholder =
+          target instanceof Element
+            ? target.closest('.ProseMirror p[data-media-placeholder="true"]')
+            : null;
+        if (placeholder !== null) {
+          const image = placeholder.querySelector(':scope > img[src=""]');
+          if (image?.getAttribute('alt')?.startsWith('media-upload-pending-') === true) {
+            event.preventDefault();
+            return;
+          }
+          event.preventDefault();
+          if (image instanceof HTMLImageElement) markMediaPlaceholder(image);
+          mediaFileInputRef.current?.click();
+          return;
+        }
+      }
       const target = event.target;
       if (!(target instanceof Element)) return;
       const image = target.closest<HTMLImageElement>('img[data-drawing-id]');
@@ -353,9 +482,13 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const notifyReady = useEffectEvent((root: HTMLDivElement) => {
       onReady?.(root);
     });
-    const receiveMediaFiles = useEffectEvent((files: readonly File[]) => {
-      void (onMediaFiles ?? onImageFiles)?.(files);
-    });
+    const receiveMediaFiles = useEffectEvent(
+      (files: readonly File[], options?: MediaFileOptions) => {
+        const receiveFiles = onMediaFiles ?? onImageFiles;
+        if (options === undefined) void receiveFiles?.(files);
+        else void receiveFiles?.(files, options);
+      },
+    );
 
     useImperativeHandle(
       forwardedRef,
@@ -396,6 +529,36 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
                   view.dispatch(transaction);
                   view.focus();
                 });
+              },
+            });
+            addAdvancedMenuItem(builder, 'media', {
+              label: 'Media',
+              icon: mediaIcon,
+              onRun: () => {
+                const editor = crepeRef.current?.editor;
+                if (editor !== undefined) {
+                  editor.action((ctx) => {
+                    const view = ctx.get(editorViewCtx);
+                    const image = ctx.get(schemaCtx).nodes['image'];
+                    const paragraph = ctx.get(schemaCtx).nodes['paragraph'];
+                    if (image === undefined || paragraph === undefined) return;
+                    const blankImage = image.create({ src: '', alt: '' });
+                    const imageParagraph = paragraph.create(null, blankImage);
+                    let transaction = view.state.tr
+                      .replaceSelectionWith(imageParagraph)
+                      .scrollIntoView();
+                    const selection = transaction.selection.$from;
+                    if (selection.depth > 0) {
+                      const imagePosition = selection.before(selection.depth) + 1;
+                      if (transaction.doc.nodeAt(imagePosition)?.type.name === 'image') {
+                        transaction = transaction.setSelection(
+                          NodeSelection.create(transaction.doc, imagePosition),
+                        );
+                      }
+                    }
+                    view.dispatch(transaction);
+                  });
+                }
               },
             });
           },
@@ -446,6 +609,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
 
         let readyTimer: number | undefined;
         let attachmentObserver: MutationObserver | undefined;
+        let mediaPlaceholderObserver: MutationObserver | undefined;
         let mermaidObserver: MutationObserver | undefined;
         let videoObserver: MutationObserver | undefined;
         const syncInitialMarkdown = (): void => {
@@ -475,8 +639,18 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             attachmentObserver.observe(editorRoot, { childList: true, subtree: true });
             stableProseMirror.setAttribute('aria-label', getEditorAriaLabel());
             notifyReady(editorRoot);
+            syncMediaPlaceholderAccessibility(editorRoot, getCurrentReadOnly());
             syncMermaidPreviews(editorRoot);
             syncVideoEmbeds(editorRoot);
+            mediaPlaceholderObserver = new MutationObserver(() =>
+              syncMediaPlaceholderAccessibility(editorRoot, getCurrentReadOnly()),
+            );
+            mediaPlaceholderObserver.observe(stableProseMirror, {
+              childList: true,
+              subtree: true,
+              attributes: true,
+              attributeFilter: ['alt', 'src'],
+            });
             mermaidObserver = new MutationObserver((records) => {
               if (hasMermaidRelevantMutations(records)) {
                 syncMermaidPreviews(editorRoot, hasRemovedMermaidPreviewCard(records));
@@ -524,6 +698,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           if (readyTimer !== undefined) window.clearTimeout(readyTimer);
           editorObserver.disconnect();
           attachmentObserver?.disconnect();
+          mediaPlaceholderObserver?.disconnect();
           mermaidObserver?.disconnect();
           videoObserver?.disconnect();
           editorRoot.removeEventListener('paste', blockFileTransfer, true);
@@ -538,6 +713,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     useEffect(
       function syncMarkdownEditorReadOnlyState() {
         crepeRef.current?.setReadonly(readOnly);
+        const root = rootRef.current;
+        if (root !== null) syncMediaPlaceholderAccessibility(root, readOnly);
       },
       [readOnly],
     );
@@ -565,6 +742,27 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           role="group"
           aria-label={ariaLabel}
           aria-disabled={readOnly}
+        />
+        <input
+          ref={mediaFileInputRef}
+          className="sr-only"
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/bmp,image/tiff,image/svg+xml,video/mp4,video/quicktime,video/webm,.png,.jpg,.jpeg,.gif,.webp,.avif,.bmp,.tif,.tiff,.svg,.mp4,.mov,.webm"
+          aria-label="Choose image or video files"
+          aria-hidden="true"
+          tabIndex={-1}
+          disabled={readOnly}
+          onChange={(event) => {
+            const files = Array.from(event.currentTarget.files ?? []).filter(isSupportedMediaFile);
+            event.currentTarget.value = '';
+            const marker = activeMediaPlaceholderMarkerRef.current;
+            activeMediaPlaceholderMarkerRef.current = null;
+            if (files.length === 0) {
+              restoreMediaPlaceholder(marker);
+              return;
+            }
+            receiveMediaFiles(files, marker === null ? undefined : { placeholderId: marker.id });
+          }}
         />
         {drawingEditTarget !== null && !readOnly && (
           <div

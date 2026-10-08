@@ -27,6 +27,11 @@ interface MarkdownAttachmentImageRange {
   readonly end: number;
 }
 
+export interface MarkdownImageSourceRange {
+  readonly start: number;
+  readonly end: number;
+}
+
 interface RenderedCharacter extends SourceCharacter {
   readonly localStart: number;
   readonly localEnd: number;
@@ -401,6 +406,20 @@ export function countMarkdownImageOccurrences(
   };
   visit(tree);
   return occurrences;
+}
+
+export function getEmptyImageSourceRanges(markdown: string): MarkdownImageSourceRange[] {
+  const ranges: MarkdownImageSourceRange[] = [];
+  const visit = (node: MarkdownNode): void => {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (node.type === 'image' && node.url === '' && start !== undefined && end !== undefined) {
+      ranges.push({ start, end });
+    }
+    node.children?.forEach(visit);
+  };
+  visit(parseMarkdownTree(markdown));
+  return ranges;
 }
 
 function parseMarkdownTree(markdown: string): MarkdownNode {

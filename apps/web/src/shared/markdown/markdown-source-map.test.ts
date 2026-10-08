@@ -4,6 +4,7 @@ import {
   countMarkdownImageOccurrences,
   decorateMarkdownRoot,
   getCodeBlockSourceRanges,
+  getEmptyImageSourceRanges,
   getMappedSourceOffset,
   getVisibleSourceMap,
   hasRenderedSourceMap,
@@ -25,6 +26,14 @@ describe('Markdown source map', () => {
     ].join('\n\n');
 
     expect(countMarkdownImageOccurrences(markdown, [image])).toEqual(new Map([[image, 2]]));
+  });
+
+  it('빈 이미지 source 범위에서 코드 예시는 제외한다', () => {
+    const markdown = ['`![]()`', '```markdown\n![]()\n```', '![]()', '![]()'].join('\n\n');
+
+    const ranges = getEmptyImageSourceRanges(markdown);
+
+    expect(ranges.map(({ start, end }) => markdown.slice(start, end))).toEqual(['![]()', '![]()']);
   });
 
   it('제목 마커 뒤 여러 공백을 건너뛴 source offset을 반환한다', () => {
