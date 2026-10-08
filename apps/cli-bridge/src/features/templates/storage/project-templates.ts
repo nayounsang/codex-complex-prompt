@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
 import { PromptTemplateSchema, type PromptTemplate } from '@codex-complex-prompt/protocol';
+import { TemplateFrontmatterValueSchema } from './schema.js';
 
 const templateDefinitions = [
   {
@@ -293,7 +294,10 @@ function parseTemplate(content: string, id: string): PromptTemplate {
   for (const line of (match[1] ?? '').split(/\r?\n/)) {
     const field = line.match(/^(name|description):\s*(.+)$/);
     if (field === null) throw new Error('Template frontmatter is malformed.');
-    fields.set(field[1] ?? '', JSON.parse(field[2] ?? '') as string);
+    const value: unknown = JSON.parse(field[2] ?? '');
+    const parsedValue = TemplateFrontmatterValueSchema.safeParse(value);
+    if (!parsedValue.success) throw new Error('Template frontmatter is malformed.');
+    fields.set(field[1] ?? '', parsedValue.data);
   }
   const name = fields.get('name');
   const description = fields.get('description');

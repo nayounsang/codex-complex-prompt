@@ -31,6 +31,7 @@ import { runCodexUserPromptHook } from './features/input/hooks/codex-user-prompt
 import { runCodexStopHook } from './features/feedback/hooks/codex-stop-hook.js';
 import { runCodexPlannotatorStopHook } from './features/feedback/hooks/codex-plannotator-stop-hook.js';
 import { createProjectTemplateStore } from './features/templates/storage/project-templates.js';
+import { PlannotatorHookPayloadSchema } from './features/setup/hooks/schema.js';
 import { createProjectAttachmentStore } from './features/attachments/project-attachments.js';
 import { DEFAULT_BRIDGE_SESSION_TTL_MS } from './shared/hook-timeouts.js';
 
@@ -158,9 +159,9 @@ async function main(): Promise<void> {
     return;
   }
   if (args[0] === 'hook' && args[1] === 'plannotator-stop' && args.length === 3) {
-    const originalCommand = JSON.parse(
-      Buffer.from(args[2] ?? '', 'base64url').toString('utf8'),
-    ) as { command?: unknown; commandWindows?: unknown };
+    const originalCommand = PlannotatorHookPayloadSchema.parse(
+      JSON.parse(Buffer.from(args[2] ?? '', 'base64url').toString('utf8')),
+    );
     const command =
       process.platform === 'win32' && typeof originalCommand.commandWindows === 'string'
         ? originalCommand.commandWindows

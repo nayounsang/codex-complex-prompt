@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -65,6 +65,17 @@ describe('feedback loop 상태 저장소', () => {
 
     const cwd = await stateStore.getCwd?.(sessionId);
     expect(cwd).toBeUndefined();
+  });
+
+  it('잘못된 JSON 상태 구조는 활성 상태와 경로로 사용하지 않는다', async () => {
+    const directory = await createDirectory();
+    const sessionId = 'invalid-state-session';
+    const statePath = join(directory, `feedback-loop-${sessionId}.json`);
+    await writeFile(statePath, JSON.stringify({ sessionId: 42, cwd: 42 }), 'utf8');
+    const stateStore = createFeedbackLoopStateStore(directory);
+
+    await expect(stateStore.isActive(sessionId)).resolves.toBe(false);
+    await expect(stateStore.getCwd?.(sessionId)).resolves.toBeUndefined();
   });
 
   it('아직 생성되지 않은 상태를 정리해도 오류를 던지지 않는다', async () => {

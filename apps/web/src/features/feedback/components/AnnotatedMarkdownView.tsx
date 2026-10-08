@@ -13,6 +13,7 @@ import {
   getTableSelectionAnchor,
 } from '../../../shared/markdown/selection-anchor.js';
 import type { FeedbackAnnotation, SelectionAnchor } from '../model/feedback-types.js';
+import { SourceFeedbackRangesSchema } from '../model/schema.js';
 import { mergeSelectionWithExistingFeedback } from './selection-feedback.js';
 import {
   getVideoEmbedAffectedParagraphs,
@@ -116,7 +117,11 @@ export function AnnotatedMarkdownView({
   useEffect(
     function decorateReadOnlyMarkdown() {
       if (rendererRoot === null) return;
-      const feedbackRanges = JSON.parse(decorationRangeKey) as SourceFeedbackRange[];
+      const rangeData: unknown = JSON.parse(decorationRangeKey);
+      const parsedFeedbackRanges = SourceFeedbackRangesSchema.safeParse(rangeData);
+      const feedbackRanges: readonly SourceFeedbackRange[] = parsedFeedbackRanges.success
+        ? parsedFeedbackRanges.data
+        : [];
       const decorate = (records?: readonly MutationRecord[]): void => {
         decorateMarkdownRoot(
           rendererRoot,

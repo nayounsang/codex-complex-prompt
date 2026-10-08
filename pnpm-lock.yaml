@@ -47,6 +47,9 @@ importers:
       ws:
         specifier: ^8.18.0
         version: 8.21.3
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
     devDependencies:
       '@codex-complex-prompt/core':
         specifier: workspace:*
@@ -141,6 +144,9 @@ importers:
       unified:
         specifier: ^11.0.5
         version: 11.0.5
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
     devDependencies:
       '@antimatter-labs/eslint-plugin-no-anonymous-use-effect-callback-rule':
         specifier: ^1.0.2

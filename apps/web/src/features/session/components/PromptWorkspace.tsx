@@ -26,6 +26,7 @@ import { SubmitFeedbackDialog } from '../../../app/components/SubmitFeedbackDial
 import { useFeedbackAnnotations } from '../../feedback/hooks/useFeedbackAnnotations.js';
 import { useFeedbackSubmission } from '../../feedback/hooks/useFeedbackSubmission.js';
 import { useProjectTemplates } from '../../templates/hooks/useProjectTemplates.js';
+import { parseAttachmentResponse } from '../infrastructure/attachment-response.js';
 import { removeMarkdownDrawingReferences } from '../../input/drawing-markdown.js';
 import { countMarkdownImageOccurrences } from '../../../shared/markdown/markdown-source-map.js';
 import { MARKDOWN_ATTACHMENT_DIRECTORY } from '../../../shared/markdown/attachment-path.js';
@@ -164,15 +165,11 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
       body: JSON.stringify(input),
     });
     const responseText = await response.text();
-    let result: { id?: string; error?: string };
-    try {
-      result = JSON.parse(responseText) as { id?: string; error?: string };
-    } catch {
-      throw new Error(
-        responseText.trim() ||
-          `The drawing server returned an invalid response (HTTP ${response.status}).`,
-      );
-    }
+    const result = parseAttachmentResponse(
+      responseText,
+      response.status,
+      `The drawing server returned an invalid response (HTTP ${response.status}).`,
+    );
     if (!response.ok || result.id === undefined)
       throw new Error(result.error ?? 'Could not save the drawing.');
     setAttachmentRefreshKey((refreshKey) => refreshKey + 1);
@@ -240,18 +237,11 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
             body: JSON.stringify({ video, extension: videoExtension }),
           });
           const responseText = await response.text();
-          let result: { id?: string; extension?: string; error?: string };
-          try {
-            result = JSON.parse(responseText) as {
-              id?: string;
-              extension?: string;
-              error?: string;
-            };
-          } catch {
-            throw new Error(
-              responseText.trim() || `Could not save the video (HTTP ${response.status}).`,
-            );
-          }
+          const result = parseAttachmentResponse(
+            responseText,
+            response.status,
+            `Could not save the video (HTTP ${response.status}).`,
+          );
           if (!response.ok || result.id === undefined)
             throw new Error(result.error ?? 'Could not save the video.');
           hasSavedAttachments = true;
@@ -277,14 +267,11 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
           }),
         });
         const responseText = await response.text();
-        let result: { id?: string; extension?: string; error?: string };
-        try {
-          result = JSON.parse(responseText) as { id?: string; error?: string };
-        } catch {
-          throw new Error(
-            responseText.trim() || `Could not save the image (HTTP ${response.status}).`,
-          );
-        }
+        const result = parseAttachmentResponse(
+          responseText,
+          response.status,
+          `Could not save the image (HTTP ${response.status}).`,
+        );
         if (!response.ok || result.id === undefined)
           throw new Error(result.error ?? 'Could not save the image.');
         hasSavedAttachments = true;

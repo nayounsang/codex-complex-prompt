@@ -1,6 +1,6 @@
 import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
-import { MAX_ATTACHMENT_IMAGE_BYTES } from '@codex-complex-prompt/protocol';
+import { DrawingSceneSchema, MAX_ATTACHMENT_IMAGE_BYTES } from '@codex-complex-prompt/protocol';
 import { Excalidraw, exportToBlob, FONT_FAMILY } from '@excalidraw/excalidraw';
 import type {
   AppState,
@@ -49,15 +49,11 @@ export function DrawingDialog({
   if (initialScene !== undefined) {
     try {
       const parsed: unknown = JSON.parse(initialScene);
-      if (
-        parsed === null ||
-        typeof parsed !== 'object' ||
-        !('elements' in parsed) ||
-        !Array.isArray(parsed.elements)
-      ) {
+      const result = DrawingSceneSchema.safeParse(parsed);
+      if (!result.success) {
         throw new Error('The drawing data has an invalid format.');
       }
-      scene = parsed as typeof scene;
+      scene = result.data as unknown as typeof scene;
     } catch (reason) {
       initialSceneError =
         reason instanceof Error

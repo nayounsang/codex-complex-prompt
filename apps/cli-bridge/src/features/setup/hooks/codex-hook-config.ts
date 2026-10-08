@@ -3,6 +3,14 @@ import { dirname, join } from 'node:path';
 
 import { defaultCodexHome } from '../../../shared/codex-home.js';
 import { CODEX_HOOK_TIMEOUT_SECONDS } from '../../../shared/hook-timeouts.js';
+import {
+  CodexCommandHookSchema,
+  CodexHookGroupSchema,
+  CodexHookGroupListSchema,
+  CodexHookGroupsSchema,
+  CodexHooksFileSchema,
+  PlannotatorHookPayloadSchema,
+} from './schema.js';
 
 export const CODEX_COMPLEX_PROMPT_HOOK_MARKER = 'Codex Complex Prompt command editor';
 export const CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER = 'Codex Complex Prompt feedback editor';
@@ -41,9 +49,7 @@ export async function installCodexUserPromptHook(
   const config = await readHooksConfig(configPath);
   const hooks = getHooks(config);
   removeLegacyStopHooks(hooks);
-  const userPromptHooks = Array.isArray(hooks['UserPromptSubmit'])
-    ? [...hooks['UserPromptSubmit']]
-    : [];
+  const userPromptHooks = parseHookGroupList(hooks['UserPromptSubmit']);
   const nextUserPromptHooks = userPromptHooks.filter(
     (group) => !containsOwnCommand(group, command),
   );
@@ -59,7 +65,7 @@ export async function installCodexUserPromptHook(
     ],
   });
   hooks['UserPromptSubmit'] = nextUserPromptHooks;
-  const stopHooks = Array.isArray(hooks['Stop']) ? [...hooks['Stop']] : [];
+  const stopHooks = parseHookGroupList(hooks['Stop']);
   const wrappedStopHooks = stopHooks.map((group) =>
     wrapPlannotatorCommands(group, plannotatorStopCommand, plannotatorStopCommandWindows),
   );
@@ -95,14 +101,12 @@ export async function removeCodexUserPromptHook(
   const stopCommand = options.stopCommand ?? 'complex-prompt hook stop';
   const config = await readHooksConfig(configPath);
   const hooks = getHooks(config);
-  const userPromptHooks = Array.isArray(hooks['UserPromptSubmit'])
-    ? [...hooks['UserPromptSubmit']]
-    : [];
+  const userPromptHooks = parseHookGroupList(hooks['UserPromptSubmit']);
   const nextUserPromptHooks = userPromptHooks
     .map((group) => removeOwnCommands(group, command))
     .filter((group) => group !== undefined);
   hooks['UserPromptSubmit'] = nextUserPromptHooks;
-  const stopHooks = Array.isArray(hooks['Stop']) ? [...hooks['Stop']] : [];
+  const stopHooks = parseHookGroupList(hooks['Stop']);
   hooks['Stop'] = stopHooks
     .map((group) => restorePlannotatorCommands(group))
     .map((group) => removeOwnCommands(group, stopCommand, CODEX_COMPLEX_PROMPT_STOP_HOOK_MARKER))
@@ -121,11 +125,11 @@ export function defaultHooksPath(): string {
 async function readHooksConfig(configPath: string): Promise<Record<string, unknown>> {
   try {
     const raw = await readFile(configPath, 'utf8');
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    const result = CodexHooksFileSchema.safeParse(JSON.parse(raw));
+    if (!result.success) {
       throw new Error(`Codex hooks file must contain a JSON object: ${configPath}`);
     }
-    return parsed as Record<string, unknown>;
+    return result.data;
   } catch (error) {
     if (isMissingFile(error)) return {};
     if (error instanceof SyntaxError)
@@ -145,13 +149,19 @@ async function writeHooksConfig(
 }
 
 /* c8 ignore start -- these helpers defend against malformed third-party config shapes. */
-function getHooks(config: Record<string, unknown>): Record<string, unknown[]> {
+function getHooks(config: Record<string, unknown>): Record<string, unknown> {
   const value = config['hooks'];
   if (value === undefined) return {};
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+  const result = CodexHookGroupsSchema.safeParse(value);
+  if (!result.success) {
     throw new Error('Codex hooks configuration must contain an object under "hooks".');
   }
-  return { ...(value as Record<string, unknown[]>) };
+  return { ...result.data };
+}
+
+function parseHookGroupList(value: unknown): unknown[] {
+  const result = CodexHookGroupListSchema.safeParse(value);
+  return result.success ? [...result.data] : [];
 }
 
 function containsOwnCommand(
@@ -159,17 +169,17 @@ function containsOwnCommand(
   command: string,
   marker = CODEX_COMPLEX_PROMPT_HOOK_MARKER,
 ): boolean {
-  if (group === null || typeof group !== 'object' || Array.isArray(group)) return false;
-  const handlers = (group as Record<string, unknown>)['hooks'];
-  if (!Array.isArray(handlers)) return false;
-  return handlers.some(
-    (handler) =>
-      handler !== null &&
-      typeof handler === 'object' &&
-      (handler as Record<string, unknown>)['type'] === 'command' &&
-      ((handler as Record<string, unknown>)['command'] === command ||
-        (handler as Record<string, unknown>)['statusMessage'] === marker),
-  );
+  const parsedGroup = parseHookGroup(group);
+  if (parsedGroup === undefined) return false;
+  const handlers = parsedGroup.handlers;
+  if (handlers === undefined) return false;
+  return handlers.some((handler) => {
+    const parsedHandler = CodexCommandHookSchema.safeParse(handler);
+    return (
+      parsedHandler.success &&
+      (parsedHandler.data.command === command || parsedHandler.data.statusMessage === marker)
+    );
+  });
 }
 
 function wrapPlannotatorCommands(
@@ -177,19 +187,19 @@ function wrapPlannotatorCommands(
   wrapperCommand: string,
   wrapperCommandWindows: string | undefined,
 ): unknown {
-  if (group === null || typeof group !== 'object' || Array.isArray(group)) return group;
-  const record = group as Record<string, unknown>;
-  const handlers = record['hooks'];
-  if (!Array.isArray(handlers)) return record;
+  const parsedGroup = parseHookGroup(group);
+  if (parsedGroup === undefined) return group;
+  const { record, handlers } = parsedGroup;
+  if (handlers === undefined) return record;
   const typedHandlers: unknown[] = handlers;
   let changed = false;
   const nextHandlers = typedHandlers.map((handler) => {
-    if (handler === null || typeof handler !== 'object' || Array.isArray(handler)) return handler;
-    const item = handler as Record<string, unknown>;
-    if (item['type'] !== 'command' || typeof item['command'] !== 'string') return handler;
+    const parsedHandler = CodexCommandHookSchema.safeParse(handler);
+    if (!parsedHandler.success || parsedHandler.data.command === undefined) return handler;
+    const item = parsedHandler.data as Record<string, unknown>;
     if (item['statusMessage'] === CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER) {
       const original =
-        getPlannotatorPayload(item['command']) ??
+        getPlannotatorPayload(parsedHandler.data.command) ??
         (typeof item['commandWindows'] === 'string'
           ? getPlannotatorPayload(item['commandWindows'])
           : undefined);
@@ -197,11 +207,11 @@ function wrapPlannotatorCommands(
       changed = true;
       return wrapPlannotatorPayload(item, original, wrapperCommand, wrapperCommandWindows);
     }
-    const windowsCommand = item['commandWindows'];
+    const windowsCommand = parsedHandler.data.commandWindows;
     const original = {
-      command: item['command'],
+      command: parsedHandler.data.command,
       ...(typeof windowsCommand === 'string' ? { commandWindows: windowsCommand } : {}),
-      statusMessage: item['statusMessage'],
+      statusMessage: parsedHandler.data.statusMessage,
     };
     const wrapsCommand = containsPlannotator(original.command);
     const wrapsWindowsCommand =
@@ -242,13 +252,9 @@ function getPlannotatorPayload(
     const parsed: unknown = JSON.parse(
       Buffer.from(command.slice(payloadSeparator + 1), 'base64url').toString('utf8'),
     );
-    if (parsed === null || typeof parsed !== 'object' || !('command' in parsed)) return undefined;
-    const value = parsed as {
-      command?: unknown;
-      commandWindows?: unknown;
-      statusMessage?: unknown;
-    };
-    if (typeof value.command !== 'string') return undefined;
+    const result = PlannotatorHookPayloadSchema.safeParse(parsed);
+    if (!result.success) return undefined;
+    const value = result.data;
     return {
       command: value.command,
       ...(typeof value.commandWindows === 'string' ? { commandWindows: value.commandWindows } : {}),
@@ -415,31 +421,30 @@ function getExecutableName(token: string): string {
 }
 
 function restorePlannotatorCommands(group: unknown): unknown {
-  if (group === null || typeof group !== 'object' || Array.isArray(group)) return group;
-  const record = group as Record<string, unknown>;
-  const handlers = record['hooks'];
-  if (!Array.isArray(handlers)) return record;
+  const parsedGroup = parseHookGroup(group);
+  if (parsedGroup === undefined) return group;
+  const { record, handlers } = parsedGroup;
+  if (handlers === undefined) return record;
   const typedHandlers: unknown[] = handlers;
   let changed = false;
   const nextHandlers = typedHandlers.map((handler) => {
-    if (handler === null || typeof handler !== 'object' || Array.isArray(handler)) return handler;
-    const item = handler as Record<string, unknown>;
+    const parsedHandler = CodexCommandHookSchema.safeParse(handler);
+    if (!parsedHandler.success) return handler;
+    const item = parsedHandler.data as Record<string, unknown>;
     if (
-      item['type'] !== 'command' ||
       item['statusMessage'] !== CODEX_COMPLEX_PROMPT_PLANNOTATOR_WRAPPER_MARKER ||
-      typeof item['command'] !== 'string'
+      parsedHandler.data.command === undefined
     )
       return handler;
     const decoded =
-      getPlannotatorPayload(item['command']) ??
-      (typeof item['commandWindows'] === 'string'
-        ? getPlannotatorPayload(item['commandWindows'])
+      getPlannotatorPayload(parsedHandler.data.command ?? '') ??
+      (typeof parsedHandler.data.commandWindows === 'string'
+        ? getPlannotatorPayload(parsedHandler.data.commandWindows)
         : undefined);
     if (decoded === undefined) return handler;
     changed = true;
     const restored: Record<string, unknown> = { ...item, command: decoded.command };
-    if (typeof decoded.commandWindows === 'string')
-      restored['commandWindows'] = decoded.commandWindows;
+    if (decoded.commandWindows !== undefined) restored['commandWindows'] = decoded.commandWindows;
     else delete restored['commandWindows'];
     if (typeof decoded.statusMessage === 'string')
       restored['statusMessage'] = decoded.statusMessage;
@@ -454,51 +459,58 @@ function removeOwnCommands(
   command: string,
   marker = CODEX_COMPLEX_PROMPT_HOOK_MARKER,
 ): Record<string, unknown> | undefined {
-  if (group === null || typeof group !== 'object' || Array.isArray(group))
-    return group as undefined;
-  const record = group as Record<string, unknown>;
-  const handlers = record['hooks'];
-  if (!Array.isArray(handlers)) return record;
-  const remaining = handlers.filter(
-    (handler) =>
-      !(
-        handler !== null &&
-        typeof handler === 'object' &&
-        (handler as Record<string, unknown>)['type'] === 'command' &&
-        ((handler as Record<string, unknown>)['command'] === command ||
-          (handler as Record<string, unknown>)['statusMessage'] === marker)
-      ),
-  );
+  const parsedGroup = parseHookGroup(group);
+  if (parsedGroup === undefined) return group as undefined;
+  const { record, handlers } = parsedGroup;
+  if (handlers === undefined) return record;
+  const remaining = handlers.filter((handler) => {
+    const parsedHandler = CodexCommandHookSchema.safeParse(handler);
+    return !(
+      parsedHandler.success &&
+      (parsedHandler.data.command === command || parsedHandler.data.statusMessage === marker)
+    );
+  });
   return remaining.length === 0 ? undefined : { ...record, hooks: remaining };
 }
 
-function removeLegacyStopHooks(hooks: Record<string, unknown[]>): void {
+function removeLegacyStopHooks(hooks: Record<string, unknown>): void {
   const stopHooks = hooks['Stop'];
-  if (!Array.isArray(stopHooks)) return;
-  hooks['Stop'] = stopHooks
-    .map((group) => removeHandlers(group, isLegacyStopHook))
-    .filter((group) => group !== undefined);
+  const parsedStopHooks = CodexHookGroupListSchema.safeParse(stopHooks);
+  if (!parsedStopHooks.success) return;
+  hooks['Stop'] = parsedStopHooks.data
+    .map((group: unknown) => removeHandlers(group, isLegacyStopHook))
+    .filter((group: Record<string, unknown> | undefined) => group !== undefined);
 }
 
 function removeHandlers(
   group: unknown,
   shouldRemove: (handler: unknown) => boolean,
 ): Record<string, unknown> | undefined {
-  if (group === null || typeof group !== 'object' || Array.isArray(group))
-    return group as undefined;
-  const record = group as Record<string, unknown>;
-  const handlers = record['hooks'];
-  if (!Array.isArray(handlers)) return record;
+  const parsedGroup = parseHookGroup(group);
+  if (parsedGroup === undefined) return group as undefined;
+  const { record, handlers } = parsedGroup;
+  if (handlers === undefined) return record;
   const remaining = handlers.filter((handler) => !shouldRemove(handler));
   return remaining.length === 0 ? undefined : { ...record, hooks: remaining };
 }
 
+function parseHookGroup(
+  group: unknown,
+): { readonly record: Record<string, unknown>; readonly handlers?: unknown[] } | undefined {
+  const result = CodexHookGroupSchema.safeParse(group);
+  if (!result.success) return undefined;
+  const hooks = CodexHookGroupListSchema.safeParse(result.data['hooks']);
+  return {
+    record: result.data,
+    ...(hooks.success ? { handlers: hooks.data } : {}),
+  };
+}
+
 function isLegacyStopHook(handler: unknown): boolean {
-  if (handler === null || typeof handler !== 'object' || Array.isArray(handler)) return false;
-  const record = handler as Record<string, unknown>;
-  if (record['type'] !== 'command') return false;
-  if (record['statusMessage'] === CODEX_COMPLEX_PROMPT_LEGACY_STOP_HOOK_MARKER) return true;
-  const command = record['command'];
+  const result = CodexCommandHookSchema.safeParse(handler);
+  if (!result.success) return false;
+  if (result.data.statusMessage === CODEX_COMPLEX_PROMPT_LEGACY_STOP_HOOK_MARKER) return true;
+  const command = result.data.command;
   return (
     typeof command === 'string' &&
     command.includes('complex-prompt') &&

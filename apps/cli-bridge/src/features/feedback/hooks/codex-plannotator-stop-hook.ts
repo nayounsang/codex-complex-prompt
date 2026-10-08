@@ -19,7 +19,8 @@ export async function runCodexPlannotatorStopHook(
 ): Promise<{ readonly skipped: boolean; readonly exitCode?: number }> {
   let parsed: ReturnType<typeof CodexStopHookInputSchema.parse> | undefined;
   try {
-    parsed = CodexStopHookInputSchema.parse(JSON.parse(rawInput));
+    const input: unknown = JSON.parse(rawInput);
+    parsed = CodexStopHookInputSchema.parse(input);
   } catch {
     // Invalid or non-Codex input should retain the behavior of the configured command.
   }
