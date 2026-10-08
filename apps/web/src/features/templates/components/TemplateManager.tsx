@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { AlertDialog } from '@base-ui/react/alert-dialog';
 import { Button } from '@base-ui/react/button';
-import { Dialog } from '@base-ui/react/dialog';
 import { Select } from '@base-ui/react/select';
+import { SvgIcon } from '../../../shared/icons/SvgIcon.js';
 
 import {
   MAX_PROMPT_LENGTH,
   PromptTemplateSchema,
   type PromptTemplate,
 } from '@codex-complex-prompt/protocol';
+import { TemplateManagerDialogs, type DraftTemplate } from './TemplateManagerDialogs.js';
 
 interface TemplateManagerProps {
   readonly templates: readonly PromptTemplate[];
@@ -26,13 +26,6 @@ interface TemplateManagerProps {
     templates?: readonly PromptTemplate[];
     error?: string;
   }>;
-}
-
-interface DraftTemplate {
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  readonly body: string;
 }
 
 export function TemplateManager(props: TemplateManagerProps): React.JSX.Element {
@@ -158,9 +151,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                           openEditor(template);
                         }}
                       >
-                        <svg viewBox="0 0 16 16" aria-hidden="true">
-                          <path d="m10.7 2.3 3 3M2.5 13.5l2.8-.6 7.9-7.9a1.4 1.4 0 0 0-2-2l-7.9 7.9-.8 2.6Z" />
-                        </svg>
+                        <SvgIcon name="templateEdit" />
                       </button>
                       <button
                         type="button"
@@ -173,9 +164,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                           openDeleteConfirmation(template);
                         }}
                       >
-                        <svg viewBox="0 0 16 16" aria-hidden="true">
-                          <path d="M2.5 4.5h11m-9.5 0 .6 9h5.8l.6-9M6 4.5V2.8h4v1.7m-3.5 2v4.5m3-4.5v4.5" />
-                        </svg>
+                        <SvgIcon name="templateDelete" />
                       </button>
                     </span>
                   </div>
@@ -220,134 +209,22 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
         </span>
       )}
 
-      <Dialog.Root
-        open={editing !== null}
-        onOpenChange={(open) => !open && !saving && setEditing(null)}
-      >
-        <Dialog.Portal>
-          <Dialog.Backdrop className="dialog-backdrop" />
-          <Dialog.Viewport className="dialog-viewport">
-            <Dialog.Popup className="template-dialog">
-              <Dialog.Title>
-                {props.templates.some((template) => template.id === editing?.id)
-                  ? 'Edit template'
-                  : 'Create template'}
-              </Dialog.Title>
-              <Dialog.Description>
-                Name, describe, and write the Markdown command to reuse.
-              </Dialog.Description>
-              <label className="template-field">
-                Name
-                <input
-                  autoFocus
-                  maxLength={120}
-                  value={editing?.name ?? ''}
-                  onChange={(event) =>
-                    setEditing((current) =>
-                      current === null ? null : { ...current, name: event.target.value },
-                    )
-                  }
-                />
-              </label>
-              <label className="template-field">
-                Description
-                <input
-                  maxLength={500}
-                  value={editing?.description ?? ''}
-                  onChange={(event) =>
-                    setEditing((current) =>
-                      current === null ? null : { ...current, description: event.target.value },
-                    )
-                  }
-                />
-              </label>
-              <label className="template-field">
-                Markdown body
-                <textarea
-                  rows={12}
-                  maxLength={MAX_PROMPT_LENGTH}
-                  value={editing?.body ?? ''}
-                  onChange={(event) =>
-                    setEditing((current) =>
-                      current === null ? null : { ...current, body: event.target.value },
-                    )
-                  }
-                />
-              </label>
-              {error !== null && (
-                <p className="template-error" role="alert">
-                  {error}
-                </p>
-              )}
-              <div className="dialog-actions">
-                <Button className="button-quiet" disabled={saving} onClick={() => setEditing(null)}>
-                  Cancel
-                </Button>
-                <Button
-                  className="button-primary"
-                  disabled={saving || editing?.name.trim() === ''}
-                  onClick={() => void saveDraft()}
-                >
-                  {saving ? 'Saving…' : 'Save template'}
-                </Button>
-              </div>
-            </Dialog.Popup>
-          </Dialog.Viewport>
-        </Dialog.Portal>
-      </Dialog.Root>
-
-      <AlertDialog.Root open={confirmApply} onOpenChange={setConfirmApply}>
-        <AlertDialog.Portal>
-          <AlertDialog.Backdrop className="dialog-backdrop" />
-          <AlertDialog.Viewport className="dialog-viewport">
-            <AlertDialog.Popup className="submit-dialog">
-              <AlertDialog.Title>Replace the current command?</AlertDialog.Title>
-              <AlertDialog.Description>
-                Applying “{selected?.name}” will replace the Markdown currently in the editor.
-              </AlertDialog.Description>
-              <div className="dialog-actions">
-                <AlertDialog.Close className="button-quiet">Cancel</AlertDialog.Close>
-                <Button
-                  className="button-primary"
-                  onClick={() => {
-                    if (selected !== null) props.onApply(selected.body);
-                    setConfirmApply(false);
-                  }}
-                >
-                  Replace command
-                </Button>
-              </div>
-            </AlertDialog.Popup>
-          </AlertDialog.Viewport>
-        </AlertDialog.Portal>
-      </AlertDialog.Root>
-
-      <AlertDialog.Root
-        open={confirmDelete}
-        onOpenChange={(open) => {
-          if (!open) closeDeleteConfirmation();
-        }}
-      >
-        <AlertDialog.Portal>
-          <AlertDialog.Backdrop className="dialog-backdrop" />
-          <AlertDialog.Viewport className="dialog-viewport">
-            <AlertDialog.Popup className="submit-dialog">
-              <AlertDialog.Title>Delete this template?</AlertDialog.Title>
-              <AlertDialog.Description>
-                “{templateToDelete?.name}” will be removed from this project.
-              </AlertDialog.Description>
-              <div className="dialog-actions">
-                <Button className="button-quiet" onClick={closeDeleteConfirmation}>
-                  Cancel
-                </Button>
-                <Button className="button-primary" onClick={() => void deleteTemplate()}>
-                  Delete template
-                </Button>
-              </div>
-            </AlertDialog.Popup>
-          </AlertDialog.Viewport>
-        </AlertDialog.Portal>
-      </AlertDialog.Root>
+      <TemplateManagerDialogs
+        templates={props.templates}
+        editing={editing}
+        setEditing={setEditing}
+        selected={selected}
+        error={error}
+        saving={saving}
+        onSaveDraft={() => void saveDraft()}
+        confirmApply={confirmApply}
+        setConfirmApply={setConfirmApply}
+        onApply={props.onApply}
+        confirmDelete={confirmDelete}
+        templateToDelete={templateToDelete}
+        onDelete={() => void deleteTemplate()}
+        onCloseDelete={closeDeleteConfirmation}
+      />
     </div>
   );
 }

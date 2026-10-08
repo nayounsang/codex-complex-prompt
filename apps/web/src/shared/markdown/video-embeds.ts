@@ -1,3 +1,5 @@
+import { MARKDOWN_UI_REPLACEMENT_MODEL } from './ui-replacements.js';
+
 export interface VideoEmbedTarget {
   readonly id: string;
   readonly mount: HTMLDivElement;
@@ -7,6 +9,31 @@ export interface VideoEmbedTarget {
 
 let nextVideoEmbedId = 0;
 const videoEmbedIds = new WeakMap<HTMLParagraphElement, string>();
+
+function isIgnorableVideoParagraphChild(child: ChildNode): boolean {
+  return (
+    child.nodeName === 'BR' ||
+    (child instanceof HTMLElement &&
+      child.classList.contains(MARKDOWN_UI_REPLACEMENT_MODEL.video.mountClassName)) ||
+    (child instanceof HTMLImageElement && child.classList.contains('ProseMirror-separator')) ||
+    (child.nodeType === Node.TEXT_NODE && child.textContent?.trim() === '')
+  );
+}
+
+function getVideoParagraphImage(paragraph: HTMLParagraphElement): HTMLImageElement | null {
+  const content = Array.from(paragraph.childNodes).filter(
+    (child) => !isIgnorableVideoParagraphChild(child),
+  );
+  return content.length === 1 && content[0] instanceof HTMLImageElement ? content[0] : null;
+}
+
+function getSourceParagraphForMutation(node: Node): HTMLParagraphElement | null {
+  const element = node instanceof Element ? node : node.parentElement;
+  const paragraph = element?.classList.contains(MARKDOWN_UI_REPLACEMENT_MODEL.video.mountClassName)
+    ? element.previousElementSibling
+    : element?.closest('p');
+  return paragraph instanceof HTMLParagraphElement ? paragraph : null;
+}
 
 export function createVideoEmbedTargets(
   root: ParentNode,
@@ -19,17 +46,7 @@ export function createVideoEmbedTargets(
   const targets: VideoEmbedTarget[] = [];
   (paragraphs ?? Array.from(root.querySelectorAll<HTMLParagraphElement>('p'))).forEach(
     (paragraph) => {
-      const children = Array.from(paragraph.childNodes).filter(
-        (child) =>
-          child.nodeName !== 'BR' &&
-          !(child instanceof HTMLElement && child.classList.contains('video-embed-mount')) &&
-          !(
-            child instanceof HTMLImageElement && child.classList.contains('ProseMirror-separator')
-          ) &&
-          (child.nodeType !== Node.TEXT_NODE || child.textContent?.trim() !== ''),
-      );
-      const image =
-        children.length === 1 && children[0] instanceof HTMLImageElement ? children[0] : null;
+      const image = getVideoParagraphImage(paragraph);
       const source =
         (image === null ? null : getVideoSource(image)) ??
         (inertMarkdown === undefined
@@ -49,8 +66,9 @@ export function createVideoEmbedTargets(
       if (id === undefined) videoEmbedIds.set(paragraph, videoEmbedId);
       if (mount === null) {
         mount = document.createElement('div');
-        mount.className = 'video-embed-mount';
+        mount.className = MARKDOWN_UI_REPLACEMENT_MODEL.video.mountClassName;
         mount.contentEditable = 'false';
+        mount.dataset['markdownUiReplacement'] = MARKDOWN_UI_REPLACEMENT_MODEL.video.kind;
         mountContainer.append(mount);
       }
       mount.dataset['videoEmbedId'] = videoEmbedId;
@@ -66,13 +84,8 @@ export function getVideoEmbedAffectedParagraphs(
 ): HTMLParagraphElement[] {
   const paragraphs = new Set<HTMLParagraphElement>();
   const includeParagraph = (node: Node): void => {
-    const element = node instanceof Element ? node : node.parentElement;
-    const paragraph = element?.classList.contains('video-embed-mount')
-      ? element.previousElementSibling
-      : element?.closest('p');
-    if (paragraph instanceof HTMLParagraphElement && root.contains(paragraph)) {
-      paragraphs.add(paragraph);
-    }
+    const paragraph = getSourceParagraphForMutation(node);
+    if (paragraph !== null && root.contains(paragraph)) paragraphs.add(paragraph);
   };
   for (const record of records) {
     includeParagraph(record.target);
@@ -184,6 +197,6 @@ function getInertMarkdownVideoSource(
 }
 
 function hasStandaloneVideoReference(markdown: string, source: string): boolean {
-  const sourceLine = `![](${source})`;
+  const sourceLine = MARKDOWN_UI_REPLACEMENT_MODEL.video.standaloneMarkdown(source);
   return markdown.split(/\r\n|\n|\r/).some((line) => line.trim() === sourceLine);
 }

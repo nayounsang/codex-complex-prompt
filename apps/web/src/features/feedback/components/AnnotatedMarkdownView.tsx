@@ -6,14 +6,10 @@ import {
   decorateMarkdownRoot,
   type SourceFeedbackRange,
 } from '../../../shared/markdown/markdown-source-map.js';
-import {
-  getCodeBlockSelectionAnchor,
-  getImageSelectionAnchor,
-  getSelectionAnchor,
-  getTableSelectionAnchor,
-} from '../../../shared/markdown/selection-anchor.js';
 import type { FeedbackAnnotation, SelectionAnchor } from '../model/feedback-types.js';
+import { SourceFeedbackRangesSchema } from '../model/schema.js';
 import { mergeSelectionWithExistingFeedback } from './selection-feedback.js';
+import { useAnnotatedMarkdownSelection } from './useAnnotatedMarkdownSelection.js';
 import {
   getVideoEmbedAffectedParagraphs,
   haveSameVideoEmbedTargets,
@@ -21,6 +17,23 @@ import {
   type VideoEmbedTarget,
 } from '../../../shared/markdown/video-embeds.js';
 import { VideoEmbedPreview } from '../../input/components/VideoEmbedPreview.js';
+
+function isPreviewControlTarget(target: Element): boolean {
+  return (
+    target.closest('.mermaid-preview-open') !== null ||
+    target.closest('.video-embed-mount') !== null
+  );
+}
+
+function getMermaidSelectionAnchor(target: Element, markdown: string): SelectionAnchor | null {
+  const diagram = target.closest('.mermaid-preview-open');
+  const codeBlock = diagram?.closest<HTMLElement>('.milkdown-code-block');
+  if (codeBlock === null || codeBlock === undefined) return null;
+  const start = Number(codeBlock.dataset['codeSourceStart']);
+  const end = Number(codeBlock.dataset['codeSourceEnd']);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= end) return null;
+  return { quote: markdown.slice(start, end), start, end, rect: codeBlock.getBoundingClientRect() };
+}
 
 interface AnnotatedMarkdownViewProps {
   readonly markdown: string;
@@ -44,10 +57,6 @@ export function AnnotatedMarkdownView({
   const rootRef = useRef<HTMLElement>(null);
   const [rendererRoot, setRendererRoot] = useState<HTMLDivElement | null>(null);
   const [videoTargets, setVideoTargets] = useState<VideoEmbedTarget[]>([]);
-  const pointerSelectingRef = useRef(false);
-  const pendingSelectionRef = useRef<SelectionAnchor | null>(null);
-  const selectionDismissedRef = useRef(false);
-  const selectionWasOpenRef = useRef(false);
   const renderedMarkdown = useMemo(
     () =>
       makeMarkdownImagesInert(
@@ -67,56 +76,33 @@ export function AnnotatedMarkdownView({
         : [],
     ),
   );
-  const publishSelection = useCallback(
-    (selection: SelectionAnchor | null): void => {
-      pendingSelectionRef.current = selection;
-      onSelection(selection);
-    },
-    [onSelection],
-  );
   const handleRendererReady = useCallback((root: HTMLDivElement): void => {
     root.setAttribute('aria-label', 'Markdown feedback document');
     setRendererRoot(root);
   }, []);
 
-  const handleSelection = useCallback((): void => {
-    const root = rootRef.current;
-    if (root === null) return;
-    const tableAnchor = getTableSelectionAnchor(root, markdown);
-    const codeBlockAnchor = getCodeBlockSelectionAnchor(root, markdown);
-    const selection = window.getSelection();
-    const anchor =
-      tableAnchor ??
-      codeBlockAnchor ??
-      (selection === null ||
-      selection.rangeCount === 0 ||
-      selection.isCollapsed ||
-      !root.contains(selection.getRangeAt(0).startContainer) ||
-      !root.contains(selection.getRangeAt(0).endContainer)
-        ? null
-        : getSelectionAnchor(root));
-    if (anchor === null) {
-      publishSelection(null);
-      return;
-    }
-    publishSelection(mergeSelectionWithExistingFeedback(anchor, annotations, markdown));
-  }, [annotations, markdown, publishSelection]);
-
-  const handleImageSelection = useCallback(
-    (image: HTMLImageElement): void => {
-      const root = rootRef.current;
-      if (root === null) return;
-      const anchor = getImageSelectionAnchor(root, markdown, image);
-      if (anchor === null) return;
-      publishSelection(mergeSelectionWithExistingFeedback(anchor, annotations, markdown));
-    },
-    [annotations, markdown, publishSelection],
-  );
+  const {
+    pointerSelectingRef,
+    selectionDismissedRef,
+    handleSelection,
+    handleImageSelection,
+    publishSelection,
+  } = useAnnotatedMarkdownSelection({
+    rootRef,
+    markdown,
+    annotations,
+    selectionPopoverOpen,
+    onSelection,
+  });
 
   useEffect(
     function decorateReadOnlyMarkdown() {
       if (rendererRoot === null) return;
-      const feedbackRanges = JSON.parse(decorationRangeKey) as SourceFeedbackRange[];
+      const rangeData: unknown = JSON.parse(decorationRangeKey);
+      const parsedFeedbackRanges = SourceFeedbackRangesSchema.safeParse(rangeData);
+      const feedbackRanges: readonly SourceFeedbackRange[] = parsedFeedbackRanges.success
+        ? parsedFeedbackRanges.data
+        : [];
       const decorate = (records?: readonly MutationRecord[]): void => {
         decorateMarkdownRoot(
           rendererRoot,
@@ -151,71 +137,6 @@ export function AnnotatedMarkdownView({
     [attachmentUrl, decorationRangeKey, markdown, rendererRoot, renderedMarkdown],
   );
 
-  useEffect(
-    function dismissNativeSelectionAfterPopoverClose() {
-      if (selectionPopoverOpen) {
-        selectionWasOpenRef.current = true;
-        selectionDismissedRef.current = false;
-        return;
-      }
-      if (!selectionWasOpenRef.current) return;
-      selectionWasOpenRef.current = false;
-      pendingSelectionRef.current = null;
-      selectionDismissedRef.current = true;
-      window.getSelection()?.removeAllRanges();
-      rootRef.current
-        ?.querySelectorAll('.milkdown-table-block .selectedCell')
-        .forEach((cell) => cell.classList.remove('selectedCell'));
-    },
-    [selectionPopoverOpen],
-  );
-
-  useEffect(
-    function finishSelectionWhenPointerLeavesDocument() {
-      const finishPointerSelection = (): void => {
-        if (!pointerSelectingRef.current) return;
-        pointerSelectingRef.current = false;
-        handleSelection();
-      };
-      const resetPointerSelection = (): void => {
-        pointerSelectingRef.current = false;
-      };
-
-      document.addEventListener('mouseup', finishPointerSelection, true);
-      window.addEventListener('blur', resetPointerSelection);
-      return () => {
-        document.removeEventListener('mouseup', finishPointerSelection, true);
-        window.removeEventListener('blur', resetPointerSelection);
-      };
-    },
-    [handleSelection],
-  );
-
-  useEffect(
-    function listenForKeyboardSelection() {
-      const handleDocumentSelectionChange = (): void => {
-        if (pointerSelectingRef.current) return;
-        if (selectionDismissedRef.current) return;
-        const root = rootRef.current;
-        const selection = window.getSelection();
-        if (selection?.isCollapsed && pendingSelectionRef.current !== null) return;
-        if (
-          root === null ||
-          selection === null ||
-          selection.rangeCount === 0 ||
-          !root.contains(selection.getRangeAt(0).startContainer) ||
-          !root.contains(selection.getRangeAt(0).endContainer)
-        ) {
-          return;
-        }
-        handleSelection();
-      };
-      document.addEventListener('selectionchange', handleDocumentSelectionChange);
-      return () => document.removeEventListener('selectionchange', handleDocumentSelectionChange);
-    },
-    [handleSelection],
-  );
-
   return (
     <article
       ref={rootRef}
@@ -226,9 +147,7 @@ export function AnnotatedMarkdownView({
         selectionDismissedRef.current = false;
         const target = event.target;
         pointerSelectingRef.current = !(
-          target instanceof Element &&
-          (target.closest('.mermaid-preview-open') !== null ||
-            target.closest('.video-embed-mount') !== null)
+          target instanceof Element && isPreviewControlTarget(target)
         );
       }}
       onKeyDown={() => {
@@ -248,20 +167,10 @@ export function AnnotatedMarkdownView({
       onClickCapture={(event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
-        const diagram = target.closest('.mermaid-preview-open');
-        if (diagram !== null) {
-          const codeBlock = diagram.closest<HTMLElement>('.milkdown-code-block');
-          if (codeBlock === null) return;
-          const start = Number(codeBlock.dataset['codeSourceStart']);
-          const end = Number(codeBlock.dataset['codeSourceEnd']);
-          if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return;
-          const anchor: SelectionAnchor = {
-            quote: markdown.slice(start, end),
-            start,
-            end,
-            rect: codeBlock.getBoundingClientRect(),
-          };
-          publishSelection(mergeSelectionWithExistingFeedback(anchor, annotations, markdown));
+        if (target.closest('.mermaid-preview-open') !== null) {
+          const anchor = getMermaidSelectionAnchor(target, markdown);
+          if (anchor !== null)
+            publishSelection(mergeSelectionWithExistingFeedback(anchor, annotations, markdown));
           return;
         }
         const image = target.closest<HTMLImageElement>(
@@ -271,12 +180,7 @@ export function AnnotatedMarkdownView({
       }}
       onMouseUpCapture={(event) => {
         const target = event.target;
-        if (
-          target instanceof Element &&
-          (target.closest('.mermaid-preview-open') !== null ||
-            target.closest('.video-embed-mount') !== null)
-        )
-          return;
+        if (target instanceof Element && isPreviewControlTarget(target)) return;
         pointerSelectingRef.current = false;
         handleSelection();
       }}

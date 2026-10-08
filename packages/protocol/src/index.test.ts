@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AttachmentTooLargeError,
+  AttachmentCreateRequestSchema,
   AttachmentValidationError,
   ClientMessageSchema,
   countPromptCharacters,
   MAX_PROMPT_LENGTH,
   ServerMessageSchema,
+  DrawingSceneSchema,
   encodeServerMessage,
   parseClientMessage,
   truncatePromptCharacters,
@@ -178,5 +180,40 @@ describe('프로토콜 스키마', () => {
 
   it('유효하지 않은 서버 메시지 인코딩을 거부한다', () => {
     expect(() => encodeServerMessage({ type: 'session.ready', sessionId: 'invalid' })).toThrow();
+  });
+});
+
+describe('첨부 요청 스키마', () => {
+  it('drawing image 요청과 레거시 PNG 요청을 수락한다', () => {
+    expect(
+      AttachmentCreateRequestSchema.safeParse({ image: 'data:image/png;base64,AA==', scene: '{}' })
+        .success,
+    ).toBe(true);
+    expect(
+      AttachmentCreateRequestSchema.safeParse({ png: 'data:image/png;base64,AA==', scene: '{}' })
+        .success,
+    ).toBe(true);
+  });
+
+  it('scene 없이 이미지만 보내거나 video에 scene을 보내는 요청을 거부한다', () => {
+    expect(AttachmentCreateRequestSchema.safeParse({ image: 'image' }).success).toBe(false);
+    expect(AttachmentCreateRequestSchema.safeParse({ video: 'video', scene: '{}' }).success).toBe(
+      false,
+    );
+  });
+
+  it('video 요청과 기존 PNG 필드가 함께 있어도 video 경로로 처리할 수 있다', () => {
+    expect(AttachmentCreateRequestSchema.safeParse({ video: 'video', png: 'legacy' }).success).toBe(
+      true,
+    );
+  });
+
+  it('drawing scene을 편집할 수 있는 형태인지 검증한다', () => {
+    expect(DrawingSceneSchema.safeParse({ elements: [], files: {} }).success).toBe(true);
+    expect(DrawingSceneSchema.safeParse({ elements: [], appState: null, files: {} }).success).toBe(
+      true,
+    );
+    expect(DrawingSceneSchema.safeParse({ elements: 'invalid' }).success).toBe(false);
+    expect(DrawingSceneSchema.safeParse(null).success).toBe(false);
   });
 });

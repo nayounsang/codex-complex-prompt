@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { WebSocket } from 'ws';
+import { ServerMessageSchema } from '@codex-complex-prompt/protocol';
 
 import { MockCodexSessionInputAdapter } from './features/input/adapters/codex-session-input.js';
 import { startCliBridge } from './index.js';
@@ -28,9 +29,20 @@ socket.send(
 );
 await new Promise<void>((resolve, reject) => {
   socket.on('message', (data: Buffer) => {
-    const message = JSON.parse(data.toString()) as { type: string; status?: string };
-    if (message.type === 'prompt.result') {
-      if (message.status !== 'accepted') reject(new Error('Smoke prompt was rejected.'));
+    let input: unknown;
+    try {
+      input = JSON.parse(data.toString());
+    } catch {
+      reject(new Error('Smoke bridge returned invalid JSON.'));
+      return;
+    }
+    const result = ServerMessageSchema.safeParse(input);
+    if (!result.success) {
+      reject(new Error('Smoke bridge returned an invalid protocol message.'));
+      return;
+    }
+    if (result.data.type === 'prompt.result') {
+      if (result.data.status !== 'accepted') reject(new Error('Smoke prompt was rejected.'));
       else resolve();
     }
   });

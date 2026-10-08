@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -111,6 +111,28 @@ describe('CLI 브리지 동작', () => {
 
     expect(bridge.browserOpened).toBe(false);
     await bridge.stop();
+  });
+
+  it('설정된 URL 파일에 브리지 URL을 기록한다', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'complex-prompt-bridge-url-'));
+    const browserUrlFile = join(directory, 'browser-url');
+    const previousBrowserUrlFile = process.env['COMPLEX_PROMPT_BROWSER_URL_FILE'];
+    process.env['COMPLEX_PROMPT_BROWSER_URL_FILE'] = browserUrlFile;
+    let bridge: Awaited<ReturnType<typeof startCliBridge>> | undefined;
+
+    try {
+      bridge = await startCliBridge();
+
+      expect(bridge.browserOpened).toBe(true);
+      await expect(readFile(browserUrlFile, 'utf8')).resolves.toBe(bridge.browserUrl);
+      await expect(readdir(directory)).resolves.toEqual(['browser-url']);
+    } finally {
+      if (previousBrowserUrlFile === undefined)
+        delete process.env['COMPLEX_PROMPT_BROWSER_URL_FILE'];
+      else process.env['COMPLEX_PROMPT_BROWSER_URL_FILE'] = previousBrowserUrlFile;
+      await bridge?.stop();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('별도 루프백 웹 URL에 브리지 오리진을 전달한다', async () => {

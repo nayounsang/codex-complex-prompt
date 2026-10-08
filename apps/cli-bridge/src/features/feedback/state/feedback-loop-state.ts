@@ -2,6 +2,7 @@ import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { defaultCodexHome } from '../../../shared/codex-home.js';
+import { FeedbackLoopStateSchema } from './schema.js';
 
 export interface FeedbackLoopStateStore {
   activate: (sessionId: string | undefined, cwd?: string) => Promise<boolean>;
@@ -36,13 +37,8 @@ export function createFeedbackLoopStateStore(
       const path = statePath(directory, sessionId);
       if (path === undefined) return false;
       try {
-        const state: unknown = JSON.parse(await readFile(path, 'utf8'));
-        return (
-          state !== null &&
-          typeof state === 'object' &&
-          'sessionId' in state &&
-          state.sessionId === sessionId
-        );
+        const result = FeedbackLoopStateSchema.safeParse(JSON.parse(await readFile(path, 'utf8')));
+        return result.success && result.data.sessionId === sessionId;
       } catch (error) {
         if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return false;
         throw error;
@@ -52,13 +48,8 @@ export function createFeedbackLoopStateStore(
       const path = statePath(directory, sessionId);
       if (path === undefined) return undefined;
       try {
-        const state: unknown = JSON.parse(await readFile(path, 'utf8'));
-        return state !== null &&
-          typeof state === 'object' &&
-          'cwd' in state &&
-          typeof state.cwd === 'string'
-          ? state.cwd
-          : undefined;
+        const result = FeedbackLoopStateSchema.safeParse(JSON.parse(await readFile(path, 'utf8')));
+        return result.success ? result.data.cwd : undefined;
       } catch (error) {
         if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return undefined;
         throw error;

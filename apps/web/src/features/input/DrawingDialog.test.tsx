@@ -27,4 +27,19 @@ describe('그림 편집 대화상자', () => {
     expect(screen.getByRole('button', { name: 'Insert' })).toBeDisabled();
     expect(onSave).not.toHaveBeenCalled();
   });
+
+  it('Excalidraw가 허용하는 null appState 장면을 연다', () => {
+    render(
+      <DrawingDialog
+        open
+        attachmentId="00000000-0000-4000-8000-000000000012"
+        initialScene='{"elements":[],"appState":null}'
+        onSave={vi.fn(async () => undefined)}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Insert' })).toBeEnabled();
+  });
 });

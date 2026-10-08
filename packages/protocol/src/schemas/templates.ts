@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { promptStringSchema } from '../prompt/limits.js';
+import { promptStringSchema } from './prompt.js';
 
 export const PromptTemplateSchema = z.object({
   id: z.string().uuid(),

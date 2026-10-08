@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   getCodeBlockSelectionAnchor,
+  getImageSelectionAnchor,
   getSelectionAnchor,
   getTableSelectionAnchor,
 } from './selection-anchor.js';
@@ -169,5 +170,18 @@ describe('선택 영역 anchor', () => {
       end: expectedStart + 'answer'.length,
       quote: 'answer',
     });
+  });
+  it('이미지 source 범위가 음수이거나 역전되면 anchor를 만들지 않는다', () => {
+    const root = document.createElement('article');
+    const image = document.createElement('img');
+    image.dataset['feedbackSourceStart'] = '-1';
+    image.dataset['feedbackSourceEnd'] = '4';
+    root.append(image);
+
+    expect(getImageSelectionAnchor(root, '![x](image.png)', image)).toBeNull();
+
+    image.dataset['feedbackSourceStart'] = '8';
+    image.dataset['feedbackSourceEnd'] = '4';
+    expect(getImageSelectionAnchor(root, '![x](image.png)', image)).toBeNull();
   });
 });
