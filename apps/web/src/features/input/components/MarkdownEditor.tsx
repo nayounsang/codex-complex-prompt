@@ -68,6 +68,8 @@ const drawingIcon =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 16.5 9.8-9.8a2.1 2.1 0 0 1 3 3L7 19.5 3.5 20.5 4 16.5Z"/><path d="m12.5 8 3 3"/></svg>';
 const diagramIcon =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="6" rx="1"/><rect x="14" y="15" width="7" height="6" rx="1"/><path d="M10 6h4a3 3 0 0 1 3 3v6M7 9v6h7"/></svg>';
+const mediaIcon =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></svg>';
 type BlockEditBuilder = Parameters<NonNullable<BlockEditFeatureConfig['buildMenu']>>[0];
 type AdvancedMenuItem = Parameters<ReturnType<BlockEditBuilder['getGroup']>['addItem']>[1];
 function addAdvancedMenuItem(builder: BlockEditBuilder, id: string, item: AdvancedMenuItem): void {
@@ -122,6 +124,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
   ): React.JSX.Element {
     const rootRef = useRef<HTMLDivElement>(null);
     const hostRef = useRef<HTMLDivElement>(null);
+    const mediaPlaceholderRef = useRef<HTMLButtonElement>(null);
+    const mediaFileInputRef = useRef<HTMLInputElement>(null);
     const crepeRef = useRef<Crepe | null>(null);
     const markdownRef = useRef(defaultMarkdown);
     const hoveredImageRef = useRef<HTMLImageElement | null>(null);
@@ -138,6 +142,13 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const [drawingEditPosition, setDrawingEditPosition] = useState({ top: 0, left: 0 });
     const drawingActionsOverlayRef = useRef<HTMLDivElement>(null);
     const [initializationError, setInitializationError] = useState<Error | null>(null);
+    const [showMediaPlaceholder, setShowMediaPlaceholder] = useState(false);
+    const [mediaPlaceholderPosition, setMediaPlaceholderPosition] = useState({ top: 18, left: 20 });
+    const [mediaPlaceholderAnchor, setMediaPlaceholderAnchor] = useState<{
+      readonly left: number;
+      readonly top: number;
+      readonly bottom: number;
+    } | null>(null);
     const drawingActionsRef = useRef({
       onDraw,
       onEditDrawing,
@@ -156,6 +167,25 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       hoveredImageRef.current = null;
       setDrawingEditTarget(null);
     };
+    useLayoutEffect(
+      function positionMediaPlaceholder() {
+        const button = mediaPlaceholderRef.current;
+        const host = hostRef.current;
+        if (!showMediaPlaceholder || mediaPlaceholderAnchor === null || button === null) return;
+        if (host === null) return;
+        const left = Math.min(
+          Math.max(8, mediaPlaceholderAnchor.left),
+          Math.max(8, host.clientWidth - button.offsetWidth - 8),
+        );
+        const below = mediaPlaceholderAnchor.bottom + 8;
+        const top =
+          below + button.offsetHeight <= host.clientHeight - 8
+            ? below
+            : Math.max(8, mediaPlaceholderAnchor.top - button.offsetHeight - 8);
+        setMediaPlaceholderPosition({ top, left });
+      },
+      [mediaPlaceholderAnchor, showMediaPlaceholder],
+    );
     const syncMermaidPreviews = (
       editorRoot: HTMLDivElement,
       recoverRemovedPreview = false,
@@ -398,6 +428,33 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
                 });
               },
             });
+            addAdvancedMenuItem(builder, 'media', {
+              label: 'Media',
+              icon: mediaIcon,
+              onRun: () => {
+                const editor = crepeRef.current?.editor;
+                const editorRoot = rootRef.current;
+                const host = hostRef.current;
+                if (editor !== undefined && editorRoot !== null && host !== null) {
+                  editor.action((ctx) => {
+                    const view = ctx.get(editorViewCtx);
+                    const coords = view.coordsAtPos(view.state.selection.from);
+                    const hostBounds = host.getBoundingClientRect();
+                    const anchor = {
+                      left: coords.left - hostBounds.left,
+                      top: coords.top - hostBounds.top,
+                      bottom: coords.bottom - hostBounds.top,
+                    };
+                    setMediaPlaceholderAnchor(anchor);
+                    setMediaPlaceholderPosition({
+                      top: anchor.bottom + 8,
+                      left: Math.max(8, anchor.left),
+                    });
+                  });
+                }
+                setShowMediaPlaceholder(true);
+              },
+            });
           },
         };
         const featureConfigs = {
@@ -565,6 +622,41 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           role="group"
           aria-label={ariaLabel}
           aria-disabled={readOnly}
+        />
+        {showMediaPlaceholder && !readOnly && (
+          <button
+            ref={mediaPlaceholderRef}
+            type="button"
+            className="media-picker-placeholder"
+            style={{ top: mediaPlaceholderPosition.top, left: mediaPlaceholderPosition.left }}
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => mediaFileInputRef.current?.click()}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <circle cx="8.5" cy="9" r="1.5" />
+              <path d="m21 15-5-5L5 20" />
+            </svg>
+            <span>Click to add media</span>
+          </button>
+        )}
+        <input
+          ref={mediaFileInputRef}
+          className="sr-only"
+          type="file"
+          accept="image/*,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
+          multiple
+          aria-label="Choose image or video files"
+          aria-hidden="true"
+          tabIndex={-1}
+          disabled={readOnly}
+          onChange={(event) => {
+            const files = Array.from(event.currentTarget.files ?? []).filter(isSupportedMediaFile);
+            event.currentTarget.value = '';
+            if (files.length === 0) return;
+            setShowMediaPlaceholder(false);
+            receiveMediaFiles(files);
+          }}
         />
         {drawingEditTarget !== null && !readOnly && (
           <div

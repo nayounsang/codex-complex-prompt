@@ -185,6 +185,41 @@ button:focus-visible,
   position: relative;
 }
 
+.media-picker-placeholder {
+  position: absolute;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed #aaa9a4;
+  border-radius: 7px;
+  color: #686762;
+  background: rgb(255 255 255 / 96%);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgb(31 31 31 / 8%);
+}
+
+.media-picker-placeholder svg {
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.media-picker-placeholder:hover {
+  border-color: #777670;
+  color: #292824;
+  background: #fff;
+}
+
+.media-picker-placeholder:focus-visible {
+  outline: 2px solid #2383e2;
+  outline-offset: 2px;
+}
+
 .markdown-editor {
   min-height: calc(100dvh - var(--app-header-height) - var(--action-bar-height) - 32px);
   overflow: visible;
