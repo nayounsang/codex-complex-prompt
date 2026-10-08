@@ -123,6 +123,12 @@ describe('hook command dispatch', () => {
     await expect(runHookCommand(['hook', 'plannotator-stop', 'not-json'])).rejects.toThrow();
   });
 
+  it('rejects Plannotator payloads that do not contain a string command', async () => {
+    const payload = encodePayload({ command: 7 });
+
+    await expect(runHookCommand(['hook', 'plannotator-stop', payload])).rejects.toThrow();
+  });
+
   it.each([
     ['an unknown command', ['version']],
     ['prompt with an extra argument', ['hook', 'prompt', 'extra']],
