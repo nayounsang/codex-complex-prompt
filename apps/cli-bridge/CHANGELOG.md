@@ -1,5 +1,11 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.4.0
+
+### Minor Changes
+
+- 0ad9c26: Add an optional setting to delegate feedback edits to a fresh Codex subagent for each submission.
+
 ## 0.3.7
 
 ### Patch Changes
