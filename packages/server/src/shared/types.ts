@@ -6,6 +6,7 @@ export interface PromptContext {
   readonly sessionId: string;
   readonly submissionId: string;
   readonly mode: PromptSubmitMode;
+  readonly sendFeedbackToSubagent: boolean;
 }
 
 export type PromptAdapterResult = string | void;

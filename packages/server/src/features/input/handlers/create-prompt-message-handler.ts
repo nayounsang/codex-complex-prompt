@@ -34,6 +34,7 @@ export function createPromptMessageHandler(
           sessionId,
           submissionId: submission.submissionId,
           mode: submission.mode ?? 'edit',
+          sendFeedbackToSubagent: submission.sendFeedbackToSubagent ?? false,
         }),
         promptTimeoutMs,
       );

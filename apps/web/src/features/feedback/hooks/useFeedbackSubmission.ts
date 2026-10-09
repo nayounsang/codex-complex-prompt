@@ -8,7 +8,12 @@ import type { FeedbackAnnotation } from '../model/feedback-types.js';
 interface FeedbackSubmissionOptions {
   readonly markdown: string;
   readonly annotations: readonly FeedbackAnnotation[];
-  readonly submit: (prompt: string, mode?: 'edit' | 'feedback') => Promise<PromptResult>;
+  readonly submit: (
+    prompt: string,
+    mode?: 'edit' | 'feedback',
+    options?: { readonly sendFeedbackToSubagent?: boolean },
+  ) => Promise<PromptResult>;
+  readonly sendFeedbackToSubagent: boolean;
   readonly onMarkdownChange: (markdown: string) => void;
   readonly onComplete: () => void;
 }
@@ -35,7 +40,9 @@ export function useFeedbackSubmission(options: FeedbackSubmissionOptions): Feedb
         return;
       }
       try {
-        const result = await options.submit(prompt, 'feedback');
+        const result = await options.submit(prompt, 'feedback', {
+          sendFeedbackToSubagent: options.sendFeedbackToSubagent,
+        });
         if (result.status === 'failed') {
           setError(result.error ?? 'The feedback could not be sent.');
           return;

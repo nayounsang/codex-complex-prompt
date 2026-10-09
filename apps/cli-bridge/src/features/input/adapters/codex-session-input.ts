@@ -1,5 +1,6 @@
 export interface CodexSessionInputContext {
   readonly mode: 'edit' | 'feedback' | 'finish';
+  readonly sendFeedbackToSubagent?: boolean;
 }
 
 export interface CodexSessionInput {

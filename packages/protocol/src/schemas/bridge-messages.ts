@@ -15,6 +15,7 @@ export const PromptSubmitSchema = z
     submissionId: z.string().uuid(),
     prompt: z.string().trim().refine(isPromptWithinLimit, promptLengthValidation),
     mode: z.enum(['edit', 'feedback', 'finish']).optional(),
+    sendFeedbackToSubagent: z.boolean().optional(),
   })
   .refine((submission) => submission.mode === 'finish' || submission.prompt.length > 0, {
     message: 'Prompt must not be empty.',

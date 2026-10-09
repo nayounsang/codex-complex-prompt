@@ -98,24 +98,33 @@ button:focus-visible,
   border-bottom: 1px solid #e6e5e2;
 }
 
-.brand,
 .connection-status {
   display: flex;
   align-items: center;
 }
 
-.brand {
-  gap: 9px;
-  color: #37352f;
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+.settings-trigger {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  padding: 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #787774;
+  cursor: pointer;
 }
 
-.brand-mark {
-  color: #787774;
-  font-size: 20px;
-  line-height: 1;
+.settings-trigger:hover,
+.settings-trigger:focus-visible {
+  background: #eeedea;
+  color: #37352f;
+}
+
+.settings-trigger svg {
+  width: 20px;
+  height: 20px;
 }
 
 .connection-status {
@@ -1440,6 +1449,64 @@ button:focus-visible,
   border-radius: 10px;
   background: #fff;
   box-shadow: 0 16px 48px rgb(55 53 47 / 18%);
+}
+
+.feedback-settings-dialog {
+  width: min(100%, 520px);
+  padding: 24px;
+  border: 1px solid #e6e5e2;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 48px rgb(55 53 47 / 18%);
+}
+
+.feedback-settings-dialog h2 {
+  margin: 0;
+  color: #37352f;
+  font-size: 18px;
+}
+
+.feedback-settings-dialog p {
+  margin: 8px 0 20px;
+  color: #787774;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #37352f;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.settings-checkbox {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #b9b8b5;
+  border-radius: 4px;
+  background: white;
+  color: white;
+}
+
+.settings-checkbox[data-checked] {
+  border-color: #37352f;
+  background: #37352f;
+}
+
+.settings-checkbox-indicator {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.feedback-settings-dialog .dialog-actions {
+  margin-top: 24px;
 }
 
 .submit-dialog h2 {

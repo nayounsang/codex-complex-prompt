@@ -13,9 +13,13 @@ import { usePromptWorkspaceAttachments } from '../hooks/usePromptWorkspaceAttach
 
 interface PromptWorkspaceProps {
   readonly bridgeSession: BridgeSession;
+  readonly sendFeedbackToSubagent: boolean;
 }
 
-export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.JSX.Element {
+export function PromptWorkspace({
+  bridgeSession,
+  sendFeedbackToSubagent,
+}: PromptWorkspaceProps): React.JSX.Element {
   const [markdownOverride, setMarkdownOverride] = useState<string | null>(null);
   const [mode, setMode] = useState<'edit' | 'feedback'>('edit');
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -33,6 +37,7 @@ export function PromptWorkspace({ bridgeSession }: PromptWorkspaceProps): React.
     markdown,
     annotations: feedback.annotations,
     submit,
+    sendFeedbackToSubagent,
     onMarkdownChange: updateMarkdownOverride,
     onComplete: () => {
       feedback.clearFeedback();

@@ -17,7 +17,11 @@ export interface BridgeSession {
     readonly error: string | null;
   } | null;
   readonly requestTemplateChange: (request: TemplateChangeRequest) => Promise<TemplateResult>;
-  readonly submit: (prompt: string, mode?: PromptSubmitMode) => Promise<PromptResult>;
+  readonly submit: (
+    prompt: string,
+    mode?: PromptSubmitMode,
+    options?: { readonly sendFeedbackToSubagent?: boolean },
+  ) => Promise<PromptResult>;
 }
 
 export type TemplateChangeRequest =

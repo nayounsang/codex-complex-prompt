@@ -6,6 +6,7 @@ import {
 } from '../state/feedback-loop-state.js';
 import { DEFAULT_BROWSER_WAIT_TIMEOUT_MS } from '../../../shared/hook-timeouts.js';
 import { startCliBridge, type CliBridgeOptions } from '../../../index.js';
+import { buildCodexFeedbackSubmissionInstruction } from '../../input/model/codex-feedback-prompt-instruction.js';
 
 export type CodexStopHookOutput =
   | { readonly continue: true; readonly systemMessage?: string }
@@ -23,6 +24,7 @@ export interface RunCodexStopHookOptions {
 interface BrowserSubmission {
   readonly prompt: string;
   readonly mode: PromptSubmitMode;
+  readonly sendFeedbackToSubagent: boolean;
 }
 
 export async function runCodexStopHook(
@@ -72,7 +74,11 @@ export async function runCodexStopHook(
       : { projectDirectory }),
     inputAdapter: {
       submit: (prompt, context) => {
-        resolveSubmission?.({ prompt, mode: context?.mode ?? 'edit' });
+        resolveSubmission?.({
+          prompt,
+          mode: context?.mode ?? 'edit',
+          sendFeedbackToSubagent: context?.sendFeedbackToSubagent ?? false,
+        });
         return bridgeSubmission;
       },
     },
@@ -118,7 +124,8 @@ export async function runCodexStopHook(
 function buildContinuationPrompt(submission: BrowserSubmission): string {
   if (submission.mode === 'feedback') {
     return (
-      "The user selected AI Feedback, not Submit. Apply the user's browser feedback to the complete Current Markdown document included below. Preserve all unaffected content. Return the complete updated Markdown only, without an introduction, summary, or code fence. Do not call ExitPlanMode for this feedback submission; the browser editor will reopen so the user can continue review.\n\n" +
+      "The user selected AI Feedback, not Submit. Apply the user's browser feedback using the instructions below.\n\n" +
+      buildCodexFeedbackSubmissionInstruction(submission.sendFeedbackToSubagent) +
       submission.prompt
     );
   }
