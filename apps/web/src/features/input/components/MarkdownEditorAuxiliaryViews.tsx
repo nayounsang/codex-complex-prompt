@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
 
-import { SvgIcon } from '../../../shared/icons/SvgIcon.js';
 import type { VideoEmbedTarget } from '../../../shared/markdown/video-embeds.js';
 import { VideoEmbedPreview } from './VideoEmbedPreview.js';
 import { MermaidDiagramCard, MermaidDiagramDialog } from './MermaidDiagramCard.js';
@@ -58,7 +58,7 @@ export function MarkdownEditorAuxiliaryViews({
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => drawingActions.onEditDrawing?.(drawingEditTarget.id)}
             >
-              <SvgIcon name="pencil" />
+              <Pencil aria-hidden="true" size={18} />
             </button>
           )}
           {drawingActions.onDeleteDrawing !== undefined && (
@@ -73,7 +73,7 @@ export function MarkdownEditorAuxiliaryViews({
                 onClearDrawingEditTarget();
               }}
             >
-              <SvgIcon name="trash" />
+              <Trash2 aria-hidden="true" size={18} />
             </button>
           )}
         </div>

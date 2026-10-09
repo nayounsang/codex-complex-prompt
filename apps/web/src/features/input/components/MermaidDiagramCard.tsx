@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
 import { Button } from '@base-ui/react/button';
@@ -6,7 +7,6 @@ import { Dialog } from '@base-ui/react/dialog';
 import { MermaidPreviewErrorBoundary } from './MermaidPreviewErrorBoundary.js';
 import type { MermaidPreviewTarget } from './mermaid-preview-targets.js';
 import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../../shared/markdown/ui-replacements.js';
-import { SvgIcon } from '../../../shared/icons/SvgIcon.js';
 
 const MermaidPreview = lazy(async () => {
   const module = await import('./MermaidSdkComponents.js');
@@ -78,7 +78,7 @@ export function MermaidDiagramCard({
               onReplace(target);
             }}
           >
-            <SvgIcon name="trash" />
+            <Trash2 aria-hidden="true" size={18} />
           </button>
         </div>
       )}

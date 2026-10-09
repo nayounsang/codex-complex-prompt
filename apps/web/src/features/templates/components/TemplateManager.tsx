@@ -1,7 +1,7 @@
 import { useState } from 'react';
+import { ChevronDown, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@base-ui/react/button';
 import { Select } from '@base-ui/react/select';
-import { SvgIcon } from '../../../shared/icons/SvgIcon.js';
 
 import {
   MAX_PROMPT_LENGTH,
@@ -118,7 +118,9 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
             {selected?.name ??
               (disabledReason === null ? 'Choose a template' : 'Templates unavailable')}
           </Select.Value>
-          <Select.Icon aria-hidden="true">▾</Select.Icon>
+          <Select.Icon aria-hidden="true">
+            <ChevronDown size={16} />
+          </Select.Icon>
         </Select.Trigger>
         <Select.Portal>
           <Select.Positioner className="template-select-positioner" sideOffset={6}>
@@ -151,7 +153,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                           openEditor(template);
                         }}
                       >
-                        <SvgIcon name="templateEdit" />
+                        <Pencil aria-hidden="true" />
                       </button>
                       <button
                         type="button"
@@ -164,7 +166,7 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                           openDeleteConfirmation(template);
                         }}
                       >
-                        <SvgIcon name="templateDelete" />
+                        <Trash2 aria-hidden="true" />
                       </button>
                     </span>
                   </div>
@@ -174,9 +176,13 @@ export function TemplateManager(props: TemplateManagerProps): React.JSX.Element 
                   className="template-select-item template-create-item"
                 >
                   <Select.ItemText>
-                    {props.templates.length === 0
-                      ? 'Create your first template…'
-                      : '＋ Create a template…'}
+                    {props.templates.length === 0 ? (
+                      'Create your first template…'
+                    ) : (
+                      <>
+                        <Plus aria-hidden="true" size={14} /> Create a template…
+                      </>
+                    )}
                   </Select.ItemText>
                 </Select.Item>
               </Select.List>
