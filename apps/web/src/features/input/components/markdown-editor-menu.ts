@@ -1,27 +1,40 @@
 import type { BlockEditFeatureConfig } from '@milkdown/crepe/feature/block-edit';
-import { ICON_SVG } from '../../../shared/icons/icon-assets.js';
+import { Image, Pencil, Workflow, type LucideIcon } from 'lucide-react';
+import { createElement } from 'react';
+import { flushSync } from 'react-dom';
+import { createRoot } from 'react-dom/client';
 
 type BlockEditBuilder = Parameters<NonNullable<BlockEditFeatureConfig['buildMenu']>>[0];
 type AdvancedMenuItem = Parameters<ReturnType<BlockEditBuilder['getGroup']>['addItem']>[1];
 export type MarkdownEditorMenuAction = 'draw' | 'diagram' | 'media';
 
+function renderLucideIcon(icon: LucideIcon): string {
+  const container = document.createElement('span');
+  const root = createRoot(container);
+  flushSync(() => root.render(createElement(icon)));
+  const svg = container.querySelector('svg');
+  root.unmount();
+  if (svg === null) throw new Error('Could not render the editor menu icon.');
+  return svg.outerHTML;
+}
+
 export const MILKDOWN_ADVANCED_MENU_MODEL = [
   {
     id: 'draw',
     label: 'Draw',
-    icon: ICON_SVG.pencil,
+    icon: renderLucideIcon(Pencil),
     action: 'draw',
   },
   {
     id: 'diagram',
     label: 'Diagram',
-    icon: ICON_SVG.diagram,
+    icon: renderLucideIcon(Workflow),
     action: 'diagram',
   },
   {
     id: 'media',
     label: 'Media',
-    icon: ICON_SVG.media,
+    icon: renderLucideIcon(Image),
     action: 'media',
   },
 ] as const satisfies readonly {

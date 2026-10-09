@@ -1,6 +1,7 @@
 import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
 import { DrawingSceneSchema, MAX_ATTACHMENT_IMAGE_BYTES } from '@codex-complex-prompt/protocol';
+import { X } from 'lucide-react';
 import { Excalidraw, exportToBlob, FONT_FAMILY } from '@excalidraw/excalidraw';
 import type {
   AppState,
@@ -11,7 +12,6 @@ import type {
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import { useRef, useState } from 'react';
 import '@excalidraw/excalidraw/index.css';
-import { SvgIcon } from '../../shared/icons/SvgIcon.js';
 
 export interface DrawingDialogProps {
   readonly open: boolean;
@@ -148,7 +148,7 @@ export function DrawingDialog({
                 disabled={saving}
                 onClick={onClose}
               >
-                <SvgIcon name="close" />
+                <X aria-hidden="true" size={20} />
               </Button>
             </div>
             <div className="drawing-canvas">
