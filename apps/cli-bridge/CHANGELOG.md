@@ -1,5 +1,11 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.4.1
+
+### Patch Changes
+
+- ace3e4d: Update the bundled Mermaid editor SDK to 0.1.2.
+
 ## 0.4.0
 
 ### Minor Changes
