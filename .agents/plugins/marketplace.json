@@ -9,7 +9,7 @@
       "source": {
         "source": "url",
         "url": "https://github.com/nayounsang/younsang-codex-plugin.git",
-        "sha": "971f5f8af3d3d6085f80755f8c9ebdb936a03b4d"
+        "sha": "0bd9dcf49325f9ec39f8a16f461549cc6e6d9b9e"
       },
       "policy": {
         "installation": "INSTALLED_BY_DEFAULT",
