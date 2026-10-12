@@ -17,7 +17,7 @@ flowchart LR
     A["Codex CLI에서 $complex-prompt"] --> B[브라우저에서 요청 확인 및 직접 수정]
     B -->|Send Feedback| C[Codex가 문서에 피드백 반영]
     C --> B
-    B -->|Submit| D[검토한 요청 실행]
+    B -->|Submit| D[요청 실행]
 ```
 
 ## 시작하기
