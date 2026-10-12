@@ -17,7 +17,7 @@ flowchart LR
     A["Run $complex-prompt in Codex CLI"] --> B[Review and edit the request in your browser]
     B -->|Send Feedback| C[Codex revises the document]
     C --> B
-    B -->|Submit| D[Run the reviewed request]
+    B -->|Submit| D[Run the request]
 ```
 
 ## Get started
