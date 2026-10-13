@@ -281,6 +281,14 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
         timeoutMs: 2_000,
         feedbackLoopStateStore,
         bridgeOptions: {
+          feedbackModelCatalog: [
+            {
+              model: 'gpt-6.1-sol',
+              displayName: 'GPT-6.1 Sol',
+              supportedReasoningEfforts: [{ effort: 'high', description: 'High' }],
+              defaultReasoningEffort: 'high',
+            },
+          ],
           openBrowser: (url) => {
             browserUrl = url;
             return Promise.resolve();
@@ -310,6 +318,8 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
         prompt:
           '## AI Feedback\n\n### Global feedback\n\nMake the language professional.\n\n### Current Markdown\n\n# Edited draft',
         mode: 'feedback',
+        sendFeedbackToSubagent: true,
+        feedbackModel: { model: 'gpt-6.1-sol', reasoningEffort: 'high' },
       }),
     );
 
@@ -318,6 +328,9 @@ describe('Codex UserPromptSubmit 훅 어댑터', () => {
     expect(result.hookSpecificOutput?.additionalContext).toContain('# Edited draft');
     expect(result.hookSpecificOutput?.additionalContext).toContain(
       'Return the complete updated Markdown only',
+    );
+    expect(result.hookSpecificOutput?.additionalContext).toContain(
+      'Spawn the subagent with model gpt-6.1-sol and reasoning effort high.',
     );
     expect(result.hookSpecificOutput?.additionalContext).toContain(
       'Do not call ExitPlanMode for this feedback submission',
