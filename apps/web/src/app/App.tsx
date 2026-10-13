@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Settings } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Download, Settings } from 'lucide-react';
+import { saveAs } from 'file-saver';
 import { useBridgeSession } from '../features/session/hooks/useBridgeSession.js';
 import { PromptWorkspace } from '../features/session/components/PromptWorkspace.js';
 import { FeedbackSettingsDialog } from './components/FeedbackSettingsDialog.js';
@@ -11,6 +12,14 @@ export function App(): React.JSX.Element {
   const bridgeSession = useBridgeSession();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sendFeedbackToSubagent, setSendFeedbackToSubagent] = useState(readSubagentSetting);
+  const getMarkdownForDownloadRef = useRef(() => bridgeSession.initialMarkdown ?? '');
+
+  function downloadMarkdown(): void {
+    const blob = new Blob([getMarkdownForDownloadRef.current()], {
+      type: 'text/markdown;charset=utf-8',
+    });
+    saveAs(blob, `${crypto.randomUUID()}.md`);
+  }
 
   function updateSubagentSetting(enabled: boolean): void {
     setSendFeedbackToSubagent(enabled);
@@ -24,14 +33,24 @@ export function App(): React.JSX.Element {
   return (
     <main className="shell">
       <header className="app-header">
-        <button
-          type="button"
-          className="settings-trigger"
-          aria-label="Settings"
-          onClick={() => setSettingsOpen(true)}
-        >
-          <Settings size={20} strokeWidth={1.8} aria-hidden="true" />
-        </button>
+        <div className="app-header-controls">
+          <button
+            type="button"
+            className="settings-trigger"
+            aria-label="Settings"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings size={20} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="settings-trigger"
+            aria-label="Download Markdown"
+            onClick={downloadMarkdown}
+          >
+            <Download size={20} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+        </div>
         <p className={`connection-status connection-status-${bridgeSession.state}`} role="status">
           <span className="status-dot" aria-hidden="true" />
           <span>
@@ -47,6 +66,7 @@ export function App(): React.JSX.Element {
       <PromptWorkspace
         bridgeSession={bridgeSession}
         sendFeedbackToSubagent={sendFeedbackToSubagent}
+        getMarkdownForDownloadRef={getMarkdownForDownloadRef}
       />
       {settingsOpen && (
         <FeedbackSettingsDialog
