@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Download, Settings } from 'lucide-react';
+import { saveAs } from 'file-saver';
 import { useBridgeSession } from '../features/session/hooks/useBridgeSession.js';
 import { PromptWorkspace } from '../features/session/components/PromptWorkspace.js';
 import { FeedbackSettingsDialog } from './components/FeedbackSettingsDialog.js';
@@ -15,15 +16,7 @@ export function App(): React.JSX.Element {
 
   function downloadMarkdown(): void {
     const blob = new Blob([markdownForDownload.current], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${crypto.randomUUID()}.md`;
-    anchor.hidden = true;
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    saveAs(blob, `${crypto.randomUUID()}.md`);
   }
 
   function updateSubagentSetting(enabled: boolean): void {
