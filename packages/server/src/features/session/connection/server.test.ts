@@ -14,10 +14,20 @@ import {
 afterEach(closeTestSockets);
 
 describe('서버 세션 연결', () => {
+  const feedbackModelCatalog = [
+    {
+      model: 'gpt-6.1-sol',
+      displayName: 'GPT-6.1 Sol',
+      supportedReasoningEfforts: [{ effort: 'high', description: 'High' }],
+      defaultReasoningEffort: 'high',
+    },
+  ];
+
   it('인증된 준비 메시지에 초기 Markdown과 feedback 상태를 포함한다', async () => {
     const server = await startLocalBridgeServer({
       initialMarkdown: '# 초기 문서',
       feedbackLoop: true,
+      feedbackModelCatalog,
       onPrompt: async () => undefined,
     });
     const session = server.createSession();
@@ -29,7 +39,171 @@ describe('서버 세션 연결', () => {
         type: 'session.ready',
         initialMarkdown: '# 초기 문서',
         feedbackLoop: true,
+        feedbackModelCatalog,
       });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('feedback model 카탈로그를 비동기로 불러와 연결별로 재사용한다', async () => {
+    let loadCount = 0;
+    const server = await startLocalBridgeServer({
+      loadFeedbackModelCatalog: async () => {
+        loadCount += 1;
+        return feedbackModelCatalog;
+      },
+      onPrompt: async () => undefined,
+    });
+    const session = server.createSession();
+
+    try {
+      const { socket } = await authenticate(server, session.token);
+
+      for (let request = 0; request < 2; request += 1) {
+        const result = nextMessage(socket);
+        socket.send(JSON.stringify({ type: 'feedback-model.catalog.request' }));
+
+        await expect(result).resolves.toMatchObject({
+          type: 'feedback-model.catalog.result',
+          catalog: feedbackModelCatalog,
+        });
+      }
+
+      expect(loadCount).toBe(1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('feedback model 카탈로그를 불러오지 못하면 빈 목록을 반환한다', async () => {
+    const server = await startLocalBridgeServer({
+      loadFeedbackModelCatalog: async () => {
+        throw new Error('Codex model catalog is unavailable.');
+      },
+      onPrompt: async () => undefined,
+    });
+    const session = server.createSession();
+
+    try {
+      const { socket } = await authenticate(server, session.token);
+      const result = nextMessage(socket);
+      socket.send(JSON.stringify({ type: 'feedback-model.catalog.request' }));
+
+      await expect(result).resolves.toMatchObject({
+        type: 'feedback-model.catalog.result',
+        catalog: [],
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('feedback loop 연결에서는 feedback model 카탈로그 요청을 무시한다', async () => {
+    const server = await startLocalBridgeServer({
+      feedbackLoop: true,
+      loadFeedbackModelCatalog: async () => feedbackModelCatalog,
+      onPrompt: async () => undefined,
+    });
+    const session = server.createSession();
+
+    try {
+      const { socket } = await authenticate(server, session.token);
+      const result = nextMessage(socket, 100);
+      socket.send(JSON.stringify({ type: 'feedback-model.catalog.request' }));
+
+      await expect(result).rejects.toThrow('WebSocket message timed out.');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('지원하지 않는 feedback model 선택을 거부한다', async () => {
+    const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
+    const session = server.createSession();
+
+    try {
+      const { socket } = await authenticate(server, session.token);
+      socket.send(
+        JSON.stringify({
+          type: 'prompt.submit',
+          submissionId: randomUUID(),
+          prompt: 'Feedback',
+          sendFeedbackToSubagent: true,
+          feedbackModel: { model: 'unknown-model', reasoningEffort: 'high' },
+        }),
+      );
+
+      expect(await nextMessage(socket)).toMatchObject({
+        type: 'session.error',
+        code: 'invalid_message',
+        message: 'The selected feedback model is not supported.',
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('비활성 feedback subagent에는 명시된 feedback model을 보내지 않는다', async () => {
+    let receivedFeedbackModel: unknown;
+    const server = await startLocalBridgeServer({
+      onPrompt: async (_prompt, context) => {
+        receivedFeedbackModel = context.feedbackModel;
+      },
+    });
+    const session = server.createSession();
+
+    try {
+      const { socket } = await authenticate(server, session.token);
+      const result = nextMessage(socket);
+      socket.send(
+        JSON.stringify({
+          type: 'prompt.submit',
+          submissionId: randomUUID(),
+          prompt: 'Feedback',
+          sendFeedbackToSubagent: false,
+          feedbackModel: { model: 'unknown-model', reasoningEffort: 'high' },
+        }),
+      );
+
+      await expect(result).resolves.toMatchObject({
+        type: 'prompt.result',
+        status: 'accepted',
+      });
+      expect(receivedFeedbackModel).toBeUndefined();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('지원되는 feedback model 선택을 prompt adapter에 전달한다', async () => {
+    let receivedFeedbackModel: unknown;
+    const server = await startLocalBridgeServer({
+      feedbackModelCatalog,
+      onPrompt: async (_prompt, context) => {
+        receivedFeedbackModel = context.feedbackModel;
+      },
+    });
+    const session = server.createSession();
+
+    try {
+      const { socket } = await authenticate(server, session.token);
+      const result = nextMessage(socket);
+      socket.send(
+        JSON.stringify({
+          type: 'prompt.submit',
+          submissionId: randomUUID(),
+          prompt: 'Feedback',
+          sendFeedbackToSubagent: true,
+          feedbackModel: { model: 'gpt-6.1-sol', reasoningEffort: 'high' },
+        }),
+      );
+
+      await expect(result).resolves.toMatchObject({
+        type: 'prompt.result',
+        status: 'accepted',
+      });
+      expect(receivedFeedbackModel).toEqual({ model: 'gpt-6.1-sol', reasoningEffort: 'high' });
     } finally {
       await server.close();
     }
@@ -203,7 +377,7 @@ describe('서버 세션 연결', () => {
 
   it('세션 TTL이 지나면 연결을 종료한다', async () => {
     const server = await startLocalBridgeServer({
-      ttlMs: 20,
+      ttlMs: 500,
       onPrompt: async () => undefined,
     });
     const session = server.createSession();
@@ -211,7 +385,7 @@ describe('서버 세션 연결', () => {
     try {
       const { socket } = await authenticate(server, session.token);
 
-      expect(await nextMessage(socket, 500)).toMatchObject({
+      expect(await nextMessage(socket, 1_500)).toMatchObject({
         type: 'session.error',
         code: 'session_expired',
       });
