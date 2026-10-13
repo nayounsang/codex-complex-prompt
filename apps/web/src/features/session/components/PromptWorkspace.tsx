@@ -21,13 +21,13 @@ import { usePromptWorkspaceAttachments } from '../hooks/usePromptWorkspaceAttach
 interface PromptWorkspaceProps {
   readonly bridgeSession: BridgeSession;
   readonly sendFeedbackToSubagent: boolean;
-  readonly markdownForDownload: RefObject<string>;
+  readonly markdownForDownloadRef: RefObject<string>;
 }
 
 export function PromptWorkspace({
   bridgeSession,
   sendFeedbackToSubagent,
-  markdownForDownload,
+  markdownForDownloadRef,
 }: PromptWorkspaceProps): React.JSX.Element {
   const [markdownOverride, setMarkdownOverride] = useState<string | null>(null);
   const [mode, setMode] = useState<'edit' | 'feedback'>('edit');
@@ -39,14 +39,14 @@ export function PromptWorkspace({
   const { feedbackLoop, submit } = bridgeSession;
   const markdown = markdownOverride ?? bridgeSession.initialMarkdown ?? '';
   useLayoutEffect(() => {
-    markdownForDownload.current = markdown;
-  }, [markdown, markdownForDownload]);
+    markdownForDownloadRef.current = markdown;
+  }, [markdown, markdownForDownloadRef]);
   const updateMarkdownOverride = useCallback(
     (nextMarkdown: string): void => {
       setMarkdownOverride(nextMarkdown);
-      markdownForDownload.current = nextMarkdown;
+      markdownForDownloadRef.current = nextMarkdown;
     },
-    [markdownForDownload],
+    [markdownForDownloadRef],
   );
   const feedback = useFeedbackAnnotations();
   const feedbackSubmission = useFeedbackSubmission({
