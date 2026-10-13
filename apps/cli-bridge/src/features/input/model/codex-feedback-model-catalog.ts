@@ -1,5 +1,5 @@
-import { spawn } from 'node:child_process';
-import type { ChildProcess } from 'node:child_process';
+import { createInterface } from 'node:readline';
+import { execa } from 'execa';
 import { z } from 'zod';
 
 import type { FeedbackModelCatalogEntry } from '@codex-complex-prompt/protocol';
@@ -34,104 +34,101 @@ const CodexModelListResponseSchema = z.object({
 
 type CodexModelListResponse = z.infer<typeof CodexModelListResponseSchema>;
 
-export function loadCodexFeedbackModelCatalog(): Promise<readonly FeedbackModelCatalogEntry[]> {
-  return new Promise((resolve) => {
-    const command = process.platform === 'win32' ? 'codex.exe' : 'codex';
-    let child: ChildProcess;
-    try {
-      child = spawn(command, ['app-server', '--listen', 'stdio://'], {
-        stdio: ['pipe', 'pipe', 'ignore'],
-      });
-    } catch {
-      resolve([]);
-      return;
-    }
-
+export async function loadCodexFeedbackModelCatalog(): Promise<
+  readonly FeedbackModelCatalogEntry[]
+> {
+  const command = process.platform === 'win32' ? 'codex.exe' : 'codex';
+  const subprocess = execa(command, ['app-server', '--listen', 'stdio://'], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'ignore',
+    timeout: MODEL_LIST_TIMEOUT_MS,
+    reject: false,
+  });
+  const lines = createInterface({ input: subprocess.stdout, crlfDelay: Infinity });
+  try {
     const entries: FeedbackModelCatalogEntry[] = [];
-    let buffer = '';
     let requestId = 1;
     let cursor: string | null = null;
     let initialized = false;
-    let finished = false;
-    const timeout = setTimeout(() => finish([]), MODEL_LIST_TIMEOUT_MS);
 
-    child.stdout?.setEncoding('utf8');
-    child.stdout?.on('data', (chunk: string) => {
-      buffer += chunk;
-      let newlineIndex = buffer.indexOf('\n');
-      while (newlineIndex >= 0) {
-        const line = buffer.slice(0, newlineIndex).trim();
-        buffer = buffer.slice(newlineIndex + 1);
-        if (line !== '') handleMessage(line);
-        newlineIndex = buffer.indexOf('\n');
+    return await new Promise((resolve) => {
+      let finished = false;
+
+      function finish(result: readonly FeedbackModelCatalogEntry[]): void {
+        if (finished) return;
+        finished = true;
+        lines.close();
+        subprocess.kill();
+        resolve(result);
       }
-    });
-    child.once('error', () => finish([]));
-    child.once('close', () => finish(entries));
 
-    function finish(result: readonly FeedbackModelCatalogEntry[]): void {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timeout);
-      child.kill();
-      resolve(result);
-    }
-
-    function send(message: unknown): void {
-      child.stdin?.write(`${JSON.stringify(message)}\n`);
-    }
-
-    function handleMessage(line: string): void {
-      let message: unknown;
-      try {
-        message = JSON.parse(line) as unknown;
-      } catch {
-        return;
+      function send(message: unknown): void {
+        subprocess.stdin.write(`${JSON.stringify(message)}\n`);
       }
-      if (typeof message !== 'object' || message === null || !('id' in message)) return;
-      const response = message as { id: unknown; error?: unknown; result?: unknown };
-      if (response.id === 1 && !initialized) {
-        if (response.error !== undefined) {
-          finish([]);
+
+      function handleMessage(line: string): void {
+        if (finished || line.trim() === '') return;
+        let message: unknown;
+        try {
+          message = JSON.parse(line) as unknown;
+        } catch {
           return;
         }
-        initialized = true;
-        send({ method: 'initialized' });
-        requestModelPage();
-        return;
+        if (typeof message !== 'object' || message === null || !('id' in message)) return;
+        const response = message as { id: unknown; error?: unknown; result?: unknown };
+        if (response.id === 1 && !initialized) {
+          if (response.error !== undefined) {
+            finish([]);
+            return;
+          }
+          initialized = true;
+          send({ method: 'initialized' });
+          requestModelPage();
+          return;
+        }
+        if (response.id !== requestId || response.error !== undefined) {
+          if (response.id === requestId) finish(entries);
+          return;
+        }
+        const page = parseModelPage(response.result);
+        if (page === undefined) {
+          finish(entries);
+          return;
+        }
+        entries.push(...page.entries);
+        cursor = page.nextCursor;
+        if (cursor === null) finish(entries);
+        else requestModelPage();
       }
-      if (response.id !== requestId || response.error !== undefined) {
-        if (response.id === requestId) finish(entries);
-        return;
-      }
-      const page = parseModelPage(response.result);
-      if (page === undefined) {
-        finish(entries);
-        return;
-      }
-      entries.push(...page.entries);
-      cursor = page.nextCursor;
-      if (cursor === null) finish(entries);
-      else requestModelPage();
-    }
 
-    function requestModelPage(): void {
-      requestId += 1;
+      function requestModelPage(): void {
+        requestId += 1;
+        send({
+          id: requestId,
+          method: 'model/list',
+          params: { limit: MODEL_LIST_PAGE_SIZE, cursor, includeHidden: false },
+        });
+      }
+
+      lines.on('line', handleMessage);
+      void subprocess.then(
+        ({ timedOut }) => finish(timedOut ? [] : entries),
+        () => finish([]),
+      );
       send({
-        id: requestId,
-        method: 'model/list',
-        params: { limit: MODEL_LIST_PAGE_SIZE, cursor, includeHidden: false },
+        id: 1,
+        method: 'initialize',
+        params: {
+          clientInfo: { name: 'codex-complex-prompt', version: '0.1.0' },
+        },
       });
-    }
-
-    send({
-      id: 1,
-      method: 'initialize',
-      params: {
-        clientInfo: { name: 'codex-complex-prompt', version: '0.1.0' },
-      },
     });
-  });
+  } catch {
+    lines.close();
+    subprocess.kill();
+    return [];
+  }
 }
 
 function parseModelPage(
