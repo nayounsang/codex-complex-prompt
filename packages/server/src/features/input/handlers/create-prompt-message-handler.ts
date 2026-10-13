@@ -35,6 +35,9 @@ export function createPromptMessageHandler(
           submissionId: submission.submissionId,
           mode: submission.mode ?? 'edit',
           sendFeedbackToSubagent: submission.sendFeedbackToSubagent ?? false,
+          ...(submission.feedbackModel === undefined
+            ? {}
+            : { feedbackModel: submission.feedbackModel }),
         }),
         promptTimeoutMs,
       );

@@ -1,6 +1,7 @@
 import {
   ClientMessageSchema,
   encodeServerMessage,
+  isFeedbackModelSupported,
   type PromptTemplate,
   type ServerMessage,
 } from '@codex-complex-prompt/protocol';
@@ -22,6 +23,7 @@ export interface BridgeConnectionOptions {
   readonly handshakeTimeoutMs: number;
   readonly initialMarkdown: string | undefined;
   readonly feedbackLoop: boolean;
+  readonly feedbackModelCatalog: LocalBridgeServerOptions['feedbackModelCatalog'];
   readonly templateStore: TemplateStore | undefined;
   readonly templatesError: string | undefined;
   readonly attachmentTokens: Map<string, string> | undefined;
@@ -37,6 +39,7 @@ export function attachConnection(options: BridgeConnectionOptions): void {
     handshakeTimeoutMs,
     initialMarkdown,
     feedbackLoop,
+    feedbackModelCatalog,
     templateStore,
     templatesError,
     attachmentTokens,
@@ -115,6 +118,7 @@ export function attachConnection(options: BridgeConnectionOptions): void {
         session,
         initialMarkdown,
         feedbackLoop,
+        feedbackModelCatalog,
         templateStore,
         templatesError,
         attachmentTokens,
@@ -145,6 +149,13 @@ export function attachConnection(options: BridgeConnectionOptions): void {
       );
       return;
     }
+    if (
+      parsed.data.feedbackModel !== undefined &&
+      !isFeedbackModelSupported(parsed.data.feedbackModel, feedbackModelCatalog ?? [])
+    ) {
+      sendError(webSocket, 'invalid_message', 'The selected feedback model is not supported.');
+      return;
+    }
     await handlePromptMessage(parsed.data);
   }
 
@@ -152,6 +163,7 @@ export function attachConnection(options: BridgeConnectionOptions): void {
     readonly session: SessionRecord;
     readonly initialMarkdown: string | undefined;
     readonly feedbackLoop: boolean;
+    readonly feedbackModelCatalog: LocalBridgeServerOptions['feedbackModelCatalog'];
     readonly templateStore: TemplateStore | undefined;
     readonly templatesError: string | undefined;
     readonly attachmentTokens: Map<string, string> | undefined;
@@ -176,6 +188,9 @@ export function attachConnection(options: BridgeConnectionOptions): void {
       expiresAt: session.expiresAt.toISOString(),
       ...(input.initialMarkdown === undefined ? {} : { initialMarkdown: input.initialMarkdown }),
       ...(input.feedbackLoop ? { feedbackLoop: input.feedbackLoop } : {}),
+      ...(input.feedbackModelCatalog === undefined
+        ? {}
+        : { feedbackModelCatalog: [...input.feedbackModelCatalog] }),
       ...(templates === undefined ? {} : { templates: [...templates] }),
       ...(resolvedTemplatesError === undefined ? {} : { templatesError: resolvedTemplatesError }),
       ...(input.attachmentTokens === undefined

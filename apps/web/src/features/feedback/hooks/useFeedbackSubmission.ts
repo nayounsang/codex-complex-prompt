@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { serializeFeedback } from '@codex-complex-prompt/core/feedback';
 import { countPromptCharacters, MAX_PROMPT_LENGTH } from '@codex-complex-prompt/protocol';
+import type { PromptSubmit } from '@codex-complex-prompt/protocol';
 
 import type { PromptResult } from '../../session/hooks/useBridgeSession.js';
 import type { FeedbackAnnotation } from '../model/feedback-types.js';
@@ -11,9 +12,13 @@ interface FeedbackSubmissionOptions {
   readonly submit: (
     prompt: string,
     mode?: 'edit' | 'feedback',
-    options?: { readonly sendFeedbackToSubagent?: boolean },
+    options?: {
+      readonly sendFeedbackToSubagent?: boolean;
+      readonly feedbackModel?: PromptSubmit['feedbackModel'];
+    },
   ) => Promise<PromptResult>;
   readonly sendFeedbackToSubagent: boolean;
+  readonly feedbackModel?: PromptSubmit['feedbackModel'];
   readonly onMarkdownChange: (markdown: string) => void;
   readonly onComplete: () => void;
 }
@@ -42,6 +47,7 @@ export function useFeedbackSubmission(options: FeedbackSubmissionOptions): Feedb
       try {
         const result = await options.submit(prompt, 'feedback', {
           sendFeedbackToSubagent: options.sendFeedbackToSubagent,
+          ...(options.feedbackModel === undefined ? {} : { feedbackModel: options.feedbackModel }),
         });
         if (result.status === 'failed') {
           setError(result.error ?? 'The feedback could not be sent.');

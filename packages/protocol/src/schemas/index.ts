@@ -1,5 +1,13 @@
 export { promptStringSchema } from './prompt.js';
 export {
+  FeedbackModelSchema,
+  FeedbackModelCatalogEntrySchema,
+  FeedbackModelCatalogSchema,
+  isFeedbackModelSupported,
+  type FeedbackModel,
+  type FeedbackModelCatalogEntry,
+} from './feedback-model.js';
+export {
   CodexUserPromptSubmitInputSchema,
   CodexStopHookInputSchema,
   type CodexUserPromptSubmitInput,

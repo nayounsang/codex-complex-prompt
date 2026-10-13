@@ -1,6 +1,9 @@
+import type { PromptSubmit } from '@codex-complex-prompt/protocol';
+
 export interface CodexSessionInputContext {
   readonly mode: 'edit' | 'feedback' | 'finish';
   readonly sendFeedbackToSubagent?: boolean;
+  readonly feedbackModel?: PromptSubmit['feedbackModel'];
 }
 
 export interface CodexSessionInput {

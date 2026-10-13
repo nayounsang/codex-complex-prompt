@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { PromptSubmitMode, ServerMessage } from '@codex-complex-prompt/protocol';
+import type { PromptSubmit, PromptSubmitMode, ServerMessage } from '@codex-complex-prompt/protocol';
 
 import { connectBridgeTransport } from '../infrastructure/bridge-transport.js';
 import { getInitialConnection, parseBridgeUrl } from './bridge-url.js';
@@ -27,6 +27,9 @@ export function useBridgeSession(): BridgeSession {
   const [closeInSeconds, setCloseInSeconds] = useState<number | null>(null);
   const [initialMarkdown, setInitialMarkdown] = useState<string | null>(null);
   const [feedbackLoop, setFeedbackLoop] = useState(false);
+  const [feedbackModelCatalog, setFeedbackModelCatalog] = useState<
+    BridgeSession['feedbackModelCatalog']
+  >([]);
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [attachmentToken, setAttachmentToken] = useState<string | null>(null);
   const [templateSnapshot, setTemplateSnapshot] = useState<BridgeSession['templateSnapshot']>(null);
@@ -89,6 +92,7 @@ export function useBridgeSession(): BridgeSession {
           setError(null);
           setInitialMarkdown(message.initialMarkdown ?? '');
           setFeedbackLoop(message.feedbackLoop ?? false);
+          setFeedbackModelCatalog(message.feedbackModelCatalog ?? []);
           setAttachmentUrl(message.attachmentUrl ?? null);
           setAttachmentToken(message.attachmentToken ?? null);
           setTemplateSnapshot({
@@ -190,7 +194,10 @@ export function useBridgeSession(): BridgeSession {
     (
       prompt: string,
       mode: PromptSubmitMode = 'edit',
-      options: { readonly sendFeedbackToSubagent?: boolean } = {},
+      options: {
+        readonly sendFeedbackToSubagent?: boolean;
+        readonly feedbackModel?: PromptSubmit['feedbackModel'];
+      } = {},
     ): Promise<PromptResult> => {
       const socket = socketRef.current;
       /* c8 ignore next -- the button disables this path when no authenticated socket exists. */
@@ -216,6 +223,9 @@ export function useBridgeSession(): BridgeSession {
             ...(mode === 'edit' ? {} : { mode }),
             ...(mode === 'feedback' && options.sendFeedbackToSubagent === true
               ? { sendFeedbackToSubagent: true }
+              : {}),
+            ...(mode === 'feedback' && options.feedbackModel !== undefined
+              ? { feedbackModel: options.feedbackModel }
               : {}),
           }),
         );
@@ -258,6 +268,7 @@ export function useBridgeSession(): BridgeSession {
     bridgeUrl,
     initialMarkdown,
     feedbackLoop,
+    feedbackModelCatalog,
     attachmentUrl,
     attachmentToken,
     templateSnapshot,

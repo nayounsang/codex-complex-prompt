@@ -1,10 +1,12 @@
 import {
   CodexUserPromptSubmitInputSchema,
   type CodexUserPromptSubmitInput,
+  type PromptSubmit,
   type PromptSubmitMode,
 } from '@codex-complex-prompt/protocol';
 
 import { resolveInitialMarkdown } from '../model/codex-prompt-input.js';
+import { loadCodexFeedbackModelCatalog } from '../model/codex-feedback-model-catalog.js';
 import { buildCodexFeedbackSubmissionInstruction } from '../model/codex-feedback-prompt-instruction.js';
 import { DEFAULT_BROWSER_WAIT_TIMEOUT_MS } from '../../../shared/hook-timeouts.js';
 import {
@@ -60,15 +62,16 @@ export async function runCodexUserPromptHook(
   if (!COMPLEX_PROMPT_INVOCATION.test(input.prompt)) return { continue: true };
 
   const invocation = input.prompt.match(COMPLEX_PROMPT_INVOCATION);
-  const initialMarkdown = await resolveInitialMarkdown(
-    input.prompt.slice(invocation?.[0].length ?? 0),
-    input.cwd,
-  );
+  const [initialMarkdown, feedbackModelCatalog] = await Promise.all([
+    resolveInitialMarkdown(input.prompt.slice(invocation?.[0].length ?? 0), input.cwd),
+    loadCodexFeedbackModelCatalog(),
+  ]);
   let resolveCommand:
     | ((submission: {
         command: string;
         mode: PromptSubmitMode;
         sendFeedbackToSubagent: boolean;
+        feedbackModel?: PromptSubmit['feedbackModel'];
       }) => void)
     | undefined;
   let resolveSubmission: (() => void) | undefined;
@@ -76,6 +79,7 @@ export async function runCodexUserPromptHook(
     command: string;
     mode: PromptSubmitMode;
     sendFeedbackToSubagent: boolean;
+    feedbackModel?: PromptSubmit['feedbackModel'];
   }>((resolve) => {
     resolveCommand = resolve;
   });
@@ -86,6 +90,7 @@ export async function runCodexUserPromptHook(
   const bridge = await startCliBridge({
     ...options.bridgeOptions,
     initialMarkdown,
+    feedbackModelCatalog,
     ...(input.cwd === undefined || input.cwd.trim() === ''
       ? { templatesError: 'The project directory was not provided by the Codex hook.' }
       : { projectDirectory: input.cwd }),
@@ -105,6 +110,7 @@ export async function runCodexUserPromptHook(
           command,
           mode,
           sendFeedbackToSubagent: context?.sendFeedbackToSubagent ?? false,
+          ...(context?.feedbackModel === undefined ? {} : { feedbackModel: context.feedbackModel }),
         });
         return submissionResult;
       },
@@ -135,7 +141,10 @@ export async function runCodexUserPromptHook(
             ? ''
             : `Project working directory for relative attachment paths: ${input.cwd}\nRead the PNG files referenced by Markdown image paths when they are relevant to the task.\n\n`) +
           (submission.mode === 'feedback'
-            ? buildCodexFeedbackSubmissionInstruction(submission.sendFeedbackToSubagent) + command
+            ? buildCodexFeedbackSubmissionInstruction(
+                submission.sendFeedbackToSubagent,
+                submission.feedbackModel,
+              ) + command
             : input.permission_mode === 'plan'
               ? 'Plan Mode is active and the user selected Submit. Treat the following command as a request to prepare an implementation plan only. Do not edit files or carry out the plan. Once the plan is ready, call ExitPlanMode to present it for user approval.\n\n' +
                 command
@@ -168,6 +177,7 @@ async function waitForCommand(
     command: string;
     mode: PromptSubmitMode;
     sendFeedbackToSubagent: boolean;
+    feedbackModel?: PromptSubmit['feedbackModel'];
   }>,
   timeoutMs: number,
   signal: AbortSignal | undefined,
@@ -175,6 +185,7 @@ async function waitForCommand(
   command: string;
   mode: PromptSubmitMode;
   sendFeedbackToSubagent: boolean;
+  feedbackModel?: PromptSubmit['feedbackModel'];
 }> {
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
     throw new Error('Browser command editor timeout must be a positive integer.');
