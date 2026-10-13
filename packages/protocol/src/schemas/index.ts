@@ -1,10 +1,13 @@
 export { promptStringSchema } from './prompt.js';
 export {
   FeedbackModelSchema,
+  FeedbackSubagentSettingsSchema,
   FeedbackModelCatalogEntrySchema,
   FeedbackModelCatalogSchema,
   isFeedbackModelSupported,
   type FeedbackModel,
+  type FeedbackSubagentSettings,
+  type FeedbackSubagentContext,
   type FeedbackModelCatalogEntry,
 } from './feedback-model.js';
 export {

@@ -3,11 +3,14 @@ import { Button } from '@base-ui/react/button';
 import { Checkbox } from '@base-ui/react/checkbox';
 import { Dialog } from '@base-ui/react/dialog';
 import Select from 'react-select';
-import { type FeedbackModelOption } from '../model/feedback-model-options.js';
+import {
+  getFeedbackModelOption,
+  type FeedbackModelOption,
+} from '../model/feedback-model-options.js';
 
 interface FeedbackSettingsDialogProps {
   readonly sendFeedbackToSubagent: boolean;
-  readonly feedbackModelOption: FeedbackModelOption;
+  readonly feedbackModelValue: string | null;
   readonly feedbackModelOptions: readonly FeedbackModelOption[];
   readonly feedbackModelCatalogLoading: boolean;
   readonly onSave: (enabled: boolean, modelOption: FeedbackModelOption) => void;
@@ -16,7 +19,7 @@ interface FeedbackSettingsDialogProps {
 
 export function FeedbackSettingsDialog({
   sendFeedbackToSubagent,
-  feedbackModelOption,
+  feedbackModelValue,
   feedbackModelOptions,
   feedbackModelCatalogLoading,
   onSave,
@@ -24,7 +27,11 @@ export function FeedbackSettingsDialog({
 }: FeedbackSettingsDialogProps): React.JSX.Element {
   const [draftSendFeedbackToSubagent, setDraftSendFeedbackToSubagent] =
     useState(sendFeedbackToSubagent);
-  const [draftFeedbackModelOption, setDraftFeedbackModelOption] = useState(feedbackModelOption);
+  const [draftFeedbackModelValue, setDraftFeedbackModelValue] = useState(feedbackModelValue);
+  const draftFeedbackModelOption = getFeedbackModelOption(
+    draftFeedbackModelValue,
+    feedbackModelOptions,
+  );
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
@@ -51,9 +58,9 @@ export function FeedbackSettingsDialog({
                 classNamePrefix="feedback-model-select"
                 options={feedbackModelOptions}
                 value={draftFeedbackModelOption}
-                isDisabled={!draftSendFeedbackToSubagent}
+                isDisabled={!draftSendFeedbackToSubagent || feedbackModelCatalogLoading}
                 onChange={(option) => {
-                  if (option !== null) setDraftFeedbackModelOption(option);
+                  if (option !== null) setDraftFeedbackModelValue(option.value);
                 }}
                 isSearchable
                 menuPlacement="auto"

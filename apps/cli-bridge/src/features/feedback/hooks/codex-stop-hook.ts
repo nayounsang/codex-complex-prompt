@@ -1,6 +1,6 @@
 import {
   CodexStopHookInputSchema,
-  type PromptSubmit,
+  type FeedbackSubagentContext,
   type PromptSubmitMode,
 } from '@codex-complex-prompt/protocol';
 
@@ -25,11 +25,9 @@ export interface RunCodexStopHookOptions {
   readonly feedbackLoopStateStore?: FeedbackLoopStateStore;
 }
 
-interface BrowserSubmission {
+interface BrowserSubmission extends FeedbackSubagentContext {
   readonly prompt: string;
   readonly mode: PromptSubmitMode;
-  readonly sendFeedbackToSubagent: boolean;
-  readonly feedbackModel?: PromptSubmit['feedbackModel'];
 }
 
 export async function runCodexStopHook(

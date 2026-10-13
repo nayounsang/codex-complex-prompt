@@ -1,8 +1,8 @@
 import type {
-  PromptSubmit,
   PromptSubmitMode,
   PromptTemplate,
   FeedbackModelCatalogEntry,
+  FeedbackSubagentSettings,
 } from '@codex-complex-prompt/protocol';
 
 export type ConnectionState =
@@ -27,10 +27,7 @@ export interface BridgeSession {
   readonly submit: (
     prompt: string,
     mode?: PromptSubmitMode,
-    options?: {
-      readonly sendFeedbackToSubagent?: boolean;
-      readonly feedbackModel?: PromptSubmit['feedbackModel'];
-    },
+    options?: FeedbackSubagentSettings,
   ) => Promise<PromptResult>;
 }
 

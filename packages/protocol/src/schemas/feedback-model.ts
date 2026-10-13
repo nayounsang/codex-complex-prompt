@@ -7,6 +7,16 @@ export const FeedbackModelSchema = z.object({
 
 export type FeedbackModel = z.infer<typeof FeedbackModelSchema>;
 
+export const FeedbackSubagentSettingsSchema = z.object({
+  sendFeedbackToSubagent: z.boolean().optional(),
+  feedbackModel: FeedbackModelSchema.optional(),
+});
+
+export type FeedbackSubagentSettings = z.infer<typeof FeedbackSubagentSettingsSchema>;
+export type FeedbackSubagentContext = Omit<FeedbackSubagentSettings, 'sendFeedbackToSubagent'> & {
+  readonly sendFeedbackToSubagent: boolean;
+};
+
 export const FeedbackModelCatalogEntrySchema = z.object({
   model: z.string().min(1),
   displayName: z.string().min(1),

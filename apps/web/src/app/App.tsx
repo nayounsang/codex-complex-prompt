@@ -71,12 +71,12 @@ export function App(): React.JSX.Element {
       {settingsOpen && (
         <FeedbackSettingsDialog
           sendFeedbackToSubagent={sendFeedbackToSubagent}
-          feedbackModelOption={feedbackModelOption}
+          feedbackModelValue={feedbackModelValue}
           feedbackModelOptions={feedbackModelOptions}
           feedbackModelCatalogLoading={bridgeSession.feedbackModelCatalogLoading}
           onSave={(enabled, modelOption) => {
             updateSubagentSetting(enabled);
-            updateFeedbackModelSetting(modelOption);
+            if (!bridgeSession.feedbackModelCatalogLoading) updateFeedbackModelSetting(modelOption);
           }}
           onClose={() => setSettingsOpen(false)}
         />

@@ -1,7 +1,7 @@
 import {
   CodexUserPromptSubmitInputSchema,
   type CodexUserPromptSubmitInput,
-  type PromptSubmit,
+  type FeedbackSubagentContext,
   type PromptSubmitMode,
 } from '@codex-complex-prompt/protocol';
 
@@ -28,6 +28,11 @@ export interface RunCodexUserPromptHookOptions {
   readonly timeoutMs?: number;
   readonly signal?: AbortSignal;
   readonly feedbackLoopStateStore?: FeedbackLoopStateStore;
+}
+
+interface BrowserPromptSubmission extends FeedbackSubagentContext {
+  readonly command: string;
+  readonly mode: PromptSubmitMode;
 }
 
 const COMPLEX_PROMPT_INVOCATION = /^\s*(?:\$|\/)complex-prompt(?:\s|$)/;
@@ -65,21 +70,9 @@ export async function runCodexUserPromptHook(
     input.prompt.slice(invocation?.[0].length ?? 0),
     input.cwd,
   );
-  let resolveCommand:
-    | ((submission: {
-        command: string;
-        mode: PromptSubmitMode;
-        sendFeedbackToSubagent: boolean;
-        feedbackModel?: PromptSubmit['feedbackModel'];
-      }) => void)
-    | undefined;
+  let resolveCommand: ((submission: BrowserPromptSubmission) => void) | undefined;
   let resolveSubmission: (() => void) | undefined;
-  const commandResult = new Promise<{
-    command: string;
-    mode: PromptSubmitMode;
-    sendFeedbackToSubagent: boolean;
-    feedbackModel?: PromptSubmit['feedbackModel'];
-  }>((resolve) => {
+  const commandResult = new Promise<BrowserPromptSubmission>((resolve) => {
     resolveCommand = resolve;
   });
   const submissionResult = new Promise<void>((resolve) => {
@@ -171,20 +164,10 @@ function continueWithMessage(systemMessage: string): CodexUserPromptHookOutput {
 }
 
 async function waitForCommand(
-  command: Promise<{
-    command: string;
-    mode: PromptSubmitMode;
-    sendFeedbackToSubagent: boolean;
-    feedbackModel?: PromptSubmit['feedbackModel'];
-  }>,
+  command: Promise<BrowserPromptSubmission>,
   timeoutMs: number,
   signal: AbortSignal | undefined,
-): Promise<{
-  command: string;
-  mode: PromptSubmitMode;
-  sendFeedbackToSubagent: boolean;
-  feedbackModel?: PromptSubmit['feedbackModel'];
-}> {
+): Promise<BrowserPromptSubmission> {
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
     throw new Error('Browser command editor timeout must be a positive integer.');
   }

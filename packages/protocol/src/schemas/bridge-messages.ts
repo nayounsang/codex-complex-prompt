@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { isPromptWithinLimit, promptLengthValidation } from '../prompt/limits.js';
 import { promptStringSchema } from './prompt.js';
-import { FeedbackModelCatalogSchema, FeedbackModelSchema } from './feedback-model.js';
+import { FeedbackModelCatalogSchema, FeedbackSubagentSettingsSchema } from './feedback-model.js';
 import { PromptTemplateSchema, TemplateRequestSchema, TemplateResultSchema } from './templates.js';
 
 export const SessionHandshakeSchema = z.object({
@@ -20,8 +20,7 @@ export const PromptSubmitSchema = z
     submissionId: z.string().uuid(),
     prompt: z.string().trim().refine(isPromptWithinLimit, promptLengthValidation),
     mode: z.enum(['edit', 'feedback', 'finish']).optional(),
-    sendFeedbackToSubagent: z.boolean().optional(),
-    feedbackModel: FeedbackModelSchema.optional(),
+    ...FeedbackSubagentSettingsSchema.shape,
   })
   .refine((submission) => submission.mode === 'finish' || submission.prompt.length > 0, {
     message: 'Prompt must not be empty.',

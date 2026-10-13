@@ -1,5 +1,5 @@
 import { FEEDBACK_EDIT_INSTRUCTION } from '@codex-complex-prompt/core/feedback';
-import type { PromptSubmit } from '@codex-complex-prompt/protocol';
+import type { FeedbackModel } from '@codex-complex-prompt/protocol';
 
 export const CODEX_FEEDBACK_SUBMISSION_INSTRUCTION =
   FEEDBACK_EDIT_INSTRUCTION +
@@ -7,7 +7,7 @@ export const CODEX_FEEDBACK_SUBMISSION_INSTRUCTION =
 
 export function buildCodexFeedbackSubmissionInstruction(
   sendFeedbackToSubagent: boolean,
-  feedbackModel?: PromptSubmit['feedbackModel'],
+  feedbackModel?: FeedbackModel,
 ): string {
   if (!sendFeedbackToSubagent && feedbackModel === undefined)
     return CODEX_FEEDBACK_SUBMISSION_INSTRUCTION;

@@ -1,18 +1,16 @@
 import type {
-  PromptSubmit,
   PromptSubmitMode,
   PromptTemplate,
   FeedbackModelCatalogEntry,
+  FeedbackSubagentContext,
 } from '@codex-complex-prompt/protocol';
 
 import type { SessionStoreOptions } from '../features/session/storage/session-store.js';
 
-export interface PromptContext {
+export interface PromptContext extends FeedbackSubagentContext {
   readonly sessionId: string;
   readonly submissionId: string;
   readonly mode: PromptSubmitMode;
-  readonly sendFeedbackToSubagent: boolean;
-  readonly feedbackModel?: PromptSubmit['feedbackModel'];
 }
 
 export type PromptAdapterResult = string | void;

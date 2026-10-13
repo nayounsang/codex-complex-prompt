@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { PromptSubmit, PromptSubmitMode, ServerMessage } from '@codex-complex-prompt/protocol';
+import type {
+  FeedbackSubagentSettings,
+  PromptSubmitMode,
+  ServerMessage,
+} from '@codex-complex-prompt/protocol';
 
 import { connectBridgeTransport } from '../infrastructure/bridge-transport.js';
 import { getInitialConnection, parseBridgeUrl } from './bridge-url.js';
@@ -208,10 +212,7 @@ export function useBridgeSession(): BridgeSession {
     (
       prompt: string,
       mode: PromptSubmitMode = 'edit',
-      options: {
-        readonly sendFeedbackToSubagent?: boolean;
-        readonly feedbackModel?: PromptSubmit['feedbackModel'];
-      } = {},
+      options: FeedbackSubagentSettings = {},
     ): Promise<PromptResult> => {
       const socket = socketRef.current;
       /* c8 ignore next -- the button disables this path when no authenticated socket exists. */
