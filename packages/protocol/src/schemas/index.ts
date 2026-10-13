@@ -23,6 +23,8 @@ export {
 export {
   SessionHandshakeSchema,
   PromptSubmitSchema,
+  FeedbackModelCatalogRequestSchema,
+  FeedbackModelCatalogResultSchema,
   ClientMessageSchema,
   SessionReadySchema,
   PromptResultSchema,
@@ -33,6 +35,8 @@ export {
   type ClientMessage,
   type ServerMessage,
   type PromptSubmit,
+  type FeedbackModelCatalogRequest,
+  type FeedbackModelCatalogResult,
   type PromptSubmitMode,
 } from './bridge-messages.js';
 export {

@@ -1,10 +1,38 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
+import { z } from 'zod';
 
 import type { FeedbackModelCatalogEntry } from '@codex-complex-prompt/protocol';
 
 const MODEL_LIST_TIMEOUT_MS = 5_000;
 const MODEL_LIST_PAGE_SIZE = 100;
+
+// Mirrors the fields used from Codex's app-server ModelListResponse schema.
+// https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/schema/json/v2/ModelListResponse.json
+const CodexModelListResponseSchema = z.object({
+  data: z.array(
+    z
+      .object({
+        id: z.string(),
+        model: z.string(),
+        displayName: z.string(),
+        description: z.string(),
+        hidden: z.boolean(),
+        isDefault: z.boolean(),
+        defaultReasoningEffort: z.string().min(1),
+        supportedReasoningEfforts: z.array(
+          z.object({
+            reasoningEffort: z.string().min(1),
+            description: z.string(),
+          }),
+        ),
+      })
+      .passthrough(),
+  ),
+  nextCursor: z.string().nullable().optional(),
+});
+
+type CodexModelListResponse = z.infer<typeof CodexModelListResponseSchema>;
 
 export function loadCodexFeedbackModelCatalog(): Promise<readonly FeedbackModelCatalogEntry[]> {
   return new Promise((resolve) => {
@@ -111,48 +139,23 @@ function parseModelPage(
 ):
   | { readonly entries: FeedbackModelCatalogEntry[]; readonly nextCursor: string | null }
   | undefined {
-  if (typeof value !== 'object' || value === null || !('data' in value)) return undefined;
-  const response = value as { data: unknown; nextCursor?: unknown };
-  if (!Array.isArray(response.data)) return undefined;
-  const entries = response.data.flatMap((value): FeedbackModelCatalogEntry[] => {
-    if (typeof value !== 'object' || value === null) return [];
-    const model = value as {
-      model?: unknown;
-      id?: unknown;
-      displayName?: unknown;
-      hidden?: unknown;
-      supportedReasoningEfforts?: unknown;
-      defaultReasoningEffort?: unknown;
-    };
-    const name = typeof model.model === 'string' ? model.model : model.id;
+  const parsed = CodexModelListResponseSchema.safeParse(value);
+  if (!parsed.success) return undefined;
+  const response: CodexModelListResponse = parsed.data;
+  const entries = response.data.flatMap((model): FeedbackModelCatalogEntry[] => {
+    const supportedReasoningEfforts = model.supportedReasoningEfforts.map((effort) => ({
+      effort: effort.reasoningEffort,
+      description: effort.description,
+    }));
     if (
-      model.hidden === true ||
-      typeof name !== 'string' ||
-      typeof model.supportedReasoningEfforts !== 'object' ||
-      model.supportedReasoningEfforts === null ||
-      !Array.isArray(model.supportedReasoningEfforts) ||
-      typeof model.defaultReasoningEffort !== 'string'
-    ) {
-      return [];
-    }
-    const supportedReasoningEfforts = model.supportedReasoningEfforts.flatMap((effortValue) => {
-      if (typeof effortValue !== 'object' || effortValue === null) return [];
-      const effort = effortValue as { reasoningEffort?: unknown; description?: unknown };
-      return typeof effort.reasoningEffort === 'string'
-        ? [
-            {
-              effort: effort.reasoningEffort,
-              description: typeof effort.description === 'string' ? effort.description : '',
-            },
-          ]
-        : [];
-    });
-    if (!supportedReasoningEfforts.some(({ effort }) => effort === model.defaultReasoningEffort))
+      model.hidden ||
+      !supportedReasoningEfforts.some(({ effort }) => effort === model.defaultReasoningEffort)
+    )
       return [];
     return [
       {
-        model: name,
-        displayName: typeof model.displayName === 'string' ? model.displayName : name,
+        model: model.model,
+        displayName: model.displayName,
         supportedReasoningEfforts,
         defaultReasoningEffort: model.defaultReasoningEffort,
       },
@@ -160,6 +163,6 @@ function parseModelPage(
   });
   return {
     entries,
-    nextCursor: typeof response.nextCursor === 'string' ? response.nextCursor : null,
+    nextCursor: response.nextCursor ?? null,
   };
 }

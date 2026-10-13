@@ -9,6 +9,7 @@ interface FeedbackSettingsDialogProps {
   readonly sendFeedbackToSubagent: boolean;
   readonly feedbackModelOption: FeedbackModelOption;
   readonly feedbackModelOptions: readonly FeedbackModelOption[];
+  readonly feedbackModelCatalogLoading: boolean;
   readonly onSave: (enabled: boolean, modelOption: FeedbackModelOption) => void;
   readonly onClose: () => void;
 }
@@ -17,6 +18,7 @@ export function FeedbackSettingsDialog({
   sendFeedbackToSubagent,
   feedbackModelOption,
   feedbackModelOptions,
+  feedbackModelCatalogLoading,
   onSave,
   onClose,
 }: FeedbackSettingsDialogProps): React.JSX.Element {
@@ -43,23 +45,26 @@ export function FeedbackSettingsDialog({
               <span>Send feedback to subagent</span>
             </label>
             <label className="feedback-model-field" htmlFor="feedback-model-select">
-              <span>Feedback Model</span>
+              <span>Sub Agent model</span>
               <Select<FeedbackModelOption, false>
                 inputId="feedback-model-select"
                 classNamePrefix="feedback-model-select"
                 options={feedbackModelOptions}
                 value={draftFeedbackModelOption}
+                isDisabled={!draftSendFeedbackToSubagent}
                 onChange={(option) => {
                   if (option !== null) setDraftFeedbackModelOption(option);
                 }}
                 isSearchable
                 menuPlacement="auto"
               />
-              {feedbackModelOptions.length === 1 && (
+              {feedbackModelCatalogLoading ? (
+                <span className="settings-field-hint">Loading model choices from Codex…</span>
+              ) : feedbackModelOptions.length === 1 ? (
                 <span className="settings-field-hint">
                   Model choices are unavailable from the current Codex runtime.
                 </span>
-              )}
+              ) : null}
             </label>
             <div className="dialog-actions">
               <Button type="button" className="button-secondary" onClick={onClose}>

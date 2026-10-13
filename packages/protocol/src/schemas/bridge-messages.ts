@@ -10,6 +10,10 @@ export const SessionHandshakeSchema = z.object({
   token: z.string().min(32).max(256),
 });
 
+export const FeedbackModelCatalogRequestSchema = z.object({
+  type: z.literal('feedback-model.catalog.request'),
+});
+
 export const PromptSubmitSchema = z
   .object({
     type: z.literal('prompt.submit'),
@@ -26,6 +30,7 @@ export const PromptSubmitSchema = z
 
 export const ClientMessageSchema = z.union([
   SessionHandshakeSchema,
+  FeedbackModelCatalogRequestSchema,
   PromptSubmitSchema,
   TemplateRequestSchema,
 ]);
@@ -51,6 +56,11 @@ export const PromptResultSchema = z.object({
   prompt: promptStringSchema().optional(),
 });
 
+export const FeedbackModelCatalogResultSchema = z.object({
+  type: z.literal('feedback-model.catalog.result'),
+  catalog: FeedbackModelCatalogSchema,
+});
+
 export const ProtocolErrorSchema = z.object({
   type: z.literal('session.error'),
   code: z.enum([
@@ -65,6 +75,7 @@ export const ProtocolErrorSchema = z.object({
 
 export const ServerMessageSchema = z.discriminatedUnion('type', [
   SessionReadySchema,
+  FeedbackModelCatalogResultSchema,
   PromptResultSchema,
   TemplateResultSchema,
   ProtocolErrorSchema,
@@ -73,6 +84,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 export type PromptSubmit = z.infer<typeof PromptSubmitSchema>;
+export type FeedbackModelCatalogRequest = z.infer<typeof FeedbackModelCatalogRequestSchema>;
+export type FeedbackModelCatalogResult = z.infer<typeof FeedbackModelCatalogResultSchema>;
 export type PromptSubmitMode = NonNullable<PromptSubmit['mode']>;
 
 export function parseClientMessage(input: unknown): ClientMessage {

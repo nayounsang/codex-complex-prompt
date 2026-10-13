@@ -30,6 +30,7 @@ export function useBridgeSession(): BridgeSession {
   const [feedbackModelCatalog, setFeedbackModelCatalog] = useState<
     BridgeSession['feedbackModelCatalog']
   >([]);
+  const [feedbackModelCatalogLoading, setFeedbackModelCatalogLoading] = useState(false);
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [attachmentToken, setAttachmentToken] = useState<string | null>(null);
   const [templateSnapshot, setTemplateSnapshot] = useState<BridgeSession['templateSnapshot']>(null);
@@ -93,12 +94,25 @@ export function useBridgeSession(): BridgeSession {
           setInitialMarkdown(message.initialMarkdown ?? '');
           setFeedbackLoop(message.feedbackLoop ?? false);
           setFeedbackModelCatalog(message.feedbackModelCatalog ?? []);
+          const shouldLoadFeedbackModelCatalog =
+            !message.feedbackLoop && message.feedbackModelCatalog === undefined;
+          setFeedbackModelCatalogLoading(shouldLoadFeedbackModelCatalog);
+          if (shouldLoadFeedbackModelCatalog) {
+            try {
+              connection.send(JSON.stringify({ type: 'feedback-model.catalog.request' }));
+            } catch {
+              setFeedbackModelCatalogLoading(false);
+            }
+          }
           setAttachmentUrl(message.attachmentUrl ?? null);
           setAttachmentToken(message.attachmentToken ?? null);
           setTemplateSnapshot({
             templates: message.templates ?? [],
             error: message.templatesError ?? null,
           });
+        } else if (message.type === 'feedback-model.catalog.result') {
+          setFeedbackModelCatalog(message.catalog);
+          setFeedbackModelCatalogLoading(false);
         } else if (message.type === 'template.result') {
           const result: TemplateResult = {
             status: message.status,
@@ -224,7 +238,9 @@ export function useBridgeSession(): BridgeSession {
             ...(mode === 'feedback' && options.sendFeedbackToSubagent === true
               ? { sendFeedbackToSubagent: true }
               : {}),
-            ...(mode === 'feedback' && options.feedbackModel !== undefined
+            ...(mode === 'feedback' &&
+            options.sendFeedbackToSubagent === true &&
+            options.feedbackModel !== undefined
               ? { feedbackModel: options.feedbackModel }
               : {}),
           }),
@@ -269,6 +285,7 @@ export function useBridgeSession(): BridgeSession {
     initialMarkdown,
     feedbackLoop,
     feedbackModelCatalog,
+    feedbackModelCatalogLoading,
     attachmentUrl,
     attachmentToken,
     templateSnapshot,

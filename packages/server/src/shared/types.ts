@@ -73,6 +73,7 @@ export interface LocalBridgeServerOptions extends SessionStoreOptions {
   readonly initialMarkdown?: string;
   readonly feedbackLoop?: boolean;
   readonly feedbackModelCatalog?: readonly FeedbackModelCatalogEntry[];
+  readonly loadFeedbackModelCatalog?: () => Promise<readonly FeedbackModelCatalogEntry[]>;
   readonly templateStore?: TemplateStore;
   readonly templatesError?: string;
   readonly attachmentStore?: AttachmentStore;

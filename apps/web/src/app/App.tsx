@@ -66,13 +66,14 @@ export function App(): React.JSX.Element {
       <PromptWorkspace
         bridgeSession={bridgeSession}
         sendFeedbackToSubagent={sendFeedbackToSubagent}
-        feedbackModel={getFeedbackModel(feedbackModelOption)}
+        feedbackModel={sendFeedbackToSubagent ? getFeedbackModel(feedbackModelOption) : undefined}
       />
       {settingsOpen && (
         <FeedbackSettingsDialog
           sendFeedbackToSubagent={sendFeedbackToSubagent}
           feedbackModelOption={feedbackModelOption}
           feedbackModelOptions={feedbackModelOptions}
+          feedbackModelCatalogLoading={bridgeSession.feedbackModelCatalogLoading}
           onSave={(enabled, modelOption) => {
             updateSubagentSetting(enabled);
             updateFeedbackModelSetting(modelOption);

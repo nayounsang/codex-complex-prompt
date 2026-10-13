@@ -12,6 +12,7 @@ import {
   type CodexSessionInputContext,
 } from './features/input/adapters/codex-session-input.js';
 import type { FeedbackModelCatalogEntry } from '@codex-complex-prompt/protocol';
+import { loadCodexFeedbackModelCatalog } from './features/input/model/codex-feedback-model-catalog.js';
 import { createProjectAttachmentStore } from './features/attachments/project-attachments.js';
 import { createProjectTemplateStore } from './features/templates/storage/project-templates.js';
 import { DEFAULT_BRIDGE_SESSION_TTL_MS } from './shared/hook-timeouts.js';
@@ -62,6 +63,7 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
     ...(options.feedbackModelCatalog === undefined
       ? {}
       : { feedbackModelCatalog: options.feedbackModelCatalog }),
+    loadFeedbackModelCatalog: loadCodexFeedbackModelCatalog,
     ...(templateStore === undefined ? {} : { templateStore }),
     ...(attachmentStore === undefined ? {} : { attachmentStore }),
     ...(options.templatesError === undefined ? {} : { templatesError: options.templatesError }),

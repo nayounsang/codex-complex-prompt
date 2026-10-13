@@ -16,6 +16,7 @@ export interface BridgeSession {
   readonly initialMarkdown: string | null;
   readonly feedbackLoop: boolean;
   readonly feedbackModelCatalog: readonly FeedbackModelCatalogEntry[];
+  readonly feedbackModelCatalogLoading: boolean;
   readonly attachmentUrl: string | null;
   readonly attachmentToken: string | null;
   readonly templateSnapshot: {

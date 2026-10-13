@@ -47,7 +47,9 @@ export function useFeedbackSubmission(options: FeedbackSubmissionOptions): Feedb
       try {
         const result = await options.submit(prompt, 'feedback', {
           sendFeedbackToSubagent: options.sendFeedbackToSubagent,
-          ...(options.feedbackModel === undefined ? {} : { feedbackModel: options.feedbackModel }),
+          ...(options.sendFeedbackToSubagent && options.feedbackModel !== undefined
+            ? { feedbackModel: options.feedbackModel }
+            : {}),
         });
         if (result.status === 'failed') {
           setError(result.error ?? 'The feedback could not be sent.');

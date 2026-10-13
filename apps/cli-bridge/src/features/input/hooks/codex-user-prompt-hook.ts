@@ -6,7 +6,6 @@ import {
 } from '@codex-complex-prompt/protocol';
 
 import { resolveInitialMarkdown } from '../model/codex-prompt-input.js';
-import { loadCodexFeedbackModelCatalog } from '../model/codex-feedback-model-catalog.js';
 import { buildCodexFeedbackSubmissionInstruction } from '../model/codex-feedback-prompt-instruction.js';
 import { DEFAULT_BROWSER_WAIT_TIMEOUT_MS } from '../../../shared/hook-timeouts.js';
 import {
@@ -62,10 +61,10 @@ export async function runCodexUserPromptHook(
   if (!COMPLEX_PROMPT_INVOCATION.test(input.prompt)) return { continue: true };
 
   const invocation = input.prompt.match(COMPLEX_PROMPT_INVOCATION);
-  const [initialMarkdown, feedbackModelCatalog] = await Promise.all([
-    resolveInitialMarkdown(input.prompt.slice(invocation?.[0].length ?? 0), input.cwd),
-    loadCodexFeedbackModelCatalog(),
-  ]);
+  const initialMarkdown = await resolveInitialMarkdown(
+    input.prompt.slice(invocation?.[0].length ?? 0),
+    input.cwd,
+  );
   let resolveCommand:
     | ((submission: {
         command: string;
@@ -90,7 +89,6 @@ export async function runCodexUserPromptHook(
   const bridge = await startCliBridge({
     ...options.bridgeOptions,
     initialMarkdown,
-    feedbackModelCatalog,
     ...(input.cwd === undefined || input.cwd.trim() === ''
       ? { templatesError: 'The project directory was not provided by the Codex hook.' }
       : { projectDirectory: input.cwd }),
