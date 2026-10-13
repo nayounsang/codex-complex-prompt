@@ -21,13 +21,13 @@ import { usePromptWorkspaceAttachments } from '../hooks/usePromptWorkspaceAttach
 interface PromptWorkspaceProps {
   readonly bridgeSession: BridgeSession;
   readonly sendFeedbackToSubagent: boolean;
-  readonly markdownForDownloadRef: RefObject<string>;
+  readonly getMarkdownForDownloadRef: RefObject<() => string>;
 }
 
 export function PromptWorkspace({
   bridgeSession,
   sendFeedbackToSubagent,
-  markdownForDownloadRef,
+  getMarkdownForDownloadRef,
 }: PromptWorkspaceProps): React.JSX.Element {
   const [markdownOverride, setMarkdownOverride] = useState<string | null>(null);
   const [mode, setMode] = useState<'edit' | 'feedback'>('edit');
@@ -38,16 +38,16 @@ export function PromptWorkspace({
   const editorRef = useRef<MarkdownEditorHandle>(null);
   const { feedbackLoop, submit } = bridgeSession;
   const markdown = markdownOverride ?? bridgeSession.initialMarkdown ?? '';
-  useLayoutEffect(() => {
-    markdownForDownloadRef.current = markdown;
-  }, [markdown, markdownForDownloadRef]);
-  const updateMarkdownOverride = useCallback(
-    (nextMarkdown: string): void => {
-      setMarkdownOverride(nextMarkdown);
-      markdownForDownloadRef.current = nextMarkdown;
-    },
-    [markdownForDownloadRef],
+  const getMarkdownForDownload = useCallback(
+    (): string => editorRef.current?.getMarkdown() ?? markdown,
+    [markdown],
   );
+  useLayoutEffect(() => {
+    getMarkdownForDownloadRef.current = getMarkdownForDownload;
+  }, [getMarkdownForDownload, getMarkdownForDownloadRef]);
+  const updateMarkdownOverride = useCallback((nextMarkdown: string): void => {
+    setMarkdownOverride(nextMarkdown);
+  }, []);
   const feedback = useFeedbackAnnotations();
   const feedbackSubmission = useFeedbackSubmission({
     markdown,

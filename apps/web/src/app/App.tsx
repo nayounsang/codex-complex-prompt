@@ -12,10 +12,10 @@ export function App(): React.JSX.Element {
   const bridgeSession = useBridgeSession();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sendFeedbackToSubagent, setSendFeedbackToSubagent] = useState(readSubagentSetting);
-  const markdownForDownloadRef = useRef(bridgeSession.initialMarkdown ?? '');
+  const getMarkdownForDownloadRef = useRef(() => bridgeSession.initialMarkdown ?? '');
 
   function downloadMarkdown(): void {
-    const blob = new Blob([markdownForDownloadRef.current], {
+    const blob = new Blob([getMarkdownForDownloadRef.current()], {
       type: 'text/markdown;charset=utf-8',
     });
     saveAs(blob, `${crypto.randomUUID()}.md`);
@@ -66,7 +66,7 @@ export function App(): React.JSX.Element {
       <PromptWorkspace
         bridgeSession={bridgeSession}
         sendFeedbackToSubagent={sendFeedbackToSubagent}
-        markdownForDownloadRef={markdownForDownloadRef}
+        getMarkdownForDownloadRef={getMarkdownForDownloadRef}
       />
       {settingsOpen && (
         <FeedbackSettingsDialog
