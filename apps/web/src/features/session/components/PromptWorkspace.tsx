@@ -1,6 +1,6 @@
 import { type SyntheticEvent, useCallback, useRef, useState } from 'react';
 import { Button } from '@base-ui/react/button';
-import type { FeedbackModel } from '@codex-complex-prompt/protocol';
+import type { FeedbackSubagentContext } from '@codex-complex-prompt/protocol';
 import { countPromptCharacters, MAX_PROMPT_LENGTH } from '@codex-complex-prompt/protocol';
 
 import type { BridgeSession } from '../hooks/useBridgeSession.js';
@@ -12,10 +12,8 @@ import { useFeedbackSubmission } from '../../feedback/hooks/useFeedbackSubmissio
 import { useProjectTemplates } from '../../templates/hooks/useProjectTemplates.js';
 import { usePromptWorkspaceAttachments } from '../hooks/usePromptWorkspaceAttachments.js';
 
-interface PromptWorkspaceProps {
+interface PromptWorkspaceProps extends FeedbackSubagentContext {
   readonly bridgeSession: BridgeSession;
-  readonly sendFeedbackToSubagent: boolean;
-  readonly feedbackModel: FeedbackModel | undefined;
 }
 
 export function PromptWorkspace({

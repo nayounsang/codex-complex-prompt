@@ -1,12 +1,15 @@
 import { useCallback, useState } from 'react';
 import { serializeFeedback } from '@codex-complex-prompt/core/feedback';
 import { countPromptCharacters, MAX_PROMPT_LENGTH } from '@codex-complex-prompt/protocol';
-import type { FeedbackModel, FeedbackSubagentSettings } from '@codex-complex-prompt/protocol';
+import type {
+  FeedbackSubagentContext,
+  FeedbackSubagentSettings,
+} from '@codex-complex-prompt/protocol';
 
 import type { PromptResult } from '../../session/hooks/useBridgeSession.js';
 import type { FeedbackAnnotation } from '../model/feedback-types.js';
 
-interface UseFeedbackSubmissionOptions {
+interface UseFeedbackSubmissionOptions extends FeedbackSubagentContext {
   readonly markdown: string;
   readonly annotations: readonly FeedbackAnnotation[];
   readonly submit: (
@@ -14,8 +17,6 @@ interface UseFeedbackSubmissionOptions {
     mode?: 'edit' | 'feedback',
     options?: FeedbackSubagentSettings,
   ) => Promise<PromptResult>;
-  readonly sendFeedbackToSubagent: boolean;
-  readonly feedbackModel: FeedbackModel | undefined;
   readonly onMarkdownChange: (markdown: string) => void;
   readonly onComplete: () => void;
 }
