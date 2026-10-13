@@ -1,4 +1,4 @@
-import { type SyntheticEvent, useCallback, useRef, useState } from 'react';
+import { type RefObject, type SyntheticEvent, useCallback, useRef, useState } from 'react';
 import { Button } from '@base-ui/react/button';
 import type { FeedbackSubagentContext } from '@codex-complex-prompt/protocol';
 import { countPromptCharacters, MAX_PROMPT_LENGTH } from '@codex-complex-prompt/protocol';
@@ -11,15 +11,18 @@ import { useFeedbackAnnotations } from '../../feedback/hooks/useFeedbackAnnotati
 import { useFeedbackSubmission } from '../../feedback/hooks/useFeedbackSubmission.js';
 import { useProjectTemplates } from '../../templates/hooks/useProjectTemplates.js';
 import { usePromptWorkspaceAttachments } from '../hooks/usePromptWorkspaceAttachments.js';
+import { useMarkdownDownloadSource } from '../hooks/useMarkdownDownloadSource.js';
 
 interface PromptWorkspaceProps extends FeedbackSubagentContext {
   readonly bridgeSession: BridgeSession;
+  readonly getMarkdownForDownloadRef: RefObject<() => string>;
 }
 
 export function PromptWorkspace({
   bridgeSession,
   sendFeedbackToSubagent,
   feedbackModel,
+  getMarkdownForDownloadRef,
 }: PromptWorkspaceProps): React.JSX.Element {
   const [markdownOverride, setMarkdownOverride] = useState<string | null>(null);
   const [mode, setMode] = useState<'edit' | 'feedback'>('edit');
@@ -30,6 +33,7 @@ export function PromptWorkspace({
   const editorRef = useRef<MarkdownEditorHandle>(null);
   const { feedbackLoop, submit } = bridgeSession;
   const markdown = markdownOverride ?? bridgeSession.initialMarkdown ?? '';
+  useMarkdownDownloadSource({ editorRef, markdown, getMarkdownForDownloadRef });
   const updateMarkdownOverride = useCallback((nextMarkdown: string): void => {
     setMarkdownOverride(nextMarkdown);
   }, []);

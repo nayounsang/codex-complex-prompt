@@ -93,6 +93,12 @@ button:focus-visible,
   border-bottom: 1px solid #e6e5e2;
 }
 
+.app-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .app-action-bar {
   top: var(--app-header-height);
   border-bottom: 1px solid #e6e5e2;
