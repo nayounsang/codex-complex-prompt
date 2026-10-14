@@ -6,15 +6,24 @@ import type { MarkdownEditorProps } from './MarkdownEditor.js';
 
 const crepeTest = vi.hoisted(() => {
   const state: { instance: unknown } = { instance: undefined };
+  const features = { update: vi.fn((update: (current: string[]) => string[]) => update([])) };
   class MockCrepe {
     public static readonly Feature = {
       ImageBlock: 'image-block',
       Placeholder: 'placeholder',
       BlockEdit: 'block-edit',
+      Table: 'table',
     } as const;
     public readonly options: Record<string, unknown>;
     public readonly destroy = vi.fn(async () => undefined);
-    public readonly editor = { action: vi.fn() };
+    public readonly editor = {
+      action: vi.fn(),
+      use: vi.fn(),
+      config: vi.fn((configure: (ctx: object) => void) => {
+        configure({});
+        return this.editor;
+      }),
+    };
     private readOnly = false;
     private editorElement: HTMLElement | undefined;
     public constructor(options: Record<string, unknown>) {
@@ -44,10 +53,13 @@ const crepeTest = vi.hoisted(() => {
       return '';
     }
   }
-  return { state, MockCrepe };
+  return { state, features, MockCrepe };
 });
 
-vi.mock('@milkdown/crepe', () => ({ Crepe: crepeTest.MockCrepe }));
+vi.mock('@milkdown/crepe', () => ({
+  Crepe: crepeTest.MockCrepe,
+  useCrepeFeatures: () => crepeTest.features,
+}));
 
 afterEach(() => {
   cleanup();

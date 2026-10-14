@@ -1,6 +1,7 @@
 import { useEffect, type RefObject, type Dispatch, type SetStateAction } from 'react';
-import { Crepe } from '@milkdown/crepe';
+import { Crepe, useCrepeFeatures as getCrepeFeatures } from '@milkdown/crepe';
 import type { BlockEditFeatureConfig } from '@milkdown/crepe/feature/block-edit';
+import { columnResizingPlugin } from '@milkdown/kit/preset/gfm';
 
 import {
   hasMermaidRelevantMutations,
@@ -22,6 +23,7 @@ import {
 
 const crepeFeatures = {
   [Crepe.Feature.ImageBlock]: false,
+  [Crepe.Feature.Table]: false,
 };
 
 interface DrawingActions {
@@ -121,6 +123,11 @@ export function useMarkdownEditorLifecycle({
         features: crepeFeatures,
         featureConfigs,
       });
+      // Keep the slash-menu table command without loading Crepe's custom table view.
+      crepe.editor.config((ctx) => {
+        getCrepeFeatures(ctx).update((features) => [...features, Crepe.Feature.Table]);
+      });
+      crepe.editor.use(columnResizingPlugin);
       crepeRef.current = crepe;
       crepe.setReadonly(getCurrentReadOnly());
       crepe.on((listener) => {
