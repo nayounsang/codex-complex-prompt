@@ -3,27 +3,29 @@ import { Button } from '@base-ui/react/button';
 import type { FeedbackSubagentContext } from '@codex-complex-prompt/protocol';
 import { countPromptCharacters, MAX_PROMPT_LENGTH } from '@codex-complex-prompt/protocol';
 
-import type { BridgeSession } from '../hooks/useBridgeSession.js';
+import { useBridgeSessionContext } from '../hooks/bridge-session/useBridgeSessionContext.js';
+import type { BridgeSessionActions } from '../hooks/bridge-session/bridge-session-types.js';
 import type { MarkdownEditorHandle } from '../../input/components/MarkdownEditor.js';
 import { PromptSessionShell } from '../../../app/components/PromptSessionShell.js';
 import { PromptWorkspaceDialogs } from './PromptWorkspaceDialogs.js';
 import { useFeedbackAnnotations } from '../../feedback/hooks/useFeedbackAnnotations.js';
 import { useFeedbackSubmission } from '../../feedback/hooks/useFeedbackSubmission.js';
 import { useProjectTemplates } from '../../templates/hooks/useProjectTemplates.js';
-import { usePromptWorkspaceAttachments } from '../hooks/usePromptWorkspaceAttachments.js';
-import { useMarkdownDownloadSource } from '../hooks/useMarkdownDownloadSource.js';
+import { usePromptWorkspaceAttachments } from '../hooks/prompt-workspace/usePromptWorkspaceAttachments.js';
+import { useMarkdownDownloadSource } from '../hooks/prompt-workspace/useMarkdownDownloadSource.js';
 
-interface PromptWorkspaceProps extends FeedbackSubagentContext {
-  readonly bridgeSession: BridgeSession;
+interface PromptWorkspaceProps extends FeedbackSubagentContext, BridgeSessionActions {
   readonly getMarkdownForDownloadRef: RefObject<() => string>;
 }
 
 export function PromptWorkspace({
-  bridgeSession,
+  submit,
+  requestTemplateChange,
   sendFeedbackToSubagent,
   feedbackModel,
   getMarkdownForDownloadRef,
 }: PromptWorkspaceProps): React.JSX.Element {
+  const bridgeSession = useBridgeSessionContext();
   const [markdownOverride, setMarkdownOverride] = useState<string | null>(null);
   const [mode, setMode] = useState<'edit' | 'feedback'>('edit');
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export function PromptWorkspace({
   const [showEmptyFinishDialog, setShowEmptyFinishDialog] = useState(false);
   const [editorResetVersion, setEditorResetVersion] = useState(0);
   const editorRef = useRef<MarkdownEditorHandle>(null);
-  const { feedbackLoop, submit } = bridgeSession;
+  const { feedbackLoop } = bridgeSession;
   const markdown = markdownOverride ?? bridgeSession.initialMarkdown ?? '';
   useMarkdownDownloadSource({ editorRef, markdown, getMarkdownForDownloadRef });
   const updateMarkdownOverride = useCallback((nextMarkdown: string): void => {
@@ -53,7 +55,7 @@ export function PromptWorkspace({
   const sendFeedback = feedbackSubmission.sendFeedback;
   const projectTemplates = useProjectTemplates({
     snapshot: bridgeSession.templateSnapshot,
-    requestChange: bridgeSession.requestTemplateChange,
+    requestChange: requestTemplateChange,
   });
   const { attachmentUrl, attachmentToken } = bridgeSession;
   const resetEditor = useCallback((): void => {
@@ -83,9 +85,9 @@ export function PromptWorkspace({
     saveDrawing,
     waitForPendingMediaSaves,
   } = attachments;
-  const isConnected = bridgeSession.state === 'connected';
+  const isConnected = bridgeSession.connectionState === 'connected';
   const isSubmitting =
-    bridgeSession.state === 'submitting' ||
+    bridgeSession.connectionState === 'submitting' ||
     feedbackSubmission.isSubmitting ||
     attachments.isWaitingForMediaSaves;
   const withPromptAfterMediaSaves = useCallback(
@@ -261,9 +263,9 @@ export function PromptWorkspace({
         onCloseEmptyFinishDialog={() => setShowEmptyFinishDialog(false)}
         onSubmitEmptyDocument={() => {
           setShowEmptyFinishDialog(false);
-          void bridgeSession.submit('', 'finish');
+          void submit('', 'finish');
         }}
-        closeInSeconds={bridgeSession.closeInSeconds}
+        isCloseScheduled={bridgeSession.isCloseScheduled}
       />
     </>
   );

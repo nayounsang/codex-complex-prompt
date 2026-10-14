@@ -4,14 +4,14 @@ import type {
   FeedbackModelCatalogEntry,
   FeedbackSubagentSettings,
 } from '@codex-complex-prompt/protocol';
+import type { DelayedClose } from './useDelayedClose.js';
 
 export type ConnectionState =
   'connecting' | 'connected' | 'submitting' | 'success' | 'error' | 'disconnected';
 
-export interface BridgeSession {
-  readonly state: ConnectionState;
+export interface BridgeSessionState extends DelayedClose {
+  readonly connectionState: ConnectionState;
   readonly error: string | null;
-  readonly closeInSeconds: number | null;
   readonly bridgeUrl: string | null;
   readonly initialMarkdown: string | null;
   readonly feedbackLoop: boolean;
@@ -23,6 +23,9 @@ export interface BridgeSession {
     readonly templates: readonly PromptTemplate[];
     readonly error: string | null;
   } | null;
+}
+
+export interface BridgeSessionActions {
   readonly requestTemplateChange: (request: TemplateChangeRequest) => Promise<TemplateResult>;
   readonly submit: (
     prompt: string,
@@ -30,6 +33,8 @@ export interface BridgeSession {
     options?: FeedbackSubagentSettings,
   ) => Promise<PromptResult>;
 }
+
+export interface BridgeSession extends BridgeSessionState, BridgeSessionActions {}
 
 export type TemplateChangeRequest =
   | { readonly type: 'template.save'; readonly template: PromptTemplate }

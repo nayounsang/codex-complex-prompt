@@ -1,7 +1,12 @@
 import { useRef, useState } from 'react';
 import { Download, Settings } from 'lucide-react';
 import { saveAs } from 'file-saver';
-import { useBridgeSession } from '../features/session/hooks/useBridgeSession.js';
+import {
+  useBridgeSessionContext,
+  BridgeSessionContext,
+} from '../features/session/hooks/bridge-session/useBridgeSessionContext.js';
+import type { BridgeSessionActions } from '../features/session/hooks/bridge-session/bridge-session-types.js';
+import { useBridgeSessionController } from '../features/session/hooks/bridge-session/useBridgeSession.js';
 import { PromptWorkspace } from '../features/session/components/PromptWorkspace.js';
 import { FeedbackSettingsDialog } from './components/FeedbackSettingsDialog.js';
 import {
@@ -16,7 +21,19 @@ const SUBAGENT_SETTING_KEY = 'codex-complex-prompt:send-feedback-to-subagent';
 const FEEDBACK_MODEL_SETTING_KEY = 'codex-complex-prompt:feedback-model';
 
 export function App(): React.JSX.Element {
-  const bridgeSession = useBridgeSession();
+  const { submit, requestTemplateChange, ...bridgeSessionState } = useBridgeSessionController();
+
+  return (
+    <BridgeSessionContext.Provider value={bridgeSessionState}>
+      <AppContent submit={submit} requestTemplateChange={requestTemplateChange} />
+    </BridgeSessionContext.Provider>
+  );
+}
+
+type AppContentProps = BridgeSessionActions;
+
+function AppContent({ submit, requestTemplateChange }: AppContentProps): React.JSX.Element {
+  const bridgeSession = useBridgeSessionContext();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sendFeedbackToSubagent, setSendFeedbackToSubagent] = useState(readSubagentSetting);
   const feedbackModelOptions = createFeedbackModelOptions(bridgeSession.feedbackModelCatalog);
@@ -71,20 +88,25 @@ export function App(): React.JSX.Element {
             <Download size={20} strokeWidth={1.8} aria-hidden="true" />
           </button>
         </div>
-        <p className={`connection-status connection-status-${bridgeSession.state}`} role="status">
+        <p
+          className={`connection-status connection-status-${bridgeSession.connectionState}`}
+          role="status"
+        >
           <span className="status-dot" aria-hidden="true" />
           <span>
-            {bridgeSession.state === 'connecting' && 'Connecting'}
-            {bridgeSession.state === 'connected' && 'Connected'}
-            {bridgeSession.state === 'submitting' && 'Sending'}
-            {bridgeSession.state === 'success' && 'Sent'}
-            {bridgeSession.state === 'error' && (bridgeSession.error ?? 'Something went wrong')}
-            {bridgeSession.state === 'disconnected' && 'Disconnected'}
+            {bridgeSession.connectionState === 'connecting' && 'Connecting'}
+            {bridgeSession.connectionState === 'connected' && 'Connected'}
+            {bridgeSession.connectionState === 'submitting' && 'Sending'}
+            {bridgeSession.connectionState === 'success' && 'Sent'}
+            {bridgeSession.connectionState === 'error' &&
+              (bridgeSession.error ?? 'Something went wrong')}
+            {bridgeSession.connectionState === 'disconnected' && 'Disconnected'}
           </span>
         </p>
       </header>
       <PromptWorkspace
-        bridgeSession={bridgeSession}
+        submit={submit}
+        requestTemplateChange={requestTemplateChange}
         sendFeedbackToSubagent={sendFeedbackToSubagent}
         feedbackModel={sendFeedbackToSubagent ? getFeedbackModel(feedbackModelOption) : undefined}
         getMarkdownForDownloadRef={getMarkdownForDownloadRef}

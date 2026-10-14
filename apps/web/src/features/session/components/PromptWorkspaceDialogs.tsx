@@ -2,7 +2,7 @@ import { type Dispatch, type SetStateAction, lazy, Suspense } from 'react';
 import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
 
-import type { PromptDrawingData } from '../hooks/usePromptWorkspaceAttachments.js';
+import type { PromptDrawingData } from '../hooks/prompt-workspace/usePromptWorkspaceAttachments.js';
 import { SubmitFeedbackDialog } from '../../../app/components/SubmitFeedbackDialog.js';
 
 const DrawingDialog = lazy(async () => {
@@ -22,7 +22,7 @@ interface PromptWorkspaceDialogsProps {
   readonly showEmptyFinishDialog: boolean;
   readonly onCloseEmptyFinishDialog: () => void;
   readonly onSubmitEmptyDocument: () => void;
-  readonly closeInSeconds: number | null;
+  readonly isCloseScheduled: boolean;
 }
 
 export function PromptWorkspaceDialogs({
@@ -36,7 +36,7 @@ export function PromptWorkspaceDialogs({
   showEmptyFinishDialog,
   onCloseEmptyFinishDialog,
   onSubmitEmptyDocument,
-  closeInSeconds,
+  isCloseScheduled,
 }: PromptWorkspaceDialogsProps): React.JSX.Element {
   return (
     <>
@@ -88,7 +88,7 @@ export function PromptWorkspaceDialogs({
           </Dialog.Portal>
         </Dialog.Root>
       )}
-      {closeInSeconds !== null && (
+      {isCloseScheduled && (
         <Dialog.Root open modal disablePointerDismissal>
           <Dialog.Portal>
             <Dialog.Backdrop className="countdown-backdrop" />
@@ -96,9 +96,7 @@ export function PromptWorkspaceDialogs({
               <Dialog.Popup className="countdown-modal">
                 <p className="eyebrow">COMMAND SENT</p>
                 <Dialog.Title id="countdown-title">Command sent</Dialog.Title>
-                <Dialog.Description>
-                  This window will close in {closeInSeconds} seconds.
-                </Dialog.Description>
+                <Dialog.Description>This window will close in 3 seconds.</Dialog.Description>
               </Dialog.Popup>
             </Dialog.Viewport>
           </Dialog.Portal>

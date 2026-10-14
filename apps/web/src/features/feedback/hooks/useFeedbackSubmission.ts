@@ -6,7 +6,7 @@ import type {
   FeedbackSubagentSettings,
 } from '@codex-complex-prompt/protocol';
 
-import type { PromptResult } from '../../session/hooks/useBridgeSession.js';
+import type { PromptResult } from '../../session/hooks/bridge-session/bridge-session-types.js';
 import type { FeedbackAnnotation } from '../model/feedback-types.js';
 
 interface UseFeedbackSubmissionOptions extends FeedbackSubagentContext {
