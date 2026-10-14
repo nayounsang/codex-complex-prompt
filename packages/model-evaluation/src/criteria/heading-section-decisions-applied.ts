@@ -31,7 +31,7 @@ const headingSectionDecisionsApplied: EvaluationCriterion<HeadingSectionDecision
       (term) => !normalizedSection.includes(term.toLocaleLowerCase()),
     );
     const missingStatements = requiredStatements.filter(({ pattern }) => !pattern.test(section));
-    const unresolvedQuestions = mustNotContain.filter((phrase) => revised.includes(phrase));
+    const unresolvedQuestions = mustNotContain.filter((phrase) => section.includes(phrase));
     const missingPreservedText = preservedText.filter((text) => !revised.includes(text));
     const passed =
       missingTerms.length === 0 &&

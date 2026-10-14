@@ -5,23 +5,29 @@ import { headingSectionDecisionsApplied } from './heading-section-decisions-appl
 import type { CriterionContext } from '../types.js';
 
 const options = {
-  startAfterHeading: 'Delivery guarantees',
+  startAfterHeading: 'Open decisions',
   endBeforeHeading: 'Rollout checklist',
   requiredTerms: ['429', 'seven days'],
   requiredStatements: [
     {
-      description: 'HTTP 429 retry behavior is stated together',
+      description: 'HTTP 429 handling is stated directly',
       pattern:
-        /^(?![^\n]*\b(?:not|never|permanent|unsupported|disabled|non-retryable)\b)(?=[^\n]*HTTP 429)(?=[^\n]*\b(?:retry|retries|retried)\b)(?=[^\n]*\b(?:same policy|transient|exponential backoff)\b)[^\n]*$/im,
+        /^(?=[^\n]*HTTP 429)(?=[^\n]*\b(?:retry|retries|retried|permanent|transient)\b)(?![^\n]*\?\s*$)[^\n]*$/im,
     },
     {
-      description: 'the seven-day replay period is tied to failed deliveries',
+      description: 'the replay period is stated directly for failed deliveries',
       pattern:
-        /^(?![^\n]*\bnot\b[^\n]*\bavailable\b)(?=[^\n]*\b(?:failed deliveries|deliveries)\b)(?=[^\n]*(?:\b(?:keep|keeps|kept|remain|remains)\b[^\n]*\bavailable\b|\bretained\b[^\n]*\bfor (?:operator )?replay\b))(?=[^\n]*\breplay\b)(?=[^\n]*\bseven days\b)[^\n]*$/im,
+        /^(?=[^\n]*\b(?:failed deliveries|deliveries)\b)(?=[^\n]*\breplay\b)(?=[^\n]*\bseven days\b)(?![^\n]*\?\s*$)[^\n]*$/im,
     },
   ],
-  mustNotContain: ['Should HTTP 429 be retried?', 'How long should replay last?'],
-  preservedText: ['## Rollout checklist'],
+  mustNotContain: [
+    'Should destination HTTP 429 responses be retried or treated as permanent failures?',
+    'How long should failed deliveries remain available for replay?',
+  ],
+  preservedText: [
+    '## Delivery guarantees',
+    '## Rollout checklist\n\n- Keep the current worker available for rollback during the pilot.',
+  ],
 };
 
 const context = (revised: string): CriterionContext => ({
@@ -32,15 +38,30 @@ const context = (revised: string): CriterionContext => ({
   selectionIsolationSucceeded: true,
 });
 
-test('heading-section criterion accepts decisions stated with their outcomes', async () => {
+function revisedDocument(decisions: readonly string[]): string {
+  return [
+    '# Webhook Delivery Proposal',
+    '',
+    '## Delivery guarantees',
+    '- HTTP 429 responses are transient failures and follow the same retry policy as timeouts.',
+    '- Failed deliveries remain available for operator replay for seven days.',
+    '',
+    '## Open decisions',
+    ...decisions,
+    '',
+    '## Rollout checklist',
+    '',
+    '- Keep the current worker available for rollback during the pilot.',
+  ].join('\n');
+}
+
+test('heading-section criterion accepts direct decisions in the open decisions section', async () => {
   const result = await headingSectionDecisionsApplied.evaluate(
     context(
-      [
-        '## Delivery guarantees',
+      revisedDocument([
         '- HTTP 429 responses are transient failures and should be retried with exponential backoff.',
         '- Failed deliveries remain available for operator replay for seven days.',
-        '## Rollout checklist',
-      ].join('\n'),
+      ]),
     ),
     options,
   );
@@ -48,15 +69,13 @@ test('heading-section criterion accepts decisions stated with their outcomes', a
   assert.equal(result.passed, true, result.detail);
 });
 
-test('heading-section criterion accepts a direct statement that deliveries are retained for replay', async () => {
+test('heading-section criterion accepts explicit decisions without enforcing their polarity', async () => {
   const result = await headingSectionDecisionsApplied.evaluate(
     context(
-      [
-        '## Delivery guarantees',
-        '- Retry HTTP 429 responses using the same policy as timeouts.',
-        '- Failed deliveries are retained for replay for seven days.',
-        '## Rollout checklist',
-      ].join('\n'),
+      revisedDocument([
+        '- HTTP 429 responses are permanent failures and should not be retried.',
+        '- Failed deliveries are not retained for replay for seven days.',
+      ]),
     ),
     options,
   );
@@ -64,42 +83,48 @@ test('heading-section criterion accepts a direct statement that deliveries are r
   assert.equal(result.passed, true, result.detail);
 });
 
-test('heading-section criterion rejects decision terms that are not connected to their outcomes', async () => {
+test('heading-section criterion rejects terms that do not state either decision directly', async () => {
   const result = await headingSectionDecisionsApplied.evaluate(
     context(
-      [
-        '## Delivery guarantees',
-        '- HTTP 429 responses are documented.',
+      revisedDocument([
+        '- HTTP 429 is a documented status.',
         '- Retry uses exponential backoff for timeouts.',
-        '- Failed deliveries are available for operator replay.',
+        '- Failed deliveries matter.',
         '- Seven days is the monitoring window.',
-        '## Rollout checklist',
-      ].join('\n'),
+      ]),
     ),
     options,
   );
 
   assert.equal(result.passed, false);
-  assert.match(result.detail, /HTTP 429 retry behavior is stated together/);
-  assert.match(result.detail, /seven-day replay period is tied to failed deliveries/);
+  assert.match(result.detail, /HTTP 429 handling is stated directly/);
+  assert.match(result.detail, /the replay period is stated directly for failed deliveries/);
 });
 
-test('heading-section criterion rejects negated decisions even when all decision terms appear', async () => {
+test('heading-section criterion rejects deleting the questions without adding decisions', async () => {
+  const result = await headingSectionDecisionsApplied.evaluate(
+    context(revisedDocument([])),
+    options,
+  );
+
+  assert.equal(result.passed, false);
+  assert.match(result.detail, /Missing decision terms: 429, seven days/);
+  assert.match(result.detail, /Missing expected decision statements/);
+});
+
+test('heading-section criterion rejects unresolved questions in the open decisions section', async () => {
   const result = await headingSectionDecisionsApplied.evaluate(
     context(
-      [
-        '## Delivery guarantees',
-        '- HTTP 429 responses are not transient failures and should not be retried.',
-        '- Failed deliveries are not available for operator replay for seven days.',
-        '- Timeouts are transient failures and use exponential backoff.',
-        '- HTTP 429 responses are permanent failures; retry is unsupported.',
-        '## Rollout checklist',
-      ].join('\n'),
+      revisedDocument([
+        '- Should destination HTTP 429 responses be retried or treated as permanent failures?',
+        '- How long should failed deliveries remain available for replay?',
+        '- HTTP 429 responses are transient failures and should be retried with exponential backoff.',
+        '- Failed deliveries remain available for operator replay for seven days.',
+      ]),
     ),
     options,
   );
 
   assert.equal(result.passed, false);
-  assert.match(result.detail, /HTTP 429 retry behavior is stated together/);
-  assert.match(result.detail, /seven-day replay period is tied to failed deliveries/);
+  assert.match(result.detail, /Unresolved questions remain: 2/);
 });

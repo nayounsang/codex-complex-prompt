@@ -27,19 +27,19 @@ const headingSectionDecisions: ModelEvaluationCase = {
   ],
   criteria: [
     configureCriterion(headingSectionDecisionsApplied, {
-      startAfterHeading: 'Delivery guarantees',
+      startAfterHeading: 'Open decisions',
       endBeforeHeading: 'Rollout checklist',
       requiredTerms: ['429', 'seven days'],
       requiredStatements: [
         {
-          description: 'HTTP 429 retry behavior is stated together',
+          description: 'HTTP 429 handling is stated directly',
           pattern:
-            /^(?![^\n]*\b(?:not|never|permanent|unsupported|disabled|non-retryable)\b)(?=[^\n]*HTTP 429)(?=[^\n]*\b(?:retry|retries|retried)\b)(?=[^\n]*\b(?:same policy|transient|exponential backoff)\b)[^\n]*$/im,
+            /^(?=[^\n]*HTTP 429)(?=[^\n]*\b(?:retry|retries|retried|permanent|transient)\b)(?![^\n]*\?\s*$)[^\n]*$/im,
         },
         {
-          description: 'the seven-day replay period is tied to failed deliveries',
+          description: 'the replay period is stated directly for failed deliveries',
           pattern:
-            /^(?![^\n]*\bnot\b[^\n]*\bavailable\b)(?=[^\n]*\b(?:failed deliveries|deliveries)\b)(?=[^\n]*(?:\b(?:keep|keeps|kept|remain|remains)\b[^\n]*\bavailable\b|\bretained\b[^\n]*\bfor (?:operator )?replay\b))(?=[^\n]*\breplay\b)(?=[^\n]*\bseven days\b)[^\n]*$/im,
+            /^(?=[^\n]*\b(?:failed deliveries|deliveries)\b)(?=[^\n]*\breplay\b)(?=[^\n]*\bseven days\b)(?![^\n]*\?\s*$)[^\n]*$/im,
         },
       ],
       mustNotContain: [
