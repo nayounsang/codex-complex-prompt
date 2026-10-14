@@ -8,7 +8,7 @@ export interface PendingResults<T> {
 }
 
 /**
- * Recommended to use this only in a `apps/web/src/features/session/hooks/useBridgeSession.ts`
+ * Recommended to use this only in a bridge-session controller.
  */
 export function usePending<T>(): PendingResults<T> {
   const pendingResults = useRef(new Map<string, (result: T) => void>());

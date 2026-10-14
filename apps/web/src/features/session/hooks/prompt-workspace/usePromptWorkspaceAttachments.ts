@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { countMarkdownImageOccurrences } from '../../../shared/markdown/markdown-source-map.js';
-import { MARKDOWN_ATTACHMENT_DIRECTORY } from '../../../shared/markdown/attachment-path.js';
-import { removeMarkdownDrawingReferences } from '../../input/drawing-markdown.js';
+import { countMarkdownImageOccurrences } from '../../../../shared/markdown/markdown-source-map.js';
+import { MARKDOWN_ATTACHMENT_DIRECTORY } from '../../../../shared/markdown/attachment-path.js';
+import { removeMarkdownDrawingReferences } from '../../../input/drawing-markdown.js';
 import type {
   MarkdownEditorHandle,
   MediaFileOptions,
-} from '../../input/components/MarkdownEditor.js';
-import { parseAttachmentResponse } from '../infrastructure/attachment-response.js';
+} from '../../../input/components/MarkdownEditor.js';
+import { parseAttachmentResponse } from '../../infrastructure/attachment-response.js';
 import {
   savePromptMediaFiles,
   type PendingMediaMarkdown,
-} from '../components/prompt-media-attachments.js';
+} from '../../components/prompt-media-attachments.js';
 
 export interface PromptDrawingData {
   readonly id?: string;

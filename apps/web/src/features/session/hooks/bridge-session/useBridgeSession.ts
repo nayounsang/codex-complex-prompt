@@ -15,20 +15,12 @@ import type {
   TemplateChangeRequest,
   TemplateResult,
 } from './bridge-session-types.js';
-import { useAttachment } from './useAttatchment.js';
+import { useAttachment } from './useAttachment.js';
 import { useBridgeConnection } from './useBridgeConnection.js';
 import { useDelayedClose } from './useDelayedClose.js';
 import { usePending } from './usePending.js';
 
-export type {
-  BridgeSession,
-  ConnectionState,
-  PromptResult,
-  TemplateChangeRequest,
-  TemplateResult,
-} from './bridge-session-types.js';
-
-export function useBridgeSession(): BridgeSession {
+export function useBridgeSessionController(): BridgeSession {
   const [connectionState, setConnectionState] = useState<ConnectionState>(
     () => getInitialConnection().state,
   );

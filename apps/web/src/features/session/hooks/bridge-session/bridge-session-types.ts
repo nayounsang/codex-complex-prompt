@@ -9,7 +9,7 @@ import type { DelayedClose } from './useDelayedClose.js';
 export type ConnectionState =
   'connecting' | 'connected' | 'submitting' | 'success' | 'error' | 'disconnected';
 
-export interface BridgeSession extends DelayedClose {
+export interface BridgeSessionState extends DelayedClose {
   readonly connectionState: ConnectionState;
   readonly error: string | null;
   readonly bridgeUrl: string | null;
@@ -23,6 +23,9 @@ export interface BridgeSession extends DelayedClose {
     readonly templates: readonly PromptTemplate[];
     readonly error: string | null;
   } | null;
+}
+
+export interface BridgeSessionActions {
   readonly requestTemplateChange: (request: TemplateChangeRequest) => Promise<TemplateResult>;
   readonly submit: (
     prompt: string,
@@ -30,6 +33,8 @@ export interface BridgeSession extends DelayedClose {
     options?: FeedbackSubagentSettings,
   ) => Promise<PromptResult>;
 }
+
+export interface BridgeSession extends BridgeSessionState, BridgeSessionActions {}
 
 export type TemplateChangeRequest =
   | { readonly type: 'template.save'; readonly template: PromptTemplate }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ClientMessage, ServerMessage } from '@codex-complex-prompt/protocol';
 
-import { connectBridgeTransport } from '../infrastructure/bridge-transport.js';
+import { connectBridgeTransport } from '../../infrastructure/bridge-transport.js';
 import { parseBridgeUrl } from './bridge-url.js';
 
 export interface BridgeConnectionHandlers {

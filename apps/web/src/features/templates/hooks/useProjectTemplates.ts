@@ -5,7 +5,7 @@ import type { PromptTemplate } from '@codex-complex-prompt/protocol';
 import type {
   TemplateChangeRequest,
   TemplateResult,
-} from '../../session/hooks/useBridgeSession.js';
+} from '../../session/hooks/bridge-session/bridge-session-types.js';
 
 interface TemplateSnapshot {
   readonly templates: readonly PromptTemplate[];

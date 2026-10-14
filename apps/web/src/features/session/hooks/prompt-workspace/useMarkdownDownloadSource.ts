@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, type RefObject } from 'react';
 
-import type { MarkdownEditorHandle } from '../../input/components/MarkdownEditor.js';
+import type { MarkdownEditorHandle } from '../../../input/components/MarkdownEditor.js';
 
 interface UseMarkdownDownloadSourceOptions {
   readonly editorRef: RefObject<MarkdownEditorHandle | null>;

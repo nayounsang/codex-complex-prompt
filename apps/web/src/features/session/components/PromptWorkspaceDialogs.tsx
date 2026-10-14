@@ -2,7 +2,7 @@ import { type Dispatch, type SetStateAction, lazy, Suspense } from 'react';
 import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
 
-import type { PromptDrawingData } from '../hooks/usePromptWorkspaceAttachments.js';
+import type { PromptDrawingData } from '../hooks/prompt-workspace/usePromptWorkspaceAttachments.js';
 import { SubmitFeedbackDialog } from '../../../app/components/SubmitFeedbackDialog.js';
 
 const DrawingDialog = lazy(async () => {

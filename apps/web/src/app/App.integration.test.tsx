@@ -441,7 +441,7 @@ describe('App integration', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('12,000 characters or fewer');
   });
 
-  it('명령 접수 후 3초 카운트다운 모달을 표시하고 창을 닫는다', async () => {
+  it('명령 접수 후 3초 뒤 닫힌다는 안내를 표시하고 창을 닫는다', async () => {
     const socket = renderWithSession();
     await screen.findByRole('textbox', { name: 'Command' });
     vi.useFakeTimers();
@@ -470,7 +470,7 @@ describe('App integration', () => {
     await act(async () => vi.advanceTimersByTime(999));
     expect(closeSpy).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTime(1_000));
-    expect(screen.getByRole('dialog')).toHaveTextContent('This window will close in 2 seconds.');
+    expect(screen.getByRole('dialog')).toHaveTextContent('This window will close in 3 seconds.');
     await act(async () => vi.advanceTimersByTime(2_000));
     expect(closeSpy).toHaveBeenCalledOnce();
   });
