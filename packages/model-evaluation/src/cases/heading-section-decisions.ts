@@ -27,7 +27,8 @@ const headingSectionDecisions: ModelEvaluationCase = {
   ],
   criteria: [
     configureCriterion(headingSectionDecisionsApplied, {
-      sectionIndex: 1,
+      startAfterHeading: 'Delivery guarantees',
+      endBeforeHeading: 'Rollout checklist',
       requiredTerms: ['429', 'retry', 'seven days'],
       requiredAlternatives: [['transient failure', 'exponential backoff']],
       mustNotContain: [

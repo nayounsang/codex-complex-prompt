@@ -1,7 +1,8 @@
 import type { CriterionContext, EvaluationCriterion } from '../types.js';
 
 export interface HeadingSectionDecisionsOptions {
-  readonly sectionIndex: number;
+  readonly startAfterHeading: string;
+  readonly endBeforeHeading: string;
   readonly requiredTerms: readonly string[];
   readonly requiredAlternatives: readonly (readonly string[])[];
   readonly mustNotContain: readonly string[];
@@ -12,9 +13,16 @@ const headingSectionDecisionsApplied: EvaluationCriterion<HeadingSectionDecision
   id: 'heading-section-decisions-applied',
   evaluate(
     { revised }: CriterionContext,
-    { sectionIndex, requiredTerms, requiredAlternatives, mustNotContain, preservedText },
+    {
+      startAfterHeading,
+      endBeforeHeading,
+      requiredTerms,
+      requiredAlternatives,
+      mustNotContain,
+      preservedText,
+    },
   ) {
-    const section = getLevelTwoSection(revised, sectionIndex);
+    const section = getTextBetweenLevelTwoHeadings(revised, startAfterHeading, endBeforeHeading);
     const normalizedSection = section.toLocaleLowerCase();
     const missingTerms = requiredTerms.filter(
       (term) => !normalizedSection.includes(term.toLocaleLowerCase()),
@@ -23,7 +31,7 @@ const headingSectionDecisionsApplied: EvaluationCriterion<HeadingSectionDecision
       (alternatives) =>
         !alternatives.some((term) => normalizedSection.includes(term.toLocaleLowerCase())),
     );
-    const unresolvedQuestions = mustNotContain.filter((phrase) => section.includes(phrase));
+    const unresolvedQuestions = mustNotContain.filter((phrase) => revised.includes(phrase));
     const missingPreservedText = preservedText.filter((text) => !revised.includes(text));
     const passed =
       missingTerms.length === 0 &&
@@ -57,11 +65,37 @@ const headingSectionDecisionsApplied: EvaluationCriterion<HeadingSectionDecision
 
 export { headingSectionDecisionsApplied };
 
-function getLevelTwoSection(markdown: string, sectionIndex: number): string {
-  const headings = [...markdown.matchAll(/^##[ \t]+.+$/gm)];
-  const sectionStart = headings[sectionIndex]?.index;
-  if (sectionStart === undefined) return '';
+function getTextBetweenLevelTwoHeadings(
+  markdown: string,
+  startAfterHeading: string,
+  endBeforeHeading: string,
+): string {
+  const startHeadingEnd = findLevelTwoHeadingEnd(markdown, startAfterHeading);
+  const endHeadingStart = findLevelTwoHeadingStart(markdown, endBeforeHeading);
+  if (
+    startHeadingEnd === undefined ||
+    endHeadingStart === undefined ||
+    startHeadingEnd > endHeadingStart
+  )
+    return '';
 
-  const sectionEnd = headings[sectionIndex + 1]?.index ?? markdown.length;
-  return markdown.slice(sectionStart, sectionEnd);
+  return markdown.slice(startHeadingEnd, endHeadingStart);
+}
+
+function findLevelTwoHeadingStart(markdown: string, title: string): number | undefined {
+  let offset = 0;
+  for (const line of markdown.split('\n')) {
+    if (line.trim() === `## ${title}`) return offset;
+    offset += line.length + 1;
+  }
+
+  return undefined;
+}
+
+function findLevelTwoHeadingEnd(markdown: string, title: string): number | undefined {
+  const start = findLevelTwoHeadingStart(markdown, title);
+  if (start === undefined) return undefined;
+
+  const lineEnd = markdown.indexOf('\n', start);
+  return lineEnd === -1 ? markdown.length : lineEnd + 1;
 }
