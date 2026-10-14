@@ -293,6 +293,70 @@ describe('서버 세션 연결', () => {
     }
   });
 
+  it('서버 시작 제한값은 양의 정수만 허용한다', async () => {
+    for (const options of [
+      { promptTimeoutMs: 0 },
+      { promptTimeoutMs: 1.5 },
+      { maxConnections: 0 },
+      { maxConnections: 1.5 },
+      { handshakeTimeoutMs: 0 },
+      { handshakeTimeoutMs: 1.5 },
+    ]) {
+      await expect(
+        startLocalBridgeServer({ ...options, onPrompt: async () => undefined }),
+      ).rejects.toThrow('positive integer');
+    }
+  });
+
+  it('기본 주소로 임시 포트에서 시작하고 세션 자격 증명을 발급한다', async () => {
+    const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
+
+    try {
+      expect(server.host).toBe('127.0.0.1');
+      expect(server.port).toBeGreaterThan(0);
+      expect(server.url).toBe(`http://127.0.0.1:${server.port}`);
+
+      const session = server.createSession();
+      expect(session.id).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(session.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(session.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('종료할 때 연결을 닫고 같은 포트를 다시 사용할 수 있다', async () => {
+    const first = await startLocalBridgeServer({ onPrompt: async () => undefined });
+    let closeFirstPromise: Promise<void> | undefined;
+    const closeFirst = (): Promise<void> => (closeFirstPromise ??= first.close());
+
+    try {
+      const socket = await openSocket(first);
+      const socketClosed = nextClose(socket);
+      const port = first.port;
+
+      await closeFirst();
+
+      expect(await socketClosed).toBe(1006);
+
+      const second = await startLocalBridgeServer({
+        host: first.host,
+        port,
+        onPrompt: async () => undefined,
+      });
+      try {
+        expect(second.port).toBe(port);
+        const response = await fetch(second.url);
+        expect(response.status).toBe(200);
+        await response.text();
+      } finally {
+        await second.close();
+      }
+    } finally {
+      await closeFirst();
+    }
+  });
+
   it('핸드셰이크 타임아웃이 지나면 인증 오류와 함께 연결을 종료한다', async () => {
     const server = await startLocalBridgeServer({
       handshakeTimeoutMs: 20,

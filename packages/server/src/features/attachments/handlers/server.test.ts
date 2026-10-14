@@ -751,6 +751,35 @@ describe('로컬 브리지 서버', () => {
     }
   });
 
+  it('첨부 HTTP 요청 본문이 허용 크기를 넘으면 저장 전에 413 응답을 반환한다', async () => {
+    let saveCalled = false;
+    const { server, token } = await startAttachmentTestServer({
+      save: async () => {
+        saveCalled = true;
+        return '00000000-0000-4000-8000-000000000043';
+      },
+    });
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments?token=${encodeURIComponent(token)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: 'x'.repeat(36 * 1024 * 1024 + 1),
+        },
+      );
+
+      expect(response.status).toBe(413);
+      expect(await response.json()).toEqual({
+        error: 'The attachment request exceeds the request size limit.',
+      });
+      expect(saveCalled).toBe(false);
+    } finally {
+      await server.close();
+    }
+  });
+
   it('localhost 외부 출처의 첨부 요청에는 CORS 허용 헤더를 주지 않는다', async () => {
     const { server, token } = await startAttachmentTestServer();
 

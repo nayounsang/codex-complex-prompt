@@ -33,6 +33,36 @@ describe('정적 파일과 HTTP 연결', () => {
     }
   });
 
+  it('정적 파일 확장자에 맞는 MIME 형식을 제공한다', async () => {
+    const staticDir = await mkdtemp(join(tmpdir(), 'codex-complex-prompt-mime-'));
+    const fixtures = [
+      ['style.css', 'text/css; charset=utf-8'],
+      ['index.html', 'text/html; charset=utf-8'],
+      ['app.js', 'text/javascript; charset=utf-8'],
+      ['data.json', 'application/json; charset=utf-8'],
+      ['icon.svg', 'image/svg+xml'],
+      ['asset.bin', 'application/octet-stream'],
+    ] as const;
+    await Promise.all(fixtures.map(([file]) => writeFile(join(staticDir, file), 'content')));
+    const server = await startLocalBridgeServer({ staticDir, onPrompt: async () => undefined });
+
+    try {
+      for (const [file, mimeType] of fixtures) {
+        const response = await fetch(`${server.url}/${file}`);
+
+        expect({ file, status: response.status }).toEqual({ file, status: 200 });
+        expect({ file, contentType: response.headers.get('content-type') }).toEqual({
+          file,
+          contentType: mimeType,
+        });
+        await response.arrayBuffer();
+      }
+    } finally {
+      await server.close();
+      await rm(staticDir, { recursive: true, force: true });
+    }
+  });
+
   it('정적 디렉터리 안의 심볼릭 링크로 외부 파일을 제공하지 않는다', async () => {
     const staticDir = await mkdtemp(join(tmpdir(), 'codex-complex-prompt-static-'));
     const outsideDir = await mkdtemp(join(tmpdir(), 'codex-complex-prompt-outside-'));
