@@ -4,7 +4,10 @@ export interface HeadingSectionDecisionsOptions {
   readonly startAfterHeading: string;
   readonly endBeforeHeading: string;
   readonly requiredTerms: readonly string[];
-  readonly requiredAlternatives: readonly (readonly string[])[];
+  readonly requiredStatements: readonly {
+    readonly description: string;
+    readonly pattern: RegExp;
+  }[];
   readonly mustNotContain: readonly string[];
   readonly preservedText: readonly string[];
 }
@@ -17,7 +20,7 @@ const headingSectionDecisionsApplied: EvaluationCriterion<HeadingSectionDecision
       startAfterHeading,
       endBeforeHeading,
       requiredTerms,
-      requiredAlternatives,
+      requiredStatements,
       mustNotContain,
       preservedText,
     },
@@ -27,15 +30,12 @@ const headingSectionDecisionsApplied: EvaluationCriterion<HeadingSectionDecision
     const missingTerms = requiredTerms.filter(
       (term) => !normalizedSection.includes(term.toLocaleLowerCase()),
     );
-    const missingAlternativeGroups = requiredAlternatives.filter(
-      (alternatives) =>
-        !alternatives.some((term) => normalizedSection.includes(term.toLocaleLowerCase())),
-    );
+    const missingStatements = requiredStatements.filter(({ pattern }) => !pattern.test(section));
     const unresolvedQuestions = mustNotContain.filter((phrase) => revised.includes(phrase));
     const missingPreservedText = preservedText.filter((text) => !revised.includes(text));
     const passed =
       missingTerms.length === 0 &&
-      missingAlternativeGroups.length === 0 &&
+      missingStatements.length === 0 &&
       unresolvedQuestions.length === 0 &&
       missingPreservedText.length === 0;
 
@@ -47,10 +47,10 @@ const headingSectionDecisionsApplied: EvaluationCriterion<HeadingSectionDecision
             ...(missingTerms.length === 0
               ? []
               : [`Missing decision terms: ${missingTerms.join(', ')}.`]),
-            ...(missingAlternativeGroups.length === 0
+            ...(missingStatements.length === 0
               ? []
               : [
-                  `Missing one of the expected policy terms: ${missingAlternativeGroups.map((group) => group.join(' or ')).join('; ')}.`,
+                  `Missing expected decision statements: ${missingStatements.map(({ description }) => description).join('; ')}.`,
                 ]),
             ...(unresolvedQuestions.length === 0
               ? []

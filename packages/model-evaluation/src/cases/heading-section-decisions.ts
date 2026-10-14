@@ -29,8 +29,19 @@ const headingSectionDecisions: ModelEvaluationCase = {
     configureCriterion(headingSectionDecisionsApplied, {
       startAfterHeading: 'Delivery guarantees',
       endBeforeHeading: 'Rollout checklist',
-      requiredTerms: ['429', 'retry', 'seven days'],
-      requiredAlternatives: [['transient failure', 'exponential backoff']],
+      requiredTerms: ['429', 'seven days'],
+      requiredStatements: [
+        {
+          description: 'HTTP 429 retry behavior is stated together',
+          pattern:
+            /^(?![^\n]*\b(?:not|never|permanent|unsupported|disabled|non-retryable)\b)(?=[^\n]*HTTP 429)(?=[^\n]*\b(?:retry|retries|retried)\b)(?=[^\n]*\b(?:same policy|transient|exponential backoff)\b)[^\n]*$/im,
+        },
+        {
+          description: 'the seven-day replay period is tied to failed deliveries',
+          pattern:
+            /^(?![^\n]*\bnot\b[^\n]*\bavailable\b)(?=[^\n]*\b(?:failed deliveries|deliveries)\b)(?=[^\n]*(?:\b(?:keep|keeps|kept|remain|remains)\b[^\n]*\bavailable\b|\bretained\b[^\n]*\bfor (?:operator )?replay\b))(?=[^\n]*\breplay\b)(?=[^\n]*\bseven days\b)[^\n]*$/im,
+        },
+      ],
       mustNotContain: [
         'Should destination HTTP 429 responses be retried or treated as permanent failures?',
         'How long should failed deliveries remain available for replay?',
