@@ -15,6 +15,7 @@ import type {
   TemplateChangeRequest,
   TemplateResult,
 } from './bridge-session-types.js';
+import { useAttachment } from './useAttatchment.js';
 import { useDelayedClose } from './useDelayedClose.js';
 import { usePending } from './usePending.js';
 export type {
@@ -44,10 +45,9 @@ export function useBridgeSession(): BridgeSession {
     BridgeSession['feedbackModelCatalog']
   >([]);
   const [feedbackModelCatalogLoading, setFeedbackModelCatalogLoading] = useState(false);
-  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
-  const [attachmentToken, setAttachmentToken] = useState<string | null>(null);
   const [templateSnapshot, setTemplateSnapshot] = useState<BridgeSession['templateSnapshot']>(null);
 
+  const { attachmentUrl, attachmentToken, setAttachment } = useAttachment();
   const { isCloseScheduled, cancelClose, clearCloseTimer, scheduleClose } = useDelayedClose();
   const pendingPrompts = usePending<PromptResult>();
   const pendingTemplates = usePending<TemplateResult>();
@@ -95,8 +95,7 @@ export function useBridgeSession(): BridgeSession {
               setFeedbackModelCatalogLoading(false);
             }
           }
-          setAttachmentUrl(message.attachmentUrl ?? null);
-          setAttachmentToken(message.attachmentToken ?? null);
+          setAttachment(message.attachmentUrl ?? null, message.attachmentToken ?? null);
           setTemplateSnapshot({
             templates: message.templates ?? [],
             error: message.templatesError ?? null,
