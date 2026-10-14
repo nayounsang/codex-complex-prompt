@@ -752,10 +752,10 @@ button:focus-visible,
 }
 
 .markdown-content table,
-.markdown-editor .milkdown .milkdown-table-block table {
+.markdown-editor .milkdown .ProseMirror table {
   width: max-content;
   min-width: 0;
-  table-layout: fixed;
+  table-layout: auto;
   border-collapse: collapse;
   color: #37352f;
   background: #fff;
@@ -763,8 +763,13 @@ button:focus-visible,
   line-height: 1.45;
 }
 
+.markdown-content table {
+  max-width: 100%;
+}
+
 .markdown-content .milkdown-table-block,
-.markdown-editor .milkdown .milkdown-table-block {
+.markdown-editor .milkdown .milkdown-table-block,
+.markdown-editor .milkdown .ProseMirror .tableWrapper {
   box-sizing: border-box;
   width: max-content;
   min-width: 0;
@@ -776,38 +781,38 @@ button:focus-visible,
 }
 
 .markdown-content :is(th, td),
-.markdown-editor .milkdown .milkdown-table-block :is(th, td) {
-  width: 12ch;
-  min-width: 12ch;
-  max-width: 12ch;
+.markdown-editor .milkdown .ProseMirror :is(th, td) {
+  min-width: 6ch;
   padding: 6px 10px;
   border: 1px solid #eaeaea;
+  caret-color: #37352f;
   text-align: left;
   vertical-align: top;
   overflow-wrap: anywhere;
 }
 
 .markdown-content :is(th, td) > p,
-.markdown-editor .milkdown .milkdown-table-block :is(th, td) > p {
+.markdown-editor .milkdown .ProseMirror :is(th, td) > p {
   margin: 0;
 }
 
 .markdown-content th,
-.markdown-editor .milkdown .milkdown-table-block th {
+.markdown-editor .milkdown .ProseMirror th {
   color: #1f1f1f;
   background: #f5f5f5;
   font-weight: 600;
 }
 
 .markdown-content .milkdown-table-block.feedback-table-highlight,
-.markdown-editor .milkdown .milkdown-table-block.feedback-table-highlight {
+.markdown-editor .milkdown .milkdown-table-block.feedback-table-highlight,
+.markdown-editor .milkdown .tableWrapper.feedback-table-highlight {
   border-color: #eecb54;
   background: #fff8d8;
   box-shadow: 0 0 0 2px rgb(238 203 84 / 22%);
 }
 
 .markdown-content td,
-.markdown-editor .milkdown .milkdown-table-block td {
+.markdown-editor .milkdown .ProseMirror td {
   background: #fff;
 }
 

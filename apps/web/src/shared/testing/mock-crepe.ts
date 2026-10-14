@@ -1,6 +1,12 @@
 import { vi } from 'vitest';
 
 const mockCrepe = vi.hoisted(() => {
+  const features = {
+    update: (update: (current: string[]) => string[]) => {
+      update([]);
+    },
+  };
+
   function renderMockMarkdown(root: HTMLElement, markdown: string): void {
     root.replaceChildren();
     const lines = markdown.split('\n');
@@ -153,10 +159,20 @@ const mockCrepe = vi.hoisted(() => {
     public static readonly Feature = {
       ImageBlock: 'image-block',
       Placeholder: 'placeholder',
+      BlockEdit: 'block-edit',
+      Table: 'table',
     } as const;
 
     public readonly options: Record<string, unknown>;
     public readonly destroy = vi.fn(() => Promise.resolve());
+    public readonly editor = {
+      action: vi.fn(),
+      config: (configure: (ctx: object) => void) => {
+        configure({});
+        return this.editor;
+      },
+      use: () => this.editor,
+    };
     private markdown: string;
     private readOnly = false;
     private markdownUpdated:
@@ -217,9 +233,12 @@ const mockCrepe = vi.hoisted(() => {
     }
   }
 
-  return { MockCrepe, state };
+  return { MockCrepe, state, features };
 });
 
 export const crepeTestState = { state: mockCrepe.state };
 
-vi.mock('@milkdown/crepe', () => ({ Crepe: mockCrepe.MockCrepe }));
+vi.mock('@milkdown/crepe', () => ({
+  Crepe: mockCrepe.MockCrepe,
+  useCrepeFeatures: () => mockCrepe.features,
+}));

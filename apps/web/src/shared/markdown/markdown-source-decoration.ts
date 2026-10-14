@@ -86,7 +86,9 @@ function decorateTableSourceRanges(
   feedbackRanges: readonly SourceFeedbackRange[],
 ): void {
   const tableRanges = getMarkdownTableRanges(markdown);
-  const tableBlocks = Array.from(root.querySelectorAll<HTMLElement>('.milkdown-table-block'));
+  const tableBlocks = Array.from(
+    root.querySelectorAll<HTMLElement>('.milkdown-table-block, .tableWrapper'),
+  );
   tableBlocks.forEach((tableBlock, index) => {
     const tableRange = tableRanges[index];
     if (tableRange === undefined) {

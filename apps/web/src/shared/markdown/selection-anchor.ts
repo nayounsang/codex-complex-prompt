@@ -47,11 +47,13 @@ export function getTableSelectionAnchor(
   root: HTMLElement,
   markdown: string,
 ): SelectionAnchor | null {
-  const selectedCell = root.querySelector<HTMLElement>('.milkdown-table-block .selectedCell');
-  const tableBlock = selectedCell?.closest<HTMLElement>('.milkdown-table-block');
+  const selectedCell = root.querySelector<HTMLElement>(
+    '.milkdown-table-block .selectedCell, .tableWrapper .selectedCell',
+  );
+  const tableBlock = selectedCell?.closest<HTMLElement>('.milkdown-table-block, .tableWrapper');
   if (tableBlock === null || tableBlock === undefined) return null;
 
-  const tableBlocks = Array.from(root.querySelectorAll('.milkdown-table-block'));
+  const tableBlocks = Array.from(root.querySelectorAll('.milkdown-table-block, .tableWrapper'));
   const tableIndex = tableBlocks.indexOf(tableBlock);
   const tableRange = getMarkdownTableRanges(markdown)[tableIndex];
   if (tableRange === undefined) return null;

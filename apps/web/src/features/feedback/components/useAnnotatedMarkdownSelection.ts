@@ -84,7 +84,7 @@ export function useAnnotatedMarkdownSelection({
       selectionDismissedRef.current = true;
       window.getSelection()?.removeAllRanges();
       rootRef.current
-        ?.querySelectorAll('.milkdown-table-block .selectedCell')
+        ?.querySelectorAll('.milkdown-table-block .selectedCell, .tableWrapper .selectedCell')
         .forEach((cell) => cell.classList.remove('selectedCell'));
     },
     [rootRef, selectionPopoverOpen],
