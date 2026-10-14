@@ -9,6 +9,10 @@ export class AttachmentTokenStore {
     return this.tokens.get(sessionId);
   }
 
+  public entries(): IterableIterator<[string, string]> {
+    return this.tokens.entries();
+  }
+
   public delete(sessionId: string): boolean {
     return this.tokens.delete(sessionId);
   }

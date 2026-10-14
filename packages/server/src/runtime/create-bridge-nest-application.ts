@@ -9,7 +9,7 @@ export async function createBridgeNestApplication(
 ): Promise<NestExpressApplication> {
   const application = await NestFactory.create<NestExpressApplication>(
     BridgeServerModule.register(options),
-    { logger: false },
+    { logger: false, bodyParser: false },
   );
   await application.init();
   return application;

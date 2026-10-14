@@ -1,4 +1,10 @@
 import { Module } from '@nestjs/common';
 
-@Module({})
+import { AttachmentController } from './attachment.controller.js';
+import { AttachmentRequestHandler } from './attachment-request-handler.js';
+
+@Module({
+  controllers: [AttachmentController],
+  providers: [AttachmentRequestHandler],
+})
 export class AttachmentModule {}

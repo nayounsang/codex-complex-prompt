@@ -13,7 +13,7 @@ export function serveAttachmentRequest(
   request: IncomingMessage,
   response: ServerResponse,
   attachmentStore: AttachmentStore | undefined,
-  attachmentTokens: Map<string, string>,
+  attachmentTokens: Iterable<[string, string]>,
 ): boolean {
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
   if (!url.pathname.startsWith('/_complex-prompt/attachments')) return false;
