@@ -16,6 +16,7 @@ import type {
   TemplateResult,
 } from './bridge-session-types.js';
 import { useDelayedClose } from './useDelayedClose.js';
+import { usePending } from './usePending.js';
 export type {
   BridgeSession,
   ConnectionState,
@@ -47,10 +48,17 @@ export function useBridgeSession(): BridgeSession {
   const [attachmentToken, setAttachmentToken] = useState<string | null>(null);
   const [templateSnapshot, setTemplateSnapshot] = useState<BridgeSession['templateSnapshot']>(null);
 
-  const pendingResults = useRef(new Map<string, (result: PromptResult) => void>());
-  const pendingTemplateResults = useRef(new Map<string, (result: TemplateResult) => void>());
-
   const { isCloseScheduled, cancelClose, clearCloseTimer, scheduleClose } = useDelayedClose();
+  const pendingPrompts = usePending<PromptResult>();
+  const pendingTemplates = usePending<TemplateResult>();
+  const failPendingResults = useCallback(
+    (message: string): void => {
+      const failure = { status: 'failed' as const, error: message };
+      pendingPrompts.failAll(failure);
+      pendingTemplates.failAll(failure);
+    },
+    [pendingPrompts, pendingTemplates],
+  );
 
   useEffect(
     function connectToBridge() {
@@ -70,17 +78,6 @@ export function useBridgeSession(): BridgeSession {
       if (searchParams.has('token')) {
         window.history.replaceState({}, document.title, cleanUrl);
       }
-      function failPendingResults(message: string): void {
-        const pending = pendingResults.current;
-        pendingResults.current = new Map();
-        for (const resolve of pending.values()) resolve({ status: 'failed', error: message });
-
-        const pendingTemplates = pendingTemplateResults.current;
-        pendingTemplateResults.current = new Map();
-        for (const resolve of pendingTemplates.values())
-          resolve({ status: 'failed', error: message });
-      }
-
       function handleMessage(connection: WebSocket, message: ServerMessage): void {
         if (socketRef.current !== connection) return;
         if (message.type === 'session.ready') {
@@ -113,16 +110,14 @@ export function useBridgeSession(): BridgeSession {
             ...(message.templates === undefined ? {} : { templates: message.templates }),
             ...(message.error === undefined ? {} : { error: message.error }),
           };
-          pendingTemplateResults.current.get(message.requestId)?.(result);
-          pendingTemplateResults.current.delete(message.requestId);
+          pendingTemplates.resolve(message.requestId, result);
         } else if (message.type === 'prompt.result') {
           const result: PromptResult = {
             status: message.status,
             ...(message.error === undefined ? {} : { error: message.error }),
             ...(message.prompt === undefined ? {} : { prompt: message.prompt }),
           };
-          pendingResults.current.get(message.submissionId)?.(result);
-          pendingResults.current.delete(message.submissionId);
+          pendingPrompts.resolve(message.submissionId, result);
           if (message.status === 'accepted') {
             setConnectionState('success');
             setError(null);
@@ -180,7 +175,14 @@ export function useBridgeSession(): BridgeSession {
         transport.close();
       };
     },
-    [cancelClose, clearCloseTimer, scheduleClose],
+    [
+      cancelClose,
+      clearCloseTimer,
+      failPendingResults,
+      pendingPrompts,
+      pendingTemplates,
+      scheduleClose,
+    ],
   );
 
   const submit = useCallback(
@@ -201,9 +203,7 @@ export function useBridgeSession(): BridgeSession {
       setConnectionState('submitting');
       setError(null);
       const submissionId = crypto.randomUUID();
-      const result = new Promise<PromptResult>((resolve) => {
-        pendingResults.current.set(submissionId, resolve);
-      });
+      const result = pendingPrompts.waitFor(submissionId);
       try {
         socket.send(
           JSON.stringify({
@@ -222,14 +222,14 @@ export function useBridgeSession(): BridgeSession {
           }),
         );
       } catch {
-        pendingResults.current.delete(submissionId);
+        pendingPrompts.delete(submissionId);
         setConnectionState('error');
         setError('The bridge connection closed.');
         return Promise.resolve({ status: 'failed', error: 'The bridge connection closed.' });
       }
       return result;
     },
-    [],
+    [pendingPrompts],
   );
 
   const requestTemplateChange = useCallback(
@@ -239,18 +239,16 @@ export function useBridgeSession(): BridgeSession {
         return Promise.resolve({ status: 'failed', error: 'The bridge is not connected.' });
       }
       const requestId = crypto.randomUUID();
-      const result = new Promise<TemplateResult>((resolve) =>
-        pendingTemplateResults.current.set(requestId, resolve),
-      );
+      const result = pendingTemplates.waitFor(requestId);
       try {
         socket.send(JSON.stringify({ ...request, requestId }));
       } catch {
-        pendingTemplateResults.current.delete(requestId);
+        pendingTemplates.delete(requestId);
         return Promise.resolve({ status: 'failed', error: 'The bridge connection closed.' });
       }
       return result;
     },
-    [],
+    [pendingTemplates],
   );
 
   return {
