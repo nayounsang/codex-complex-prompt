@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
 
-@Module({})
+import { StaticFilesController } from './static-files.controller.js';
+
+@Module({ controllers: [StaticFilesController] })
 export class StaticFilesModule {}

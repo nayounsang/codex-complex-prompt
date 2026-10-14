@@ -14,7 +14,7 @@ import { ATTACHMENT_STORE, BRIDGE_OPTIONS, ON_PROMPT, TEMPLATE_STORE } from './t
 
 @Global()
 @Module({
-  imports: [AttachmentModule, StaticFilesModule, InputModule, TemplateModule, SessionModule],
+  imports: [AttachmentModule, InputModule, TemplateModule, SessionModule, StaticFilesModule],
 })
 export class BridgeServerModule {
   public static register(options: LocalBridgeServerOptions): DynamicModule {
