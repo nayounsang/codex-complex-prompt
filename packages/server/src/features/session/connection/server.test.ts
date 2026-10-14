@@ -99,7 +99,7 @@ describe('서버 세션 연결', () => {
     }
   });
 
-  it('feedback loop 연결에서는 feedback model 카탈로그 요청을 무시한다', async () => {
+  it('feedback loop 연결에서도 feedback model 카탈로그를 불러온다', async () => {
     const server = await startLocalBridgeServer({
       feedbackLoop: true,
       loadFeedbackModelCatalog: async () => feedbackModelCatalog,
@@ -109,10 +109,13 @@ describe('서버 세션 연결', () => {
 
     try {
       const { socket } = await authenticate(server, session.token);
-      const result = nextMessage(socket, 100);
+      const result = nextMessage(socket);
       socket.send(JSON.stringify({ type: 'feedback-model.catalog.request' }));
 
-      await expect(result).rejects.toThrow('WebSocket message timed out.');
+      await expect(result).resolves.toMatchObject({
+        type: 'feedback-model.catalog.result',
+        catalog: feedbackModelCatalog,
+      });
     } finally {
       await server.close();
     }

@@ -147,7 +147,6 @@ export function attachConnection(options: BridgeConnectionOptions): void {
       return;
     }
     if (parsed.data.type === 'feedback-model.catalog.request') {
-      if (feedbackLoop) return;
       feedbackModelCatalogPromise ??= (async () => {
         try {
           return resolvedFeedbackModelCatalog ?? (await loadFeedbackModelCatalog?.()) ?? [];

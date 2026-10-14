@@ -98,8 +98,7 @@ export function useBridgeSession(): BridgeSession {
           setInitialMarkdown(message.initialMarkdown ?? '');
           setFeedbackLoop(message.feedbackLoop ?? false);
           setFeedbackModelCatalog(message.feedbackModelCatalog ?? []);
-          const shouldLoadFeedbackModelCatalog =
-            !message.feedbackLoop && message.feedbackModelCatalog === undefined;
+          const shouldLoadFeedbackModelCatalog = message.feedbackModelCatalog === undefined;
           setFeedbackModelCatalogLoading(shouldLoadFeedbackModelCatalog);
           if (shouldLoadFeedbackModelCatalog) {
             try {

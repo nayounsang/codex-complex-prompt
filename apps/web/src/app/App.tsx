@@ -40,8 +40,9 @@ export function App(): React.JSX.Element {
     }
   }
 
-  function updateFeedbackModelSetting(option: FeedbackModelOption): void {
+  function updateFeedbackModelSetting(option: FeedbackModelOption, persist: boolean): void {
     setFeedbackModelValue(option.value);
+    if (!persist) return;
     try {
       window.sessionStorage.setItem(FEEDBACK_MODEL_SETTING_KEY, option.value);
     } catch {
@@ -96,7 +97,8 @@ export function App(): React.JSX.Element {
           feedbackModelCatalogLoading={bridgeSession.feedbackModelCatalogLoading}
           onSave={(enabled, modelOption) => {
             updateSubagentSetting(enabled);
-            if (!bridgeSession.feedbackModelCatalogLoading) updateFeedbackModelSetting(modelOption);
+            if (!bridgeSession.feedbackModelCatalogLoading)
+              updateFeedbackModelSetting(modelOption, !bridgeSession.feedbackLoop);
           }}
           onClose={() => setSettingsOpen(false)}
         />
