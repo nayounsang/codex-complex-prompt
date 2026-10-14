@@ -83,9 +83,9 @@ export function PromptWorkspace({
     saveDrawing,
     waitForPendingMediaSaves,
   } = attachments;
-  const isConnected = bridgeSession.state === 'connected';
+  const isConnected = bridgeSession.connectionState === 'connected';
   const isSubmitting =
-    bridgeSession.state === 'submitting' ||
+    bridgeSession.connectionState === 'submitting' ||
     feedbackSubmission.isSubmitting ||
     attachments.isWaitingForMediaSaves;
   const withPromptAfterMediaSaves = useCallback(

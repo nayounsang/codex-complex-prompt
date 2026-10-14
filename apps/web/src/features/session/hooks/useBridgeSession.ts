@@ -26,7 +26,9 @@ export type {
 const COMMAND_WINDOW_CLOSE_DELAY_MS = 3_000;
 
 export function useBridgeSession(): BridgeSession {
-  const [state, setState] = useState<ConnectionState>(() => getInitialConnection().state);
+  const [connectionState, setConnectionState] = useState<ConnectionState>(
+    () => getInitialConnection().state,
+  );
   const [error, setError] = useState<string | null>(() => getInitialConnection().error);
   const [closeInSeconds, setCloseInSeconds] = useState<number | null>(null);
   const [initialMarkdown, setInitialMarkdown] = useState<string | null>(null);
@@ -93,7 +95,7 @@ export function useBridgeSession(): BridgeSession {
       function handleMessage(connection: WebSocket, message: ServerMessage): void {
         if (socketRef.current !== connection) return;
         if (message.type === 'session.ready') {
-          setState('connected');
+          setConnectionState('connected');
           setError(null);
           setInitialMarkdown(message.initialMarkdown ?? '');
           setFeedbackLoop(message.feedbackLoop ?? false);
@@ -133,7 +135,7 @@ export function useBridgeSession(): BridgeSession {
           pendingResults.current.get(message.submissionId)?.(result);
           pendingResults.current.delete(message.submissionId);
           if (message.status === 'accepted') {
-            setState('success');
+            setConnectionState('success');
             setError(null);
             clearCloseTimers();
             setCloseInSeconds(COMMAND_WINDOW_CLOSE_DELAY_MS / 1_000);
@@ -151,14 +153,14 @@ export function useBridgeSession(): BridgeSession {
               });
             }, 1_000);
           } else {
-            setState('error');
+            setConnectionState('error');
             setError(message.error ?? 'The command could not be sent.');
             clearCloseTimers();
             setCloseInSeconds(null);
           }
         } else if (message.type === 'session.error') {
           failPendingResults(message.message);
-          setState('error');
+          setConnectionState('error');
           setError(message.message);
         }
       }
@@ -166,7 +168,7 @@ export function useBridgeSession(): BridgeSession {
       function handleInvalidMessage(connection: WebSocket): void {
         if (socketRef.current !== connection) return;
         failPendingResults('The bridge returned an invalid message.');
-        setState('error');
+        setConnectionState('error');
         setError('The bridge returned an invalid message.');
       }
 
@@ -174,7 +176,7 @@ export function useBridgeSession(): BridgeSession {
         if (socketRef.current !== connection) return;
         socketRef.current = null;
         failPendingResults('The bridge connection closed.');
-        setState((current) =>
+        setConnectionState((current) =>
           current === 'success' || current === 'error' ? current : 'disconnected',
         );
       }
@@ -182,7 +184,7 @@ export function useBridgeSession(): BridgeSession {
       function handleError(connection: WebSocket): void {
         if (socketRef.current !== connection) return;
         failPendingResults('Could not connect to the local bridge.');
-        setState('error');
+        setConnectionState('error');
         setError('Could not connect to the local bridge.');
       }
 
@@ -222,7 +224,7 @@ export function useBridgeSession(): BridgeSession {
       ) {
         return Promise.resolve({ status: 'failed', error: 'The bridge is not connected.' });
       }
-      setState('submitting');
+      setConnectionState('submitting');
       setError(null);
       const submissionId = crypto.randomUUID();
       const result = new Promise<PromptResult>((resolve) => {
@@ -247,7 +249,7 @@ export function useBridgeSession(): BridgeSession {
         );
       } catch {
         pendingResults.current.delete(submissionId);
-        setState('error');
+        setConnectionState('error');
         setError('The bridge connection closed.');
         return Promise.resolve({ status: 'failed', error: 'The bridge connection closed.' });
       }
@@ -278,7 +280,7 @@ export function useBridgeSession(): BridgeSession {
   );
 
   return {
-    state,
+    connectionState,
     error,
     closeInSeconds,
     bridgeUrl,

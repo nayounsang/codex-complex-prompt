@@ -9,7 +9,7 @@ export type ConnectionState =
   'connecting' | 'connected' | 'submitting' | 'success' | 'error' | 'disconnected';
 
 export interface BridgeSession {
-  readonly state: ConnectionState;
+  readonly connectionState: ConnectionState;
   readonly error: string | null;
   readonly closeInSeconds: number | null;
   readonly bridgeUrl: string | null;

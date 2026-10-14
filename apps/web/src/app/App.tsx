@@ -71,15 +71,19 @@ export function App(): React.JSX.Element {
             <Download size={20} strokeWidth={1.8} aria-hidden="true" />
           </button>
         </div>
-        <p className={`connection-status connection-status-${bridgeSession.state}`} role="status">
+        <p
+          className={`connection-status connection-status-${bridgeSession.connectionState}`}
+          role="status"
+        >
           <span className="status-dot" aria-hidden="true" />
           <span>
-            {bridgeSession.state === 'connecting' && 'Connecting'}
-            {bridgeSession.state === 'connected' && 'Connected'}
-            {bridgeSession.state === 'submitting' && 'Sending'}
-            {bridgeSession.state === 'success' && 'Sent'}
-            {bridgeSession.state === 'error' && (bridgeSession.error ?? 'Something went wrong')}
-            {bridgeSession.state === 'disconnected' && 'Disconnected'}
+            {bridgeSession.connectionState === 'connecting' && 'Connecting'}
+            {bridgeSession.connectionState === 'connected' && 'Connected'}
+            {bridgeSession.connectionState === 'submitting' && 'Sending'}
+            {bridgeSession.connectionState === 'success' && 'Sent'}
+            {bridgeSession.connectionState === 'error' &&
+              (bridgeSession.error ?? 'Something went wrong')}
+            {bridgeSession.connectionState === 'disconnected' && 'Disconnected'}
           </span>
         </p>
       </header>
