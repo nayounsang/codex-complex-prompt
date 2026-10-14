@@ -4,14 +4,14 @@ import type {
   FeedbackModelCatalogEntry,
   FeedbackSubagentSettings,
 } from '@codex-complex-prompt/protocol';
+import type { DelayedClose } from './useDelayedClose.js';
 
 export type ConnectionState =
   'connecting' | 'connected' | 'submitting' | 'success' | 'error' | 'disconnected';
 
-export interface BridgeSession {
+export interface BridgeSession extends DelayedClose {
   readonly connectionState: ConnectionState;
   readonly error: string | null;
-  readonly closeInSeconds: number | null;
   readonly bridgeUrl: string | null;
   readonly initialMarkdown: string | null;
   readonly feedbackLoop: boolean;

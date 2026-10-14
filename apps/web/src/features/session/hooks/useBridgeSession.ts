@@ -15,6 +15,7 @@ import type {
   TemplateChangeRequest,
   TemplateResult,
 } from './bridge-session-types.js';
+import { useDelayedClose } from './useDelayedClose.js';
 export type {
   BridgeSession,
   ConnectionState,
@@ -23,14 +24,19 @@ export type {
   TemplateResult,
 } from './bridge-session-types.js';
 
-const COMMAND_WINDOW_CLOSE_DELAY_MS = 3_000;
-
 export function useBridgeSession(): BridgeSession {
   const [connectionState, setConnectionState] = useState<ConnectionState>(
     () => getInitialConnection().state,
   );
   const [error, setError] = useState<string | null>(() => getInitialConnection().error);
-  const [closeInSeconds, setCloseInSeconds] = useState<number | null>(null);
+  const [bridgeUrl, setBridgeUrl] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('bridge') ?? window.location.origin;
+  });
+  const tokenRef = useRef<string | null>(null);
+  const bridgeRef = useRef<string | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+
   const [initialMarkdown, setInitialMarkdown] = useState<string | null>(null);
   const [feedbackLoop, setFeedbackLoop] = useState(false);
   const [feedbackModelCatalog, setFeedbackModelCatalog] = useState<
@@ -40,28 +46,11 @@ export function useBridgeSession(): BridgeSession {
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [attachmentToken, setAttachmentToken] = useState<string | null>(null);
   const [templateSnapshot, setTemplateSnapshot] = useState<BridgeSession['templateSnapshot']>(null);
-  const [bridgeUrl, setBridgeUrl] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return new URLSearchParams(window.location.search).get('bridge') ?? window.location.origin;
-  });
-  const tokenRef = useRef<string | null>(null);
-  const bridgeRef = useRef<string | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
-  const closeTimer = useRef<number | undefined>(undefined);
-  const countdownTimer = useRef<number | undefined>(undefined);
+
   const pendingResults = useRef(new Map<string, (result: PromptResult) => void>());
   const pendingTemplateResults = useRef(new Map<string, (result: TemplateResult) => void>());
 
-  const clearCloseTimers = useCallback((): void => {
-    if (closeTimer.current !== undefined) {
-      window.clearTimeout(closeTimer.current);
-      closeTimer.current = undefined;
-    }
-    if (countdownTimer.current !== undefined) {
-      window.clearInterval(countdownTimer.current);
-      countdownTimer.current = undefined;
-    }
-  }, []);
+  const { isCloseScheduled, cancelClose, clearCloseTimer, scheduleClose } = useDelayedClose();
 
   useEffect(
     function connectToBridge() {
@@ -137,26 +126,11 @@ export function useBridgeSession(): BridgeSession {
           if (message.status === 'accepted') {
             setConnectionState('success');
             setError(null);
-            clearCloseTimers();
-            setCloseInSeconds(COMMAND_WINDOW_CLOSE_DELAY_MS / 1_000);
-            closeTimer.current = window.setTimeout(() => {
-              closeTimer.current = undefined;
-              window.close();
-            }, COMMAND_WINDOW_CLOSE_DELAY_MS);
-            countdownTimer.current = window.setInterval(() => {
-              setCloseInSeconds((current) => {
-                if (current === null || current <= 1) {
-                  clearCloseTimers();
-                  return 0;
-                }
-                return current - 1;
-              });
-            }, 1_000);
+            scheduleClose();
           } else {
+            cancelClose();
             setConnectionState('error');
             setError(message.error ?? 'The command could not be sent.');
-            clearCloseTimers();
-            setCloseInSeconds(null);
           }
         } else if (message.type === 'session.error') {
           failPendingResults(message.message);
@@ -199,14 +173,14 @@ export function useBridgeSession(): BridgeSession {
 
       return function cleanupBridgeConnection() {
         failPendingResults('The bridge connection closed.');
-        clearCloseTimers();
+        clearCloseTimer();
         if (socketRef.current === connection) {
           socketRef.current = null;
         }
         transport.close();
       };
     },
-    [clearCloseTimers],
+    [cancelClose, clearCloseTimer, scheduleClose],
   );
 
   const submit = useCallback(
@@ -282,7 +256,7 @@ export function useBridgeSession(): BridgeSession {
   return {
     connectionState,
     error,
-    closeInSeconds,
+    isCloseScheduled,
     bridgeUrl,
     initialMarkdown,
     feedbackLoop,

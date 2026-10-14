@@ -263,7 +263,7 @@ export function PromptWorkspace({
           setShowEmptyFinishDialog(false);
           void bridgeSession.submit('', 'finish');
         }}
-        closeInSeconds={bridgeSession.closeInSeconds}
+        isCloseScheduled={bridgeSession.isCloseScheduled}
       />
     </>
   );
