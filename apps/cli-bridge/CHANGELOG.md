@@ -1,5 +1,13 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.4.2
+
+### Patch Changes
+
+- ba38fa7: Load Sub Agent model choices asynchronously after the command editor opens.
+- ba38fa7: Populate feedback model choices from the Codex app-server catalog and validate supported model-effort pairs.
+- 38a4427: Add a toolbar action to download the current editor contents as a Markdown file.
+
 ## 0.4.1
 
 ### Patch Changes
