@@ -1,5 +1,14 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.4.3
+
+### Patch Changes
+
+- d927b0f: Infer the intended scope of selected feedback from the request and surrounding document context while preserving unrelated content.
+- 6139114: Simplify the command-sent close notice to a fixed three-second message.
+- b70ce41: Update the bundled Mermaid editor SDK to 0.2.0.
+- 3892acf: Size Markdown table columns to their content and keep column resizing usable in the editor.
+
 ## 0.4.2
 
 ### Patch Changes
