@@ -1,6 +1,8 @@
 import {
   ClientMessageSchema,
   encodeServerMessage,
+  isFeedbackModelSupported,
+  type FeedbackModelCatalogEntry,
   type PromptTemplate,
   type ServerMessage,
 } from '@codex-complex-prompt/protocol';
@@ -22,6 +24,8 @@ export interface BridgeConnectionOptions {
   readonly handshakeTimeoutMs: number;
   readonly initialMarkdown: string | undefined;
   readonly feedbackLoop: boolean;
+  readonly feedbackModelCatalog: LocalBridgeServerOptions['feedbackModelCatalog'];
+  readonly loadFeedbackModelCatalog: LocalBridgeServerOptions['loadFeedbackModelCatalog'];
   readonly templateStore: TemplateStore | undefined;
   readonly templatesError: string | undefined;
   readonly attachmentTokens: Map<string, string> | undefined;
@@ -37,6 +41,8 @@ export function attachConnection(options: BridgeConnectionOptions): void {
     handshakeTimeoutMs,
     initialMarkdown,
     feedbackLoop,
+    feedbackModelCatalog,
+    loadFeedbackModelCatalog,
     templateStore,
     templatesError,
     attachmentTokens,
@@ -44,6 +50,8 @@ export function attachConnection(options: BridgeConnectionOptions): void {
   } = options;
   let sessionId: string | undefined;
   let handlePromptMessage: ReturnType<typeof createPromptMessageHandler> | undefined;
+  let resolvedFeedbackModelCatalog = feedbackModelCatalog;
+  let feedbackModelCatalogPromise: Promise<readonly FeedbackModelCatalogEntry[]> | undefined;
   let handshakeComplete = false;
   let sessionExpiryTimeout: NodeJS.Timeout | undefined;
   const handshakeTimeout = setTimeout(() => {
@@ -115,6 +123,7 @@ export function attachConnection(options: BridgeConnectionOptions): void {
         session,
         initialMarkdown,
         feedbackLoop,
+        feedbackModelCatalog,
         templateStore,
         templatesError,
         attachmentTokens,
@@ -137,12 +146,35 @@ export function attachConnection(options: BridgeConnectionOptions): void {
       await handleTemplateRequest(webSocket, parsed.data, templateStore, templatesError);
       return;
     }
+    if (parsed.data.type === 'feedback-model.catalog.request') {
+      feedbackModelCatalogPromise ??= (async () => {
+        try {
+          return resolvedFeedbackModelCatalog ?? (await loadFeedbackModelCatalog?.()) ?? [];
+        } catch {
+          return [];
+        }
+      })();
+      resolvedFeedbackModelCatalog = await feedbackModelCatalogPromise;
+      send(webSocket, {
+        type: 'feedback-model.catalog.result',
+        catalog: [...resolvedFeedbackModelCatalog],
+      });
+      return;
+    }
     if (parsed.data.type !== 'prompt.submit' || handlePromptMessage === undefined) {
       sendError(
         webSocket,
         'invalid_message',
         'Only prompt submissions are accepted after handshake.',
       );
+      return;
+    }
+    if (
+      parsed.data.sendFeedbackToSubagent !== false &&
+      parsed.data.feedbackModel !== undefined &&
+      !isFeedbackModelSupported(parsed.data.feedbackModel, resolvedFeedbackModelCatalog ?? [])
+    ) {
+      sendError(webSocket, 'invalid_message', 'The selected feedback model is not supported.');
       return;
     }
     await handlePromptMessage(parsed.data);
@@ -152,6 +184,7 @@ export function attachConnection(options: BridgeConnectionOptions): void {
     readonly session: SessionRecord;
     readonly initialMarkdown: string | undefined;
     readonly feedbackLoop: boolean;
+    readonly feedbackModelCatalog: LocalBridgeServerOptions['feedbackModelCatalog'];
     readonly templateStore: TemplateStore | undefined;
     readonly templatesError: string | undefined;
     readonly attachmentTokens: Map<string, string> | undefined;
@@ -176,6 +209,9 @@ export function attachConnection(options: BridgeConnectionOptions): void {
       expiresAt: session.expiresAt.toISOString(),
       ...(input.initialMarkdown === undefined ? {} : { initialMarkdown: input.initialMarkdown }),
       ...(input.feedbackLoop ? { feedbackLoop: input.feedbackLoop } : {}),
+      ...(input.feedbackModelCatalog === undefined
+        ? {}
+        : { feedbackModelCatalog: [...input.feedbackModelCatalog] }),
       ...(templates === undefined ? {} : { templates: [...templates] }),
       ...(resolvedTemplatesError === undefined ? {} : { templatesError: resolvedTemplatesError }),
       ...(input.attachmentTokens === undefined

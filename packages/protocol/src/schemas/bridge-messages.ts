@@ -2,11 +2,16 @@ import { z } from 'zod';
 
 import { isPromptWithinLimit, promptLengthValidation } from '../prompt/limits.js';
 import { promptStringSchema } from './prompt.js';
+import { FeedbackModelCatalogSchema, FeedbackSubagentSettingsSchema } from './feedback-model.js';
 import { PromptTemplateSchema, TemplateRequestSchema, TemplateResultSchema } from './templates.js';
 
 export const SessionHandshakeSchema = z.object({
   type: z.literal('session.handshake'),
   token: z.string().min(32).max(256),
+});
+
+export const FeedbackModelCatalogRequestSchema = z.object({
+  type: z.literal('feedback-model.catalog.request'),
 });
 
 export const PromptSubmitSchema = z
@@ -15,7 +20,7 @@ export const PromptSubmitSchema = z
     submissionId: z.string().uuid(),
     prompt: z.string().trim().refine(isPromptWithinLimit, promptLengthValidation),
     mode: z.enum(['edit', 'feedback', 'finish']).optional(),
-    sendFeedbackToSubagent: z.boolean().optional(),
+    ...FeedbackSubagentSettingsSchema.shape,
   })
   .refine((submission) => submission.mode === 'finish' || submission.prompt.length > 0, {
     message: 'Prompt must not be empty.',
@@ -24,6 +29,7 @@ export const PromptSubmitSchema = z
 
 export const ClientMessageSchema = z.union([
   SessionHandshakeSchema,
+  FeedbackModelCatalogRequestSchema,
   PromptSubmitSchema,
   TemplateRequestSchema,
 ]);
@@ -34,6 +40,7 @@ export const SessionReadySchema = z.object({
   expiresAt: z.string().datetime(),
   initialMarkdown: z.string().optional(),
   feedbackLoop: z.boolean().optional(),
+  feedbackModelCatalog: FeedbackModelCatalogSchema.optional(),
   templates: z.array(PromptTemplateSchema).optional(),
   templatesError: z.string().optional(),
   attachmentUrl: z.string().url().optional(),
@@ -46,6 +53,11 @@ export const PromptResultSchema = z.object({
   status: z.enum(['accepted', 'failed']),
   error: z.string().optional(),
   prompt: promptStringSchema().optional(),
+});
+
+export const FeedbackModelCatalogResultSchema = z.object({
+  type: z.literal('feedback-model.catalog.result'),
+  catalog: FeedbackModelCatalogSchema,
 });
 
 export const ProtocolErrorSchema = z.object({
@@ -62,6 +74,7 @@ export const ProtocolErrorSchema = z.object({
 
 export const ServerMessageSchema = z.discriminatedUnion('type', [
   SessionReadySchema,
+  FeedbackModelCatalogResultSchema,
   PromptResultSchema,
   TemplateResultSchema,
   ProtocolErrorSchema,
@@ -70,6 +83,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 export type PromptSubmit = z.infer<typeof PromptSubmitSchema>;
+export type FeedbackModelCatalogRequest = z.infer<typeof FeedbackModelCatalogRequestSchema>;
+export type FeedbackModelCatalogResult = z.infer<typeof FeedbackModelCatalogResultSchema>;
 export type PromptSubmitMode = NonNullable<PromptSubmit['mode']>;
 
 export function parseClientMessage(input: unknown): ClientMessage {

@@ -145,6 +145,8 @@ function registerConnections(
       handshakeTimeoutMs: limits.handshakeTimeoutMs,
       initialMarkdown: options.initialMarkdown,
       feedbackLoop: options.feedbackLoop ?? false,
+      feedbackModelCatalog: options.feedbackModelCatalog,
+      loadFeedbackModelCatalog: options.loadFeedbackModelCatalog,
       templateStore: options.templateStore,
       templatesError: options.templatesError,
       attachmentTokens: options.attachmentStore === undefined ? undefined : attachmentTokens,

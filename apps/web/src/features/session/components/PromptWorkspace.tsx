@@ -1,5 +1,6 @@
 import { type RefObject, type SyntheticEvent, useCallback, useRef, useState } from 'react';
 import { Button } from '@base-ui/react/button';
+import type { FeedbackSubagentContext } from '@codex-complex-prompt/protocol';
 import { countPromptCharacters, MAX_PROMPT_LENGTH } from '@codex-complex-prompt/protocol';
 
 import type { BridgeSession } from '../hooks/useBridgeSession.js';
@@ -12,15 +13,15 @@ import { useProjectTemplates } from '../../templates/hooks/useProjectTemplates.j
 import { usePromptWorkspaceAttachments } from '../hooks/usePromptWorkspaceAttachments.js';
 import { useMarkdownDownloadSource } from '../hooks/useMarkdownDownloadSource.js';
 
-interface PromptWorkspaceProps {
+interface PromptWorkspaceProps extends FeedbackSubagentContext {
   readonly bridgeSession: BridgeSession;
-  readonly sendFeedbackToSubagent: boolean;
   readonly getMarkdownForDownloadRef: RefObject<() => string>;
 }
 
 export function PromptWorkspace({
   bridgeSession,
   sendFeedbackToSubagent,
+  feedbackModel,
   getMarkdownForDownloadRef,
 }: PromptWorkspaceProps): React.JSX.Element {
   const [markdownOverride, setMarkdownOverride] = useState<string | null>(null);
@@ -42,6 +43,7 @@ export function PromptWorkspace({
     annotations: feedback.annotations,
     submit,
     sendFeedbackToSubagent,
+    feedbackModel,
     onMarkdownChange: updateMarkdownOverride,
     onComplete: () => {
       feedback.clearFeedback();

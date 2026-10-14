@@ -1,6 +1,7 @@
 import {
   CodexUserPromptSubmitInputSchema,
   type CodexUserPromptSubmitInput,
+  type FeedbackSubagentContext,
   type PromptSubmitMode,
 } from '@codex-complex-prompt/protocol';
 
@@ -27,6 +28,11 @@ export interface RunCodexUserPromptHookOptions {
   readonly timeoutMs?: number;
   readonly signal?: AbortSignal;
   readonly feedbackLoopStateStore?: FeedbackLoopStateStore;
+}
+
+interface BrowserPromptSubmission extends FeedbackSubagentContext {
+  readonly command: string;
+  readonly mode: PromptSubmitMode;
 }
 
 const COMPLEX_PROMPT_INVOCATION = /^\s*(?:\$|\/)complex-prompt(?:\s|$)/;
@@ -64,19 +70,9 @@ export async function runCodexUserPromptHook(
     input.prompt.slice(invocation?.[0].length ?? 0),
     input.cwd,
   );
-  let resolveCommand:
-    | ((submission: {
-        command: string;
-        mode: PromptSubmitMode;
-        sendFeedbackToSubagent: boolean;
-      }) => void)
-    | undefined;
+  let resolveCommand: ((submission: BrowserPromptSubmission) => void) | undefined;
   let resolveSubmission: (() => void) | undefined;
-  const commandResult = new Promise<{
-    command: string;
-    mode: PromptSubmitMode;
-    sendFeedbackToSubagent: boolean;
-  }>((resolve) => {
+  const commandResult = new Promise<BrowserPromptSubmission>((resolve) => {
     resolveCommand = resolve;
   });
   const submissionResult = new Promise<void>((resolve) => {
@@ -105,6 +101,7 @@ export async function runCodexUserPromptHook(
           command,
           mode,
           sendFeedbackToSubagent: context?.sendFeedbackToSubagent ?? false,
+          ...(context?.feedbackModel === undefined ? {} : { feedbackModel: context.feedbackModel }),
         });
         return submissionResult;
       },
@@ -135,7 +132,10 @@ export async function runCodexUserPromptHook(
             ? ''
             : `Project working directory for relative attachment paths: ${input.cwd}\nRead the PNG files referenced by Markdown image paths when they are relevant to the task.\n\n`) +
           (submission.mode === 'feedback'
-            ? buildCodexFeedbackSubmissionInstruction(submission.sendFeedbackToSubagent) + command
+            ? buildCodexFeedbackSubmissionInstruction(
+                submission.sendFeedbackToSubagent,
+                submission.feedbackModel,
+              ) + command
             : input.permission_mode === 'plan'
               ? 'Plan Mode is active and the user selected Submit. Treat the following command as a request to prepare an implementation plan only. Do not edit files or carry out the plan. Once the plan is ready, call ExitPlanMode to present it for user approval.\n\n' +
                 command
@@ -164,18 +164,10 @@ function continueWithMessage(systemMessage: string): CodexUserPromptHookOutput {
 }
 
 async function waitForCommand(
-  command: Promise<{
-    command: string;
-    mode: PromptSubmitMode;
-    sendFeedbackToSubagent: boolean;
-  }>,
+  command: Promise<BrowserPromptSubmission>,
   timeoutMs: number,
   signal: AbortSignal | undefined,
-): Promise<{
-  command: string;
-  mode: PromptSubmitMode;
-  sendFeedbackToSubagent: boolean;
-}> {
+): Promise<BrowserPromptSubmission> {
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
     throw new Error('Browser command editor timeout must be a positive integer.');
   }

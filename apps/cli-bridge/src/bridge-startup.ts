@@ -11,6 +11,8 @@ import {
   type CodexSessionInput,
   type CodexSessionInputContext,
 } from './features/input/adapters/codex-session-input.js';
+import type { FeedbackModelCatalogEntry } from '@codex-complex-prompt/protocol';
+import { loadCodexFeedbackModelCatalog } from './features/input/model/codex-feedback-model-catalog.js';
 import { createProjectAttachmentStore } from './features/attachments/project-attachments.js';
 import { createProjectTemplateStore } from './features/templates/storage/project-templates.js';
 import { DEFAULT_BRIDGE_SESSION_TTL_MS } from './shared/hook-timeouts.js';
@@ -19,6 +21,7 @@ export interface CliBridgeOptions {
   readonly inputAdapter?: CodexSessionInput;
   readonly initialMarkdown?: string;
   readonly feedbackLoop?: boolean;
+  readonly feedbackModelCatalog?: readonly FeedbackModelCatalogEntry[];
   readonly openBrowser?: (url: string) => Promise<void>;
   readonly webUrl?: string;
   readonly port?: number;
@@ -57,6 +60,10 @@ export async function startCliBridge(options: CliBridgeOptions = {}): Promise<Ru
     ...(options.promptTimeoutMs === undefined ? {} : { promptTimeoutMs: options.promptTimeoutMs }),
     ...(options.initialMarkdown === undefined ? {} : { initialMarkdown: options.initialMarkdown }),
     ...(options.feedbackLoop === undefined ? {} : { feedbackLoop: options.feedbackLoop }),
+    ...(options.feedbackModelCatalog === undefined
+      ? {}
+      : { feedbackModelCatalog: options.feedbackModelCatalog }),
+    loadFeedbackModelCatalog: loadCodexFeedbackModelCatalog,
     ...(templateStore === undefined ? {} : { templateStore }),
     ...(attachmentStore === undefined ? {} : { attachmentStore }),
     ...(options.templatesError === undefined ? {} : { templatesError: options.templatesError }),

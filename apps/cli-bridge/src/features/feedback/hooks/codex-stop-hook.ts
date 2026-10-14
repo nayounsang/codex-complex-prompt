@@ -1,4 +1,8 @@
-import { CodexStopHookInputSchema, type PromptSubmitMode } from '@codex-complex-prompt/protocol';
+import {
+  CodexStopHookInputSchema,
+  type FeedbackSubagentContext,
+  type PromptSubmitMode,
+} from '@codex-complex-prompt/protocol';
 
 import {
   createFeedbackLoopStateStore,
@@ -21,10 +25,9 @@ export interface RunCodexStopHookOptions {
   readonly feedbackLoopStateStore?: FeedbackLoopStateStore;
 }
 
-interface BrowserSubmission {
+interface BrowserSubmission extends FeedbackSubagentContext {
   readonly prompt: string;
   readonly mode: PromptSubmitMode;
-  readonly sendFeedbackToSubagent: boolean;
 }
 
 export async function runCodexStopHook(
@@ -78,6 +81,7 @@ export async function runCodexStopHook(
           prompt,
           mode: context?.mode ?? 'edit',
           sendFeedbackToSubagent: context?.sendFeedbackToSubagent ?? false,
+          ...(context?.feedbackModel === undefined ? {} : { feedbackModel: context.feedbackModel }),
         });
         return bridgeSubmission;
       },
@@ -125,7 +129,10 @@ function buildContinuationPrompt(submission: BrowserSubmission): string {
   if (submission.mode === 'feedback') {
     return (
       "The user selected AI Feedback, not Submit. Apply the user's browser feedback using the instructions below.\n\n" +
-      buildCodexFeedbackSubmissionInstruction(submission.sendFeedbackToSubagent) +
+      buildCodexFeedbackSubmissionInstruction(
+        submission.sendFeedbackToSubagent,
+        submission.feedbackModel,
+      ) +
       submission.prompt
     );
   }

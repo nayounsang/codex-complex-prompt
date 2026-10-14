@@ -1,12 +1,16 @@
-import type { PromptSubmitMode, PromptTemplate } from '@codex-complex-prompt/protocol';
+import type {
+  PromptSubmitMode,
+  PromptTemplate,
+  FeedbackModelCatalogEntry,
+  FeedbackSubagentContext,
+} from '@codex-complex-prompt/protocol';
 
 import type { SessionStoreOptions } from '../features/session/storage/session-store.js';
 
-export interface PromptContext {
+export interface PromptContext extends FeedbackSubagentContext {
   readonly sessionId: string;
   readonly submissionId: string;
   readonly mode: PromptSubmitMode;
-  readonly sendFeedbackToSubagent: boolean;
 }
 
 export type PromptAdapterResult = string | void;
@@ -66,6 +70,8 @@ export interface LocalBridgeServerOptions extends SessionStoreOptions {
   readonly handshakeTimeoutMs?: number;
   readonly initialMarkdown?: string;
   readonly feedbackLoop?: boolean;
+  readonly feedbackModelCatalog?: readonly FeedbackModelCatalogEntry[];
+  readonly loadFeedbackModelCatalog?: () => Promise<readonly FeedbackModelCatalogEntry[]>;
   readonly templateStore?: TemplateStore;
   readonly templatesError?: string;
   readonly attachmentStore?: AttachmentStore;

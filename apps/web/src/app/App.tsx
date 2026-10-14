@@ -4,14 +4,24 @@ import { saveAs } from 'file-saver';
 import { useBridgeSession } from '../features/session/hooks/useBridgeSession.js';
 import { PromptWorkspace } from '../features/session/components/PromptWorkspace.js';
 import { FeedbackSettingsDialog } from './components/FeedbackSettingsDialog.js';
+import {
+  createFeedbackModelOptions,
+  getFeedbackModel,
+  getFeedbackModelOption,
+  type FeedbackModelOption,
+} from './model/feedback-model-options.js';
 import './styles.css';
 
 const SUBAGENT_SETTING_KEY = 'codex-complex-prompt:send-feedback-to-subagent';
+const FEEDBACK_MODEL_SETTING_KEY = 'codex-complex-prompt:feedback-model';
 
 export function App(): React.JSX.Element {
   const bridgeSession = useBridgeSession();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sendFeedbackToSubagent, setSendFeedbackToSubagent] = useState(readSubagentSetting);
+  const feedbackModelOptions = createFeedbackModelOptions(bridgeSession.feedbackModelCatalog);
+  const [feedbackModelValue, setFeedbackModelValue] = useState(readFeedbackModelSetting);
+  const feedbackModelOption = getFeedbackModelOption(feedbackModelValue, feedbackModelOptions);
   const getMarkdownForDownloadRef = useRef(() => bridgeSession.initialMarkdown ?? '');
 
   function downloadMarkdown(): void {
@@ -25,6 +35,16 @@ export function App(): React.JSX.Element {
     setSendFeedbackToSubagent(enabled);
     try {
       window.sessionStorage.setItem(SUBAGENT_SETTING_KEY, String(enabled));
+    } catch {
+      // Keep the current tab's setting even when storage is unavailable.
+    }
+  }
+
+  function updateFeedbackModelSetting(option: FeedbackModelOption, persist: boolean): void {
+    setFeedbackModelValue(option.value);
+    if (!persist) return;
+    try {
+      window.sessionStorage.setItem(FEEDBACK_MODEL_SETTING_KEY, option.value);
     } catch {
       // Keep the current tab's setting even when storage is unavailable.
     }
@@ -66,17 +86,33 @@ export function App(): React.JSX.Element {
       <PromptWorkspace
         bridgeSession={bridgeSession}
         sendFeedbackToSubagent={sendFeedbackToSubagent}
+        feedbackModel={sendFeedbackToSubagent ? getFeedbackModel(feedbackModelOption) : undefined}
         getMarkdownForDownloadRef={getMarkdownForDownloadRef}
       />
       {settingsOpen && (
         <FeedbackSettingsDialog
           sendFeedbackToSubagent={sendFeedbackToSubagent}
-          onSave={updateSubagentSetting}
+          feedbackModelValue={feedbackModelValue}
+          feedbackModelOptions={feedbackModelOptions}
+          feedbackModelCatalogLoading={bridgeSession.feedbackModelCatalogLoading}
+          onSave={(enabled, modelOption) => {
+            updateSubagentSetting(enabled);
+            if (!bridgeSession.feedbackModelCatalogLoading)
+              updateFeedbackModelSetting(modelOption, !bridgeSession.feedbackLoop);
+          }}
           onClose={() => setSettingsOpen(false)}
         />
       )}
     </main>
   );
+}
+
+function readFeedbackModelSetting(): string | null {
+  try {
+    return window.sessionStorage.getItem(FEEDBACK_MODEL_SETTING_KEY);
+  } catch {
+    return null;
+  }
 }
 
 function readSubagentSetting(): boolean {

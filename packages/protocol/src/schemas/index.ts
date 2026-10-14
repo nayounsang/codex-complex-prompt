@@ -1,5 +1,16 @@
 export { promptStringSchema } from './prompt.js';
 export {
+  FeedbackModelSchema,
+  FeedbackSubagentSettingsSchema,
+  FeedbackModelCatalogEntrySchema,
+  FeedbackModelCatalogSchema,
+  isFeedbackModelSupported,
+  type FeedbackModel,
+  type FeedbackSubagentSettings,
+  type FeedbackSubagentContext,
+  type FeedbackModelCatalogEntry,
+} from './feedback-model.js';
+export {
   CodexUserPromptSubmitInputSchema,
   CodexStopHookInputSchema,
   type CodexUserPromptSubmitInput,
@@ -15,6 +26,8 @@ export {
 export {
   SessionHandshakeSchema,
   PromptSubmitSchema,
+  FeedbackModelCatalogRequestSchema,
+  FeedbackModelCatalogResultSchema,
   ClientMessageSchema,
   SessionReadySchema,
   PromptResultSchema,
@@ -25,6 +38,8 @@ export {
   type ClientMessage,
   type ServerMessage,
   type PromptSubmit,
+  type FeedbackModelCatalogRequest,
+  type FeedbackModelCatalogResult,
   type PromptSubmitMode,
 } from './bridge-messages.js';
 export {

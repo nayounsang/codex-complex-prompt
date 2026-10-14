@@ -1458,7 +1458,9 @@ button:focus-visible,
 }
 
 .feedback-settings-dialog {
+  position: relative;
   width: min(100%, 520px);
+  overflow: visible;
   padding: 24px;
   border: 1px solid #e6e5e2;
   border-radius: 10px;
@@ -1486,6 +1488,51 @@ button:focus-visible,
   color: #37352f;
   font-size: 14px;
   cursor: pointer;
+}
+
+.feedback-model-field {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+  color: #37352f;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-field-hint {
+  color: #787774;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.feedback-model-select__control {
+  min-height: 40px;
+  border-color: #d6d5d1 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.feedback-model-select__control:hover,
+.feedback-model-select__control--is-focused {
+  border-color: #8a8983 !important;
+}
+
+.feedback-model-select__menu {
+  z-index: 5 !important;
+  color: #37352f;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.feedback-model-select__option--is-focused {
+  background: #f0efec !important;
+}
+
+.feedback-model-select__option--is-selected {
+  background: #37352f !important;
 }
 
 .settings-checkbox {
