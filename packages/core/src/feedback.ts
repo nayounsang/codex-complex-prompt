@@ -20,7 +20,7 @@ export type FeedbackAnnotation = GlobalFeedbackAnnotation | SelectionFeedbackAnn
 export type FeedbackScope = FeedbackAnnotation['scope'];
 
 export const FEEDBACK_EDIT_INSTRUCTION =
-  'Apply the feedback to the complete Current Markdown document included below. Follow the AI Feedback scope rules: selected feedback may change only its exact quoted text at its listed location. Do not apply selected feedback to matching or similar text elsewhere, and preserve all content outside selected ranges exactly. Global feedback may apply across the document. Preserve all other unaffected content. Return the complete updated Markdown only, without an introduction, summary, or code fence.\n\n';
+  'Apply the feedback to the complete Current Markdown document included below. Use each selected quote and location as an anchor, then infer the intended edit scope from the feedback and surrounding context. Edit related content when needed to fulfill the request, and preserve unrelated content and similar passages elsewhere. Global feedback may apply across the document. Preserve all other unaffected content. Return the complete updated Markdown only, without an introduction, summary, or code fence.\n\n';
 
 export function serializeFeedback(
   markdown: string,
@@ -36,9 +36,8 @@ export function serializeFeedback(
       sections.push('- Global feedback applies across the document.');
     }
     sections.push(
-      '- Selected feedback applies only to the exact quoted text at its listed location.',
-      '- Treat each selection as a hard edit boundary. Do not apply its feedback to matching, similar, or related text elsewhere.',
-      '- Keep all Markdown outside each selected range unchanged. Never broaden a selection request into a document-wide change.',
+      '- Use each selected quote and location as an anchor. Infer the requested edit scope from the feedback and surrounding context.',
+      '- Edit related content when needed to fulfill the request. Do not change unrelated content or merely similar passages elsewhere.',
     );
   }
 

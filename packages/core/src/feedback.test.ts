@@ -23,9 +23,8 @@ describe('feedback serialization', () => {
       '## AI Feedback\n\n' +
         '### Scope rules\n\n' +
         '- Global feedback applies across the document.\n' +
-        '- Selected feedback applies only to the exact quoted text at its listed location.\n' +
-        '- Treat each selection as a hard edit boundary. Do not apply its feedback to matching, similar, or related text elsewhere.\n' +
-        '- Keep all Markdown outside each selected range unchanged. Never broaden a selection request into a document-wide change.\n\n' +
+        '- Use each selected quote and location as an anchor. Infer the requested edit scope from the feedback and surrounding context.\n' +
+        '- Edit related content when needed to fulfill the request. Do not change unrelated content or merely similar passages elsewhere.\n\n' +
         '### Global feedback\n\n' +
         'Make the document more concise.\n\n' +
         '### Selected feedback\n\n' +
@@ -45,7 +44,7 @@ describe('feedback serialization', () => {
     );
   });
 
-  it('keeps selected-only feedback scoped to its exact range', () => {
+  it('includes the selected location and full document context for selected feedback', () => {
     const result = serializeFeedback('First paragraph.\n\nSecond paragraph.', [
       {
         id: 'selection-1',
@@ -58,7 +57,7 @@ describe('feedback serialization', () => {
     ]);
 
     expect(result).toContain(
-      '- Selected feedback applies only to the exact quoted text at its listed location.',
+      '- Use each selected quote and location as an anchor. Infer the requested edit scope from the feedback and surrounding context.',
     );
     expect(result).toContain('- Exact Markdown range: [0, 16)');
     expect(result).not.toContain('Global feedback applies across the document.');
