@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import type {
+  ClientMessage,
   FeedbackSubagentSettings,
   PromptSubmitMode,
   ServerMessage,
 } from '@codex-complex-prompt/protocol';
 
-import { connectBridgeTransport } from '../infrastructure/bridge-transport.js';
-import { getInitialConnection, parseBridgeUrl } from './bridge-url.js';
+import { getInitialConnection } from './bridge-url.js';
 import type {
   BridgeSession,
   ConnectionState,
@@ -16,8 +16,10 @@ import type {
   TemplateResult,
 } from './bridge-session-types.js';
 import { useAttachment } from './useAttatchment.js';
+import { useBridgeConnection } from './useBridgeConnection.js';
 import { useDelayedClose } from './useDelayedClose.js';
 import { usePending } from './usePending.js';
+
 export type {
   BridgeSession,
   ConnectionState,
@@ -31,14 +33,6 @@ export function useBridgeSession(): BridgeSession {
     () => getInitialConnection().state,
   );
   const [error, setError] = useState<string | null>(() => getInitialConnection().error);
-  const [bridgeUrl, setBridgeUrl] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return new URLSearchParams(window.location.search).get('bridge') ?? window.location.origin;
-  });
-  const tokenRef = useRef<string | null>(null);
-  const bridgeRef = useRef<string | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
-
   const [initialMarkdown, setInitialMarkdown] = useState<string | null>(null);
   const [feedbackLoop, setFeedbackLoop] = useState(false);
   const [feedbackModelCatalog, setFeedbackModelCatalog] = useState<
@@ -60,27 +54,10 @@ export function useBridgeSession(): BridgeSession {
     [pendingPrompts, pendingTemplates],
   );
 
-  useEffect(
-    function connectToBridge() {
-      const searchParams = new URLSearchParams(window.location.search);
-      const token = tokenRef.current ?? searchParams.get('token');
-      if (token === null) {
-        return;
-      }
-      tokenRef.current = token;
-      const bridge = bridgeRef.current ?? searchParams.get('bridge') ?? window.location.origin;
-      const bridgeResult = parseBridgeUrl(bridge);
-      if (bridgeResult.url === null) return;
-      const bridgeOrigin = bridgeResult.url;
-      bridgeRef.current = bridge;
-      setBridgeUrl(bridge);
-      const cleanUrl = `${window.location.pathname}${window.location.hash}`;
-      if (searchParams.has('token')) {
-        window.history.replaceState({}, document.title, cleanUrl);
-      }
-      function handleMessage(connection: WebSocket, message: ServerMessage): void {
-        if (socketRef.current !== connection) return;
-        if (message.type === 'session.ready') {
+  const handleMessage = useCallback(
+    (message: ServerMessage, send: (message: ClientMessage) => void): void => {
+      switch (message.type) {
+        case 'session.ready': {
           setConnectionState('connected');
           setError(null);
           setInitialMarkdown(message.initialMarkdown ?? '');
@@ -90,7 +67,7 @@ export function useBridgeSession(): BridgeSession {
           setFeedbackModelCatalogLoading(shouldLoadFeedbackModelCatalog);
           if (shouldLoadFeedbackModelCatalog) {
             try {
-              connection.send(JSON.stringify({ type: 'feedback-model.catalog.request' }));
+              send({ type: 'feedback-model.catalog.request' });
             } catch {
               setFeedbackModelCatalogLoading(false);
             }
@@ -100,17 +77,22 @@ export function useBridgeSession(): BridgeSession {
             templates: message.templates ?? [],
             error: message.templatesError ?? null,
           });
-        } else if (message.type === 'feedback-model.catalog.result') {
+          break;
+        }
+        case 'feedback-model.catalog.result':
           setFeedbackModelCatalog(message.catalog);
           setFeedbackModelCatalogLoading(false);
-        } else if (message.type === 'template.result') {
+          break;
+        case 'template.result': {
           const result: TemplateResult = {
             status: message.status,
             ...(message.templates === undefined ? {} : { templates: message.templates }),
             ...(message.error === undefined ? {} : { error: message.error }),
           };
           pendingTemplates.resolve(message.requestId, result);
-        } else if (message.type === 'prompt.result') {
+          break;
+        }
+        case 'prompt.result': {
           const result: PromptResult = {
             status: message.status,
             ...(message.error === undefined ? {} : { error: message.error }),
@@ -126,63 +108,56 @@ export function useBridgeSession(): BridgeSession {
             setConnectionState('error');
             setError(message.error ?? 'The command could not be sent.');
           }
-        } else if (message.type === 'session.error') {
+          break;
+        }
+        case 'session.error':
           failPendingResults(message.message);
           setConnectionState('error');
           setError(message.message);
-        }
+          break;
       }
-
-      function handleInvalidMessage(connection: WebSocket): void {
-        if (socketRef.current !== connection) return;
-        failPendingResults('The bridge returned an invalid message.');
-        setConnectionState('error');
-        setError('The bridge returned an invalid message.');
-      }
-
-      function handleClose(connection: WebSocket): void {
-        if (socketRef.current !== connection) return;
-        socketRef.current = null;
-        failPendingResults('The bridge connection closed.');
-        setConnectionState((current) =>
-          current === 'success' || current === 'error' ? current : 'disconnected',
-        );
-      }
-
-      function handleError(connection: WebSocket): void {
-        if (socketRef.current !== connection) return;
-        failPendingResults('Could not connect to the local bridge.');
-        setConnectionState('error');
-        setError('Could not connect to the local bridge.');
-      }
-
-      const transport = connectBridgeTransport(bridgeOrigin, token, {
-        onMessage: handleMessage,
-        onInvalidMessage: handleInvalidMessage,
-        onClose: handleClose,
-        onError: handleError,
-      });
-      const connection = transport.socket;
-      socketRef.current = connection;
-
-      return function cleanupBridgeConnection() {
-        failPendingResults('The bridge connection closed.');
-        clearCloseTimer();
-        if (socketRef.current === connection) {
-          socketRef.current = null;
-        }
-        transport.close();
-      };
     },
     [
       cancelClose,
-      clearCloseTimer,
       failPendingResults,
       pendingPrompts,
       pendingTemplates,
       scheduleClose,
+      setAttachment,
     ],
   );
+
+  const handleInvalidMessage = useCallback((): void => {
+    failPendingResults('The bridge returned an invalid message.');
+    setConnectionState('error');
+    setError('The bridge returned an invalid message.');
+  }, [failPendingResults]);
+
+  const handleClose = useCallback((): void => {
+    failPendingResults('The bridge connection closed.');
+    setConnectionState((current) =>
+      current === 'success' || current === 'error' ? current : 'disconnected',
+    );
+  }, [failPendingResults]);
+
+  const handleError = useCallback((): void => {
+    failPendingResults('Could not connect to the local bridge.');
+    setConnectionState('error');
+    setError('Could not connect to the local bridge.');
+  }, [failPendingResults]);
+
+  const handleCleanup = useCallback((): void => {
+    failPendingResults('The bridge connection closed.');
+    clearCloseTimer();
+  }, [clearCloseTimer, failPendingResults]);
+
+  const connection = useBridgeConnection({
+    onMessage: handleMessage,
+    onInvalidMessage: handleInvalidMessage,
+    onClose: handleClose,
+    onError: handleError,
+    onCleanup: handleCleanup,
+  });
 
   const submit = useCallback(
     (
@@ -190,13 +165,8 @@ export function useBridgeSession(): BridgeSession {
       mode: PromptSubmitMode = 'edit',
       options: FeedbackSubagentSettings = {},
     ): Promise<PromptResult> => {
-      const socket = socketRef.current;
       /* c8 ignore next -- the button disables this path when no authenticated socket exists. */
-      if (
-        socket === null ||
-        socket.readyState !== WebSocket.OPEN ||
-        (prompt.trim() === '' && mode !== 'finish')
-      ) {
+      if (!connection.isOpen() || (prompt.trim() === '' && mode !== 'finish')) {
         return Promise.resolve({ status: 'failed', error: 'The bridge is not connected.' });
       }
       setConnectionState('submitting');
@@ -204,22 +174,20 @@ export function useBridgeSession(): BridgeSession {
       const submissionId = crypto.randomUUID();
       const result = pendingPrompts.waitFor(submissionId);
       try {
-        socket.send(
-          JSON.stringify({
-            type: 'prompt.submit',
-            submissionId,
-            prompt: prompt.trim(),
-            ...(mode === 'edit' ? {} : { mode }),
-            ...(mode === 'feedback' && options.sendFeedbackToSubagent === true
-              ? { sendFeedbackToSubagent: true }
-              : {}),
-            ...(mode === 'feedback' &&
-            options.sendFeedbackToSubagent === true &&
-            options.feedbackModel !== undefined
-              ? { feedbackModel: options.feedbackModel }
-              : {}),
-          }),
-        );
+        connection.send({
+          type: 'prompt.submit',
+          submissionId,
+          prompt: prompt.trim(),
+          ...(mode === 'edit' ? {} : { mode }),
+          ...(mode === 'feedback' && options.sendFeedbackToSubagent === true
+            ? { sendFeedbackToSubagent: true }
+            : {}),
+          ...(mode === 'feedback' &&
+          options.sendFeedbackToSubagent === true &&
+          options.feedbackModel !== undefined
+            ? { feedbackModel: options.feedbackModel }
+            : {}),
+        });
       } catch {
         pendingPrompts.delete(submissionId);
         setConnectionState('error');
@@ -228,33 +196,32 @@ export function useBridgeSession(): BridgeSession {
       }
       return result;
     },
-    [pendingPrompts],
+    [connection, pendingPrompts],
   );
 
   const requestTemplateChange = useCallback(
     (request: TemplateChangeRequest): Promise<TemplateResult> => {
-      const socket = socketRef.current;
-      if (socket === null || socket.readyState !== WebSocket.OPEN) {
+      if (!connection.isOpen()) {
         return Promise.resolve({ status: 'failed', error: 'The bridge is not connected.' });
       }
       const requestId = crypto.randomUUID();
       const result = pendingTemplates.waitFor(requestId);
       try {
-        socket.send(JSON.stringify({ ...request, requestId }));
+        connection.send({ ...request, requestId });
       } catch {
         pendingTemplates.delete(requestId);
         return Promise.resolve({ status: 'failed', error: 'The bridge connection closed.' });
       }
       return result;
     },
-    [pendingTemplates],
+    [connection, pendingTemplates],
   );
 
   return {
     connectionState,
     error,
     isCloseScheduled,
-    bridgeUrl,
+    bridgeUrl: connection.bridgeUrl,
     initialMarkdown,
     feedbackLoop,
     feedbackModelCatalog,
