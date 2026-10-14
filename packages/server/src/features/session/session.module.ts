@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
 
-@Module({})
+import { WebSocketLifecycleProvider } from './websocket-lifecycle.provider.js';
+
+@Module({ providers: [WebSocketLifecycleProvider] })
 export class SessionModule {}

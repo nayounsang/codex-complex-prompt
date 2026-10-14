@@ -11,6 +11,11 @@ export async function createBridgeNestApplication(
     BridgeServerModule.register(options),
     { logger: false, bodyParser: false },
   );
-  await application.init();
-  return application;
+  try {
+    await application.init();
+    return application;
+  } catch (error) {
+    await application.close();
+    throw error;
+  }
 }

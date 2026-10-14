@@ -28,7 +28,7 @@ export interface BridgeConnectionOptions {
   readonly loadFeedbackModelCatalog: LocalBridgeServerOptions['loadFeedbackModelCatalog'];
   readonly templateStore: TemplateStore | undefined;
   readonly templatesError: string | undefined;
-  readonly attachmentTokens: Map<string, string> | undefined;
+  readonly attachmentTokens: Pick<ReadonlyMap<string, string>, 'get'> | undefined;
   readonly getAttachmentUrl: () => string;
 }
 
@@ -187,7 +187,7 @@ export function attachConnection(options: BridgeConnectionOptions): void {
     readonly feedbackModelCatalog: LocalBridgeServerOptions['feedbackModelCatalog'];
     readonly templateStore: TemplateStore | undefined;
     readonly templatesError: string | undefined;
-    readonly attachmentTokens: Map<string, string> | undefined;
+    readonly attachmentTokens: Pick<ReadonlyMap<string, string>, 'get'> | undefined;
     readonly getAttachmentUrl: () => string;
   }): Promise<ServerMessage> {
     const { session } = input;
