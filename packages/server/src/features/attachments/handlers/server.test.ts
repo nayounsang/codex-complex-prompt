@@ -1,19 +1,10 @@
-import { randomBytes } from 'node:crypto';
-
 import { AttachmentTooLargeError } from '@codex-complex-prompt/protocol';
 import { describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import {
-  startLocalBridgeServer,
-  type AttachmentStore,
-  type RunningLocalBridgeServer,
-} from '../../../index.js';
-import { AttachmentTokenStore } from '../attachment-token-store.js';
-import type { LocalBridgeServerOptions } from '../../../shared/types.js';
-import { createBridgeNestApplication } from '../../../runtime/create-bridge-nest-application.js';
+import { startLocalBridgeServer, type AttachmentStore } from '../../../index.js';
 
 async function authenticate(
-  server: RunningLocalBridgeServer,
+  server: AttachmentContractServer,
   token: string,
 ): Promise<{ ready: unknown }> {
   const socket = new WebSocket(`${server.url}/ws`);
@@ -39,11 +30,7 @@ interface StartedAttachmentContractServer {
   readonly token: string;
 }
 
-type AttachmentContractServerFactory = (
-  attachmentStore: AttachmentStore | undefined,
-) => Promise<StartedAttachmentContractServer>;
-
-async function startLegacyAttachmentContractServer(
+async function startAttachmentContractServer(
   attachmentStore: AttachmentStore | undefined,
 ): Promise<StartedAttachmentContractServer> {
   const server = await startLocalBridgeServer({
@@ -65,46 +52,7 @@ async function startLegacyAttachmentContractServer(
   }
 }
 
-async function startNestAttachmentContractServer(
-  attachmentStore: AttachmentStore | undefined,
-): Promise<StartedAttachmentContractServer> {
-  const options: LocalBridgeServerOptions = {
-    ...(attachmentStore === undefined ? {} : { attachmentStore }),
-    onPrompt: async () => undefined,
-  };
-  const application = await createBridgeNestApplication(options);
-  const token = randomBytes(32).toString('base64url');
-
-  try {
-    if (attachmentStore !== undefined) {
-      application
-        .get(AttachmentTokenStore, { strict: false })
-        .set('attachment-contract-session', token);
-    }
-    await application.listen(0, '127.0.0.1');
-    const address = application.getHttpServer().address();
-    if (address === null || typeof address === 'string') {
-      throw new Error('The Nest attachment test server did not expose a TCP address.');
-    }
-    return {
-      server: {
-        url: `http://127.0.0.1:${address.port}`,
-        close: () => application.close(),
-      },
-      token: attachmentStore === undefined ? '' : token,
-    };
-  } catch (error) {
-    await application.close();
-    throw error;
-  }
-}
-
-const attachmentContractServerFactories: readonly [string, AttachmentContractServerFactory][] = [
-  ['Node', startLegacyAttachmentContractServer],
-  ['Nest', startNestAttachmentContractServer],
-];
-
-describe.each(attachmentContractServerFactories)('%s 첨부 HTTP 계약', (_runtime, startServer) => {
+describe('공개 첨부 HTTP 계약', () => {
   function startAttachmentTestServer(
     attachmentStoreOverrides: Partial<AttachmentStore> = {},
     storeEnabled = true,
@@ -118,7 +66,7 @@ describe.each(attachmentContractServerFactories)('%s 첨부 HTTP 계약', (_runt
           ...attachmentStoreOverrides,
         }
       : undefined;
-    return startServer(attachmentStore);
+    return startAttachmentContractServer(attachmentStore);
   }
 
   it('video 첨부를 편집 장면 없이 저장한다', async () => {

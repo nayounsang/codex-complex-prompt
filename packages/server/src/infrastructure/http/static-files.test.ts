@@ -7,8 +7,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 
 import { resolveStaticPath, startLocalBridgeServer } from '../../index.js';
-import { createBridgeNestApplication } from '../../runtime/create-bridge-nest-application.js';
-import type { LocalBridgeServerOptions, RunningLocalBridgeServer } from '../../shared/types.js';
 import { closeTestSockets, getHttp, trackSocket } from '../../test-support/server.js';
 
 afterEach(closeTestSockets);
@@ -18,42 +16,12 @@ interface StaticTestServer {
   readonly close: () => Promise<void>;
 }
 
-type StaticTestServerFactory = (staticDir?: string) => Promise<StaticTestServer>;
-
-async function startNestStaticTestServer(staticDir?: string): Promise<StaticTestServer> {
-  const options: LocalBridgeServerOptions = {
-    ...(staticDir === undefined ? {} : { staticDir }),
-    onPrompt: async () => undefined,
-  };
-  const application = await createBridgeNestApplication(options);
-
-  try {
-    await application.listen(0, '127.0.0.1');
-    const address = application.getHttpServer().address();
-    if (address === null || typeof address === 'string') {
-      throw new Error('The Nest static test server did not expose a TCP address.');
-    }
-    return {
-      url: `http://127.0.0.1:${address.port}`,
-      close: () => application.close(),
-    };
-  } catch (error) {
-    await application.close();
-    throw error;
-  }
-}
-
-async function startLegacyStaticTestServer(staticDir?: string): Promise<RunningLocalBridgeServer> {
+async function startStaticTestServer(staticDir?: string): Promise<StaticTestServer> {
   return startLocalBridgeServer({
     ...(staticDir === undefined ? {} : { staticDir }),
     onPrompt: async () => undefined,
   });
 }
-
-const staticTestServerFactories: readonly [string, StaticTestServerFactory][] = [
-  ['Node', startLegacyStaticTestServer],
-  ['Nest', startNestStaticTestServer],
-];
 
 describe('정적 경로 해석', () => {
   it('정적 경로가 루트 밖을 가리키면 경로를 반환하지 않는다', () => {
@@ -61,11 +29,11 @@ describe('정적 경로 해석', () => {
   });
 });
 
-describe.each(staticTestServerFactories)('%s 정적 파일 HTTP 계약', (_runtime, startServer) => {
+describe('공개 정적 파일 HTTP 계약', () => {
   it('정적 디렉터리의 색인 문서를 제공한다', async () => {
     const staticDir = await mkdtemp(join(tmpdir(), 'codex-complex-prompt-'));
     await writeFile(join(staticDir, 'index.html'), '<h1>bridge</h1>');
-    const server = await startServer(`${staticDir}/`);
+    const server = await startStaticTestServer(`${staticDir}/`);
 
     try {
       const response = await getHttp(`${server.url}/`);
@@ -88,7 +56,7 @@ describe.each(staticTestServerFactories)('%s 정적 파일 HTTP 계약', (_runti
       ['asset.bin', 'application/octet-stream'],
     ] as const;
     await Promise.all(fixtures.map(([file]) => writeFile(join(staticDir, file), 'content')));
-    const server = await startServer(staticDir);
+    const server = await startStaticTestServer(staticDir);
 
     try {
       for (const [file, mimeType] of fixtures) {
@@ -112,7 +80,7 @@ describe.each(staticTestServerFactories)('%s 정적 파일 HTTP 계약', (_runti
     const outsideDir = await mkdtemp(join(tmpdir(), 'codex-complex-prompt-outside-'));
     await writeFile(join(outsideDir, 'secret.txt'), 'private content');
     await symlink(join(outsideDir, 'secret.txt'), join(staticDir, 'secret.txt'));
-    const server = await startServer(staticDir);
+    const server = await startStaticTestServer(staticDir);
 
     try {
       const response = await getHttp(`${server.url}/secret.txt`);
@@ -130,7 +98,7 @@ describe.each(staticTestServerFactories)('%s 정적 파일 HTTP 계약', (_runti
   it('일반 파일이 아닌 정적 경로를 제공하지 않는다', async () => {
     const staticDir = await mkdtemp(join(tmpdir(), 'codex-complex-prompt-directory-'));
     await mkdir(join(staticDir, 'assets'));
-    const server = await startServer(staticDir);
+    const server = await startStaticTestServer(staticDir);
 
     try {
       const response = await getHttp(`${server.url}/assets`);
@@ -143,7 +111,7 @@ describe.each(staticTestServerFactories)('%s 정적 파일 HTTP 계약', (_runti
   });
 
   it('정적 디렉터리가 없으면 브리지 상태를 HTTP로 반환한다', async () => {
-    const server = await startServer();
+    const server = await startStaticTestServer();
 
     try {
       const response = await fetch(server.url);
@@ -158,7 +126,7 @@ describe.each(staticTestServerFactories)('%s 정적 파일 HTTP 계약', (_runti
 
   it('정적 디렉터리에 없는 문서 요청에 404를 반환한다', async () => {
     const staticDir = await mkdtemp(join(tmpdir(), 'codex-complex-prompt-'));
-    const server = await startServer(staticDir);
+    const server = await startStaticTestServer(staticDir);
 
     try {
       const response = await getHttp(`${server.url}/missing.js`);
@@ -175,7 +143,7 @@ describe.each(staticTestServerFactories)('%s 정적 파일 HTTP 계약', (_runti
     const filePath = join(staticDir, 'large.bin');
     await writeFile(filePath, 'x');
     await truncate(filePath, 32 * 1024 * 1024);
-    const server = await startServer(staticDir);
+    const server = await startStaticTestServer(staticDir);
 
     try {
       const statusCode = await new Promise<number | undefined>((resolve, reject) => {
