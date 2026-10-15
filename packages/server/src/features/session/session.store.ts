@@ -1,11 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 
-export interface SessionRecord {
-  readonly id: string;
-  readonly token: string;
-  readonly expiresAt: Date;
-  connected: boolean;
-}
+import { SessionEntity, type SessionRecord } from './entities/session.entity.js';
+
+export { SessionEntity, type SessionRecord } from './entities/session.entity.js';
 
 export interface SessionStoreOptions {
   readonly ttlMs?: number;
@@ -27,12 +24,11 @@ export class SessionStore {
 
   public create(): SessionRecord {
     this.removeExpired();
-    const session: SessionRecord = {
-      id: randomUUID(),
-      token: randomBytes(32).toString('base64url'),
-      expiresAt: new Date(this.now().getTime() + this.ttlMs),
-      connected: false,
-    };
+    const session = new SessionEntity(
+      randomUUID(),
+      randomBytes(32).toString('base64url'),
+      new Date(this.now().getTime() + this.ttlMs),
+    );
     this.sessions.set(session.token, session);
     return session;
   }

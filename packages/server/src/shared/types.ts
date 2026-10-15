@@ -5,7 +5,7 @@ import type {
   FeedbackSubagentContext,
 } from '@codex-complex-prompt/protocol';
 
-import type { SessionStoreOptions } from '../features/session/storage/session-store.js';
+import type { SessionStoreOptions } from '../features/session/session.store.js';
 
 export interface PromptContext extends FeedbackSubagentContext {
   readonly sessionId: string;

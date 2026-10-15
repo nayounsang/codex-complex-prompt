@@ -1,19 +1,41 @@
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DrawingSceneSchema } from '@codex-complex-prompt/protocol';
+import { ATTACHMENT_STORE } from '../../runtime/tokens.js';
 import type { AttachmentStore } from '../../shared/types.js';
-import { handleAttachmentCreateRequest } from './attachment-create-route.js';
-import {
-  isLoopbackOrigin,
-  isVideoExtension,
-  parseVideoRange,
-  tokensEqual,
-} from './attachment-route-utils.js';
+import { AttachmentTokenStore } from './store/attachment-token.store.js';
+import { AttachmentCreateService } from './create/attachment-create.service.js';
+import { isLoopbackOrigin, tokensEqual } from './security/attachment-http.security.js';
+import { isVideoExtension, parseVideoRange } from './video/video-range.js';
 
-export function serveAttachmentRequest(
+@Injectable()
+export class AttachmentService {
+  public constructor(
+    @Optional()
+    @Inject(ATTACHMENT_STORE)
+    private readonly attachmentStore: AttachmentStore | undefined,
+    @Inject(AttachmentTokenStore) private readonly attachmentTokens: AttachmentTokenStore,
+    @Inject(AttachmentCreateService)
+    private readonly attachmentCreateService: AttachmentCreateService,
+  ) {}
+
+  public handle(request: IncomingMessage, response: ServerResponse): boolean {
+    return serveAttachmentRequest(
+      request,
+      response,
+      this.attachmentStore,
+      this.attachmentTokens.entries(),
+      this.attachmentCreateService,
+    );
+  }
+}
+
+function serveAttachmentRequest(
   request: IncomingMessage,
   response: ServerResponse,
   attachmentStore: AttachmentStore | undefined,
-  attachmentTokens: Map<string, string>,
+  attachmentTokens: Iterable<[string, string]>,
+  attachmentCreateService: AttachmentCreateService,
 ): boolean {
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
   if (!url.pathname.startsWith('/_complex-prompt/attachments')) return false;
@@ -50,7 +72,7 @@ export function serveAttachmentRequest(
     return true;
   }
   if (request.method === 'POST' && match[1] === undefined) {
-    handleAttachmentCreateRequest(request, response, attachmentStore);
+    attachmentCreateService.handle(request, response);
     return true;
   }
   const id = match[1];

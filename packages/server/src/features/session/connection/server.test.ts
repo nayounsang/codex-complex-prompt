@@ -1,19 +1,22 @@
 import { randomUUID } from 'node:crypto';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import WebSocket from 'ws';
 
 import { startLocalBridgeServer } from '../../../index.js';
+import type { RunningLocalBridgeServer } from '../../../shared/types.js';
 import {
   authenticate,
   closeTestSockets,
   nextClose,
   nextMessage,
   openSocket,
+  trackSocket,
 } from '../../../test-support/server.js';
 
 afterEach(closeTestSockets);
 
-describe('서버 세션 연결', () => {
+describe('공개 서버 세션 WebSocket 계약', () => {
   const feedbackModelCatalog = [
     {
       model: 'gpt-6.1-sol',
@@ -281,15 +284,223 @@ describe('서버 세션 연결', () => {
     }
   });
 
+  it('같은 포트에서 HTTP 상태 응답과 WebSocket 핸드셰이크를 제공한다', async () => {
+    const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
+    const session = server.createSession();
+
+    try {
+      const response = await fetch(server.url);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe('Codex Complex Prompt bridge is running.');
+
+      const { ready } = await authenticate(server, session.token);
+      expect(ready).toMatchObject({ type: 'session.ready', sessionId: session.id });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('핸드셰이크에 같은 앱의 첨부 URL과 토큰을 포함한다', async () => {
+    const server = await startLocalBridgeServer({
+      attachmentStore: {
+        save: async () => 'id',
+        read: async () => undefined,
+        hasSceneData: async () => false,
+        delete: async () => false,
+      },
+      onPrompt: async () => undefined,
+    });
+    const session = server.createSession();
+
+    try {
+      const { ready } = await authenticate(server, session.token);
+
+      expect(ready).toMatchObject({
+        type: 'session.ready',
+        attachmentUrl: `${server.url}/_complex-prompt/attachments`,
+        attachmentToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('허용하지 않는 WebSocket upgrade 경로를 종료한다', async () => {
+    const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
+
+    try {
+      const socket = new WebSocket(`${server.url}/not-ws`);
+      trackSocket(socket);
+      const termination = await new Promise<'error' | 'close'>((resolve) => {
+        socket.once('error', () => resolve('error'));
+        socket.once('close', () => resolve('close'));
+      });
+
+      expect(['error', 'close']).toContain(termination);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('두 앱은 세션 인증 저장소를 공유하지 않는다', async () => {
+    const first = await startLocalBridgeServer({
+      maxConnections: 2,
+      onPrompt: async () => undefined,
+    });
+    let second: RunningLocalBridgeServer | undefined;
+
+    try {
+      second = await startLocalBridgeServer({
+        maxConnections: 2,
+        onPrompt: async () => undefined,
+      });
+      const firstSession = first.createSession();
+      const secondSession = second.createSession();
+      const firstConnection = await authenticate(first, firstSession.token);
+
+      const foreignSocket = await openSocket(second);
+      foreignSocket.send(JSON.stringify({ type: 'session.handshake', token: firstSession.token }));
+      expect(await nextMessage(foreignSocket)).toMatchObject({
+        type: 'session.error',
+        code: 'invalid_token',
+      });
+
+      const secondConnection = await authenticate(second, secondSession.token);
+      expect(firstConnection.ready).toMatchObject({
+        type: 'session.ready',
+        sessionId: firstSession.id,
+      });
+      expect(secondConnection.ready).toMatchObject({
+        type: 'session.ready',
+        sessionId: secondSession.id,
+      });
+    } finally {
+      await Promise.all([first.close(), second?.close()]);
+    }
+  });
+
+  it('두 앱은 각자의 연결 제한을 적용한다', async () => {
+    const first = await startLocalBridgeServer({
+      maxConnections: 1,
+      onPrompt: async () => undefined,
+    });
+    let second: RunningLocalBridgeServer | undefined;
+
+    try {
+      second = await startLocalBridgeServer({
+        maxConnections: 1,
+        onPrompt: async () => undefined,
+      });
+      const firstSession = first.createSession();
+      const secondSession = second.createSession();
+      const firstConnection = await authenticate(first, firstSession.token);
+      const secondConnection = await authenticate(second, secondSession.token);
+
+      expect(firstConnection.ready).toMatchObject({
+        type: 'session.ready',
+        sessionId: firstSession.id,
+      });
+      expect(secondConnection.ready).toMatchObject({
+        type: 'session.ready',
+        sessionId: secondSession.id,
+      });
+    } finally {
+      await Promise.all([first.close(), second?.close()]);
+    }
+  });
+
   it('사용 중인 포트로 브리지를 시작하면 실패한다', async () => {
     const firstServer = await startLocalBridgeServer({ onPrompt: async () => undefined });
+    const port = firstServer.port;
 
     try {
       await expect(
-        startLocalBridgeServer({ port: firstServer.port, onPrompt: async () => undefined }),
+        startLocalBridgeServer({ port, onPrompt: async () => undefined }),
       ).rejects.toThrow();
     } finally {
       await firstServer.close();
+    }
+
+    const restarted = await startLocalBridgeServer({
+      port,
+      onPrompt: async () => undefined,
+    });
+    try {
+      expect(restarted.port).toBe(port);
+    } finally {
+      await restarted.close();
+    }
+  });
+
+  it('서버 시작 제한값은 양의 정수만 허용한다', async () => {
+    for (const options of [
+      { promptTimeoutMs: 0 },
+      { promptTimeoutMs: 1.5 },
+      { maxConnections: 0 },
+      { maxConnections: 1.5 },
+      { handshakeTimeoutMs: 0 },
+      { handshakeTimeoutMs: 1.5 },
+    ]) {
+      await expect(
+        startLocalBridgeServer({ ...options, onPrompt: async () => undefined }),
+      ).rejects.toThrow('positive integer');
+    }
+  });
+
+  it('기본 주소로 임시 포트에서 시작하고 세션 자격 증명을 발급한다', async () => {
+    const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
+
+    try {
+      expect(server.host).toBe('127.0.0.1');
+      expect(server.port).toBeGreaterThan(0);
+      expect(server.url).toBe(`http://127.0.0.1:${server.port}`);
+
+      const session = server.createSession();
+      expect(session.id).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(session.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(session.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('이미 종료한 서버를 다시 종료하면 실패한다', async () => {
+    const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
+
+    await server.close();
+
+    await expect(server.close()).rejects.toThrow();
+  });
+
+  it('종료할 때 연결을 닫고 같은 포트를 다시 사용할 수 있다', async () => {
+    const first = await startLocalBridgeServer({ onPrompt: async () => undefined });
+    let closeFirstPromise: Promise<void> | undefined;
+    const closeFirst = (): Promise<void> => (closeFirstPromise ??= first.close());
+
+    try {
+      const socket = await openSocket(first);
+      const socketClosed = nextClose(socket);
+      const port = first.port;
+
+      await closeFirst();
+
+      expect(await socketClosed).toBe(1006);
+
+      const second = await startLocalBridgeServer({
+        host: first.host,
+        port,
+        onPrompt: async () => undefined,
+      });
+      try {
+        expect(second.port).toBe(port);
+        const response = await fetch(second.url);
+        expect(response.status).toBe(200);
+        await response.text();
+      } finally {
+        await second.close();
+      }
+    } finally {
+      await closeFirst();
     }
   });
 

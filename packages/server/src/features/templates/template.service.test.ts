@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { startLocalBridgeServer } from '../../../index.js';
-import { authenticate, closeTestSockets, nextMessage } from '../../../test-support/server.js';
+import { startLocalBridgeServer } from '../../index.js';
+import { authenticate, closeTestSockets, nextMessage } from '../../test-support/server.js';
 
 afterEach(closeTestSockets);
 

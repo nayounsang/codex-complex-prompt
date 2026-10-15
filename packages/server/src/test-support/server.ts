@@ -3,6 +3,7 @@ import { get } from 'node:http';
 import WebSocket from 'ws';
 
 import type { RunningLocalBridgeServer } from '../index.js';
+export { delay as wait } from 'es-toolkit';
 
 const sockets: WebSocket[] = [];
 
@@ -85,10 +86,6 @@ export async function authenticate(
   const socket = await openSocket(server);
   socket.send(JSON.stringify({ type: 'session.handshake', token }));
   return { socket, ready: await nextMessage(socket) };
-}
-
-export function wait(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 export function getHttp(url: string): Promise<{ statusCode: number | undefined; body: string }> {

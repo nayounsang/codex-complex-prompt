@@ -1,4 +1,4 @@
-import { chmod, cp, mkdir, rm } from 'node:fs/promises';
+import { chmod, cp, mkdir, readFile, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,6 +8,34 @@ const packageDir = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const workspaceWebDist = join(packageDir, '..', 'web', 'dist');
 const packagedWebDist = join(packageDir, 'web', 'dist');
 const entrypoint = join(packageDir, 'dist', 'index.js');
+const externalPackages = [
+  '@file-type/xml',
+  '@nestjs/common',
+  '@nestjs/core',
+  '@nestjs/platform-express',
+  '@nestjs/platform-ws',
+  '@nestjs/websockets',
+  'execa',
+  'file-type',
+  'mime',
+  'open',
+  'range-parser',
+  'raw-body',
+  'reflect-metadata',
+  'rxjs',
+  'ws',
+];
+const packageJson = JSON.parse(await readFile(join(packageDir, 'package.json'), 'utf8')) as {
+  dependencies?: Record<string, string>;
+};
+const undeclaredExternals = externalPackages.filter(
+  (packageName) => packageJson.dependencies?.[packageName] === undefined,
+);
+if (undeclaredExternals.length > 0) {
+  throw new Error(
+    `External runtime packages must be direct production dependencies: ${undeclaredExternals.join(', ')}`,
+  );
+}
 
 await rm(packagedWebDist, { recursive: true, force: true });
 await mkdir(dirname(packagedWebDist), { recursive: true });
@@ -15,7 +43,7 @@ await cp(workspaceWebDist, packagedWebDist, { recursive: true });
 await build({
   bundle: true,
   entryPoints: [entrypoint],
-  external: ['@file-type/xml', 'execa', 'file-type', 'mime', 'open', 'ws'],
+  external: externalPackages,
   format: 'esm',
   outfile: entrypoint,
   platform: 'node',

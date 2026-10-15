@@ -1,14 +1,10 @@
 import { AttachmentTooLargeError } from '@codex-complex-prompt/protocol';
 import { describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import {
-  startLocalBridgeServer,
-  type AttachmentStore,
-  type RunningLocalBridgeServer,
-} from '../../../index.js';
+import { startLocalBridgeServer, type AttachmentStore } from '../../index.js';
 
 async function authenticate(
-  server: RunningLocalBridgeServer,
+  server: AttachmentContractServer,
   token: string,
 ): Promise<{ ready: unknown }> {
   const socket = new WebSocket(`${server.url}/ws`);
@@ -24,26 +20,55 @@ async function authenticate(
   return { ready: await ready };
 }
 
-async function startAttachmentTestServer(
-  attachmentStoreOverrides: Partial<AttachmentStore> = {},
-): Promise<{ server: RunningLocalBridgeServer; token: string }> {
-  const attachmentStore: AttachmentStore = {
-    save: async () => '00000000-0000-4000-8000-000000000001',
-    read: async () => undefined,
-    hasSceneData: async () => false,
-    delete: async () => false,
-    ...attachmentStoreOverrides,
-  };
-  const server = await startLocalBridgeServer({
-    attachmentStore,
-    onPrompt: async () => undefined,
-  });
-  const session = server.createSession();
-  const { ready } = await authenticate(server, session.token);
-  return { server, token: (ready as { attachmentToken: string }).attachmentToken };
+interface AttachmentContractServer {
+  readonly url: string;
+  readonly close: () => Promise<void>;
 }
 
-describe('로컬 브리지 서버', () => {
+interface StartedAttachmentContractServer {
+  readonly server: AttachmentContractServer;
+  readonly token: string;
+}
+
+async function startAttachmentContractServer(
+  attachmentStore: AttachmentStore | undefined,
+): Promise<StartedAttachmentContractServer> {
+  const server = await startLocalBridgeServer({
+    ...(attachmentStore === undefined ? {} : { attachmentStore }),
+    onPrompt: async () => undefined,
+  });
+  if (attachmentStore === undefined) return { server, token: '' };
+
+  try {
+    const session = server.createSession();
+    const { ready } = await authenticate(server, session.token);
+    return {
+      server,
+      token: (ready as { attachmentToken: string }).attachmentToken,
+    };
+  } catch (error) {
+    await server.close();
+    throw error;
+  }
+}
+
+describe('공개 첨부 HTTP 계약', () => {
+  function startAttachmentTestServer(
+    attachmentStoreOverrides: Partial<AttachmentStore> = {},
+    storeEnabled = true,
+  ): Promise<StartedAttachmentContractServer> {
+    const attachmentStore = storeEnabled
+      ? {
+          save: async () => '00000000-0000-4000-8000-000000000001',
+          read: async () => undefined,
+          hasSceneData: async () => false,
+          delete: async () => false,
+          ...attachmentStoreOverrides,
+        }
+      : undefined;
+    return startAttachmentContractServer(attachmentStore);
+  }
+
   it('video 첨부를 편집 장면 없이 저장한다', async () => {
     let savedInput: Parameters<NonNullable<AttachmentStore['save']>>[0] | undefined;
     const id = '00000000-0000-4000-8000-000000000038';
@@ -218,21 +243,12 @@ describe('로컬 브리지 서버', () => {
   it('첨부 컬렉션 경로에서 그림 저장 요청을 받는다', async () => {
     const id = '00000000-0000-4000-8000-000000000006';
     let saved = false;
-    const server = await startLocalBridgeServer({
-      attachmentStore: {
-        save: async () => {
-          saved = true;
-          return id;
-        },
-        read: async () => undefined,
-        hasSceneData: async () => false,
-        delete: async () => false,
+    const { server, token: attachmentToken } = await startAttachmentTestServer({
+      save: async () => {
+        saved = true;
+        return id;
       },
-      onPrompt: async () => undefined,
     });
-    const session = server.createSession();
-    const { ready } = await authenticate(server, session.token);
-    const attachmentToken = (ready as { attachmentToken: string }).attachmentToken;
 
     try {
       const response = await fetch(
@@ -254,19 +270,12 @@ describe('로컬 브리지 서버', () => {
 
   it('그림과 편집 데이터가 함께 있으면 존재 확인 요청에 응답한다', async () => {
     const id = '00000000-0000-4000-8000-000000000007';
-    const server = await startLocalBridgeServer({
-      attachmentStore: {
-        save: async () => id,
-        read: async () => ({ png: Buffer.from('png'), scene: '{"elements":[]}' }),
-        readScene: async () => '{"elements":[]}',
-        hasSceneData: async () => true,
-        delete: async () => false,
-      },
-      onPrompt: async () => undefined,
+    const { server, token: attachmentToken } = await startAttachmentTestServer({
+      save: async () => id,
+      read: async () => ({ png: Buffer.from('png'), scene: '{"elements":[]}' }),
+      readScene: async () => '{"elements":[]}',
+      hasSceneData: async () => true,
     });
-    const session = server.createSession();
-    const { ready } = await authenticate(server, session.token);
-    const attachmentToken = (ready as { attachmentToken: string }).attachmentToken;
 
     try {
       const response = await fetch(
@@ -284,19 +293,12 @@ describe('로컬 브리지 서버', () => {
 
   it('편집 데이터가 없는 이미지는 존재 확인 요청에서 찾을 수 없다고 응답한다', async () => {
     const id = '00000000-0000-4000-8000-000000000008';
-    const server = await startLocalBridgeServer({
-      attachmentStore: {
-        save: async () => id,
-        read: async () => undefined,
-        readScene: async () => undefined,
-        hasSceneData: async () => false,
-        delete: async () => false,
-      },
-      onPrompt: async () => undefined,
+    const { server, token: attachmentToken } = await startAttachmentTestServer({
+      save: async () => id,
+      read: async () => undefined,
+      readScene: async () => undefined,
+      hasSceneData: async () => false,
     });
-    const session = server.createSession();
-    const { ready } = await authenticate(server, session.token);
-    const attachmentToken = (ready as { attachmentToken: string }).attachmentToken;
 
     try {
       const response = await fetch(
@@ -643,8 +645,29 @@ describe('로컬 브리지 서버', () => {
     }
   });
 
+  it('다른 서버 앱에 발급된 첨부 토큰을 받아들이지 않는다', async () => {
+    const first = await startAttachmentTestServer();
+    const path = '/_complex-prompt/attachments/00000000-0000-4000-8000-000000000044.png';
+    let second: StartedAttachmentContractServer | undefined;
+
+    try {
+      second = await startAttachmentTestServer();
+      const ownToken = await fetch(
+        `${first.server.url}${path}?token=${encodeURIComponent(first.token)}`,
+      );
+      const foreignToken = await fetch(
+        `${second.server.url}${path}?token=${encodeURIComponent(first.token)}`,
+      );
+
+      expect(ownToken.status).toBe(404);
+      expect(foreignToken.status).toBe(403);
+    } finally {
+      await Promise.all([first.server.close(), second?.server.close()]);
+    }
+  });
+
   it('첨부 저장소가 설정되지 않으면 첨부 경로에 404 응답을 반환한다', async () => {
-    const server = await startLocalBridgeServer({ onPrompt: async () => undefined });
+    const { server } = await startAttachmentTestServer({}, false);
 
     try {
       const response = await fetch(`${server.url}/_complex-prompt/attachments`);
@@ -746,6 +769,35 @@ describe('로컬 브리지 서버', () => {
 
       expect(response.status).toBe(413);
       expect(await response.json()).toMatchObject({ error: expect.stringContaining('25 MB') });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('첨부 HTTP 요청 본문이 허용 크기를 넘으면 저장 전에 413 응답을 반환한다', async () => {
+    let saveCalled = false;
+    const { server, token } = await startAttachmentTestServer({
+      save: async () => {
+        saveCalled = true;
+        return '00000000-0000-4000-8000-000000000043';
+      },
+    });
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments?token=${encodeURIComponent(token)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: 'x'.repeat(36 * 1024 * 1024 + 1),
+        },
+      );
+
+      expect(response.status).toBe(413);
+      expect(await response.json()).toEqual({
+        error: 'The attachment request exceeds the request size limit.',
+      });
+      expect(saveCalled).toBe(false);
     } finally {
       await server.close();
     }

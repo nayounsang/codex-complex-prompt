@@ -2,6 +2,7 @@ import { constants } from 'node:fs';
 import { open, realpath, stat } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, relative, resolve, sep } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 
 const mimeTypes: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
@@ -76,12 +77,18 @@ export async function serveStatic(
     ) {
       throw new Error('Static file changed while opening');
     }
+    const fileStream = fileHandle.createReadStream();
+    fileHandle = undefined;
     response.writeHead(200, {
       'content-type': mimeTypes[extname(realCandidate)] ?? 'application/octet-stream',
     });
-    fileHandle.createReadStream().pipe(response);
+    await pipeline(fileStream, response);
   } catch {
     await fileHandle?.close().catch(() => undefined);
+    if (response.headersSent) {
+      if (!response.destroyed) response.destroy();
+      return;
+    }
     response.writeHead(404);
     response.end('Not found');
   }
