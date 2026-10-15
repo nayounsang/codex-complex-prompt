@@ -1,5 +1,12 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.4.4
+
+### Patch Changes
+
+- 76aea92: Package the Nest runtime dependencies required by the CLI bridge server.
+- 76aea92: Restructure the bundled Nest bridge into feature modules, controllers, services, Zod DTOs, and domain entities.
+
 ## 0.4.3
 
 ### Patch Changes
