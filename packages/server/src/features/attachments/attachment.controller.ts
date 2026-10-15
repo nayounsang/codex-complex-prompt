@@ -1,13 +1,12 @@
 import { All, Controller, Inject, Req, Res } from '@nestjs/common';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { AttachmentRequestHandler } from './attachment-request-handler.js';
+import { AttachmentService } from './attachment.service.js';
 
 @Controller('_complex-prompt/attachments')
 export class AttachmentController {
   public constructor(
-    @Inject(AttachmentRequestHandler)
-    private readonly attachmentRequestHandler: AttachmentRequestHandler,
+    @Inject(AttachmentService) private readonly attachmentService: AttachmentService,
   ) {}
 
   @All()
@@ -21,6 +20,6 @@ export class AttachmentController {
   }
 
   private handleRequest(request: IncomingMessage, response: ServerResponse): void {
-    if (!this.attachmentRequestHandler.handle(request, response)) response.writeHead(404).end();
+    if (!this.attachmentService.handle(request, response)) response.writeHead(404).end();
   }
 }

@@ -1,16 +1,14 @@
 import { randomBytes } from 'node:crypto';
 
-import { AttachmentTokenStore } from './features/attachments/attachment-token-store.js';
-import { SessionStore } from './features/session/storage/session-store.js';
-import { resolveStaticPath } from './infrastructure/http/static-files.js';
+import { AttachmentTokenStore } from './features/attachments/store/attachment-token.store.js';
+import { resolveStaticPath } from './features/static-files/static-files.utils.js';
+import { SessionService } from './features/session/session.service.js';
+import { SessionCredentialsDtoSchema } from './features/session/dto/session-credentials.dto.js';
 import { createBridgeNestApplication } from './runtime/create-bridge-nest-application.js';
 import type { LocalBridgeServerOptions, RunningLocalBridgeServer } from './shared/types.js';
 
-export { SessionStore } from './features/session/storage/session-store.js';
-export type {
-  SessionRecord,
-  SessionStoreOptions,
-} from './features/session/storage/session-store.js';
+export { SessionStore } from './features/session/session.store.js';
+export type { SessionRecord, SessionStoreOptions } from './features/session/session.store.js';
 export type {
   LocalBridgeServerOptions,
   PromptAdapterResult,
@@ -35,21 +33,30 @@ export async function startLocalBridgeServer(
       throw new Error('The local bridge server did not expose a TCP address.');
     }
     const port = address.port;
-    const sessionStore = application.get(SessionStore, { strict: false });
+    const sessionService = application.get(SessionService, { strict: false });
     const attachmentTokens = application.get(AttachmentTokenStore, { strict: false });
+    let closed = false;
 
     return {
       host,
       port,
       url: `http://${host}:${port}`,
       createSession: () => {
-        const session = sessionStore.create();
+        const session = sessionService.create();
         if (options.attachmentStore !== undefined) {
           attachmentTokens.set(session.id, randomBytes(32).toString('base64url'));
         }
-        return { id: session.id, token: session.token, expiresAt: session.expiresAt };
+        return SessionCredentialsDtoSchema.parse({
+          id: session.id,
+          token: session.token,
+          expiresAt: session.expiresAt,
+        });
       },
-      close: () => application.close(),
+      close: async () => {
+        if (closed) throw new Error('The local bridge server is already closed.');
+        closed = true;
+        await application.close();
+      },
     };
   } catch (error) {
     await application.close();

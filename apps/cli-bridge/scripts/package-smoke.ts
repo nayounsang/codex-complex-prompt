@@ -69,6 +69,10 @@ try {
     '@nestjs/common',
     '@nestjs/core',
     '@nestjs/platform-express',
+    '@nestjs/platform-ws',
+    '@nestjs/websockets',
+    'range-parser',
+    'raw-body',
     'reflect-metadata',
     'rxjs',
   ]) {

@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
 
-@Module({})
+import { InputService } from './input.service.js';
+
+@Module({ providers: [InputService], exports: [InputService] })
 export class InputModule {}

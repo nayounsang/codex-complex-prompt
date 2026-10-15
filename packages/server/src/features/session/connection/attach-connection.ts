@@ -1,55 +1,58 @@
 import {
-  ClientMessageSchema,
   encodeServerMessage,
   isFeedbackModelSupported,
   type FeedbackModelCatalogEntry,
-  type PromptTemplate,
   type ServerMessage,
 } from '@codex-complex-prompt/protocol';
-import { type RawData, type WebSocket } from 'ws';
+import { omitBy } from 'es-toolkit';
+import { type WebSocket } from 'ws';
 
-import { createPromptMessageHandler } from '../../input/handlers/create-prompt-message-handler.js';
-import {
-  handleTemplateRequest,
-  templateStoreErrorMessage,
-} from '../../templates/handlers/handle-template-request.js';
-import type { LocalBridgeServerOptions, TemplateStore } from '../../../shared/types.js';
-import type { SessionRecord, SessionStore } from '../storage/session-store.js';
+import type { InputService } from '../../input/input.service.js';
+import type { LocalBridgeServerOptions } from '../../../shared/types.js';
+import type { TemplateService } from '../../templates/template.service.js';
+import type { SessionEntity } from '../entities/session.entity.js';
+import type { SessionService } from '../session.service.js';
+import { ClientMessageDtoSchema } from '../dto/client-message.dto.js';
+
+type SessionReadyMessage = Extract<ServerMessage, { type: 'session.ready' }>;
+type SessionReadyOptionalFields = Partial<
+  Omit<SessionReadyMessage, 'type' | 'sessionId' | 'expiresAt'>
+>;
 
 export interface BridgeConnectionOptions {
   readonly webSocket: WebSocket;
-  readonly sessionStore: SessionStore;
-  readonly onPrompt: LocalBridgeServerOptions['onPrompt'];
+  readonly sessionService: Pick<SessionService, 'authenticate'>;
+  readonly inputService: InputService;
+  readonly templateService: TemplateService;
   readonly promptTimeoutMs: number;
   readonly handshakeTimeoutMs: number;
   readonly initialMarkdown: string | undefined;
   readonly feedbackLoop: boolean;
   readonly feedbackModelCatalog: LocalBridgeServerOptions['feedbackModelCatalog'];
   readonly loadFeedbackModelCatalog: LocalBridgeServerOptions['loadFeedbackModelCatalog'];
-  readonly templateStore: TemplateStore | undefined;
-  readonly templatesError: string | undefined;
   readonly attachmentTokens: Pick<ReadonlyMap<string, string>, 'get'> | undefined;
   readonly getAttachmentUrl: () => string;
 }
 
-export function attachConnection(options: BridgeConnectionOptions): void {
+export function createConnectionMessageHandler(
+  options: BridgeConnectionOptions,
+): (raw: string) => void {
   const {
     webSocket,
-    sessionStore,
-    onPrompt,
+    sessionService,
+    inputService,
+    templateService,
     promptTimeoutMs,
     handshakeTimeoutMs,
     initialMarkdown,
     feedbackLoop,
     feedbackModelCatalog,
     loadFeedbackModelCatalog,
-    templateStore,
-    templatesError,
     attachmentTokens,
     getAttachmentUrl,
   } = options;
   let sessionId: string | undefined;
-  let handlePromptMessage: ReturnType<typeof createPromptMessageHandler> | undefined;
+  let handlePromptMessage: ReturnType<InputService['createPromptMessageHandler']> | undefined;
   let resolvedFeedbackModelCatalog = feedbackModelCatalog;
   let feedbackModelCatalogPromise: Promise<readonly FeedbackModelCatalogEntry[]> | undefined;
   let handshakeComplete = false;
@@ -61,16 +64,17 @@ export function attachConnection(options: BridgeConnectionOptions): void {
     }
   }, handshakeTimeoutMs);
 
-  webSocket.on('message', (raw: RawData) => {
-    /* c8 ignore next 3 -- handleMessage catches expected protocol and adapter failures. */
-    void handleMessage(rawDataToString(raw)).catch(() => {
-      sendError(webSocket, 'adapter_error', 'The bridge could not process this message.');
-    });
-  });
   webSocket.on('close', () => {
     clearTimeout(handshakeTimeout);
     if (sessionExpiryTimeout !== undefined) clearTimeout(sessionExpiryTimeout);
   });
+
+  return (raw: string): void => {
+    /* c8 ignore next 3 -- handleMessage catches expected protocol and adapter failures. */
+    void handleMessage(raw).catch(() => {
+      sendError(webSocket, 'adapter_error', 'The bridge could not process this message.');
+    });
+  };
 
   async function handleMessage(raw: string): Promise<void> {
     let input: unknown;
@@ -81,7 +85,7 @@ export function attachConnection(options: BridgeConnectionOptions): void {
       return;
     }
 
-    const parsed = ClientMessageSchema.safeParse(input);
+    const parsed = ClientMessageDtoSchema.safeParse(input);
     if (!parsed.success) {
       sendError(webSocket, 'invalid_message', 'Message does not match the protocol.');
       return;
@@ -93,7 +97,7 @@ export function attachConnection(options: BridgeConnectionOptions): void {
         webSocket.close(1008);
         return;
       }
-      const session = sessionStore.authenticate(parsed.data.token);
+      const session = sessionService.authenticate(parsed.data.token);
       if (session === undefined) {
         sendError(
           webSocket,
@@ -105,10 +109,9 @@ export function attachConnection(options: BridgeConnectionOptions): void {
       }
       handshakeComplete = true;
       sessionId = session.id;
-      handlePromptMessage = createPromptMessageHandler(
+      handlePromptMessage = inputService.createPromptMessageHandler(
         webSocket,
         session.id,
-        onPrompt,
         promptTimeoutMs,
       );
       clearTimeout(handshakeTimeout);
@@ -124,8 +127,7 @@ export function attachConnection(options: BridgeConnectionOptions): void {
         initialMarkdown,
         feedbackLoop,
         feedbackModelCatalog,
-        templateStore,
-        templatesError,
+        templateService,
         attachmentTokens,
         getAttachmentUrl,
       });
@@ -143,7 +145,7 @@ export function attachConnection(options: BridgeConnectionOptions): void {
       parsed.data.type === 'template.save' ||
       parsed.data.type === 'template.delete'
     ) {
-      await handleTemplateRequest(webSocket, parsed.data, templateStore, templatesError);
+      await templateService.handleRequest(webSocket, parsed.data);
       return;
     }
     if (parsed.data.type === 'feedback-model.catalog.request') {
@@ -181,53 +183,36 @@ export function attachConnection(options: BridgeConnectionOptions): void {
   }
 
   async function createReadyMessage(input: {
-    readonly session: SessionRecord;
+    readonly session: SessionEntity;
     readonly initialMarkdown: string | undefined;
     readonly feedbackLoop: boolean;
     readonly feedbackModelCatalog: LocalBridgeServerOptions['feedbackModelCatalog'];
-    readonly templateStore: TemplateStore | undefined;
-    readonly templatesError: string | undefined;
+    readonly templateService: TemplateService;
     readonly attachmentTokens: Pick<ReadonlyMap<string, string>, 'get'> | undefined;
     readonly getAttachmentUrl: () => string;
   }): Promise<ServerMessage> {
     const { session } = input;
-    let templates: readonly PromptTemplate[] | undefined;
-    let resolvedTemplatesError = input.templatesError;
-    if (input.templateStore !== undefined) {
-      try {
-        templates = await input.templateStore.list();
-      } catch (error) {
-        resolvedTemplatesError = templateStoreErrorMessage(
-          error,
-          'Project templates could not be loaded from this directory.',
-        );
-      }
-    }
+    const templateState = await input.templateService.getInitialState();
+    const optionalFields = omitBy(
+      {
+        initialMarkdown: input.initialMarkdown,
+        feedbackLoop: input.feedbackLoop ? input.feedbackLoop : undefined,
+        feedbackModelCatalog:
+          input.feedbackModelCatalog === undefined ? undefined : [...input.feedbackModelCatalog],
+        templates: templateState.templates === undefined ? undefined : [...templateState.templates],
+        templatesError: templateState.templatesError,
+        attachmentUrl: input.attachmentTokens === undefined ? undefined : input.getAttachmentUrl(),
+        attachmentToken: input.attachmentTokens?.get(session.id),
+      },
+      (value) => value === undefined,
+    ) as SessionReadyOptionalFields;
     return {
       type: 'session.ready',
       sessionId: session.id,
       expiresAt: session.expiresAt.toISOString(),
-      ...(input.initialMarkdown === undefined ? {} : { initialMarkdown: input.initialMarkdown }),
-      ...(input.feedbackLoop ? { feedbackLoop: input.feedbackLoop } : {}),
-      ...(input.feedbackModelCatalog === undefined
-        ? {}
-        : { feedbackModelCatalog: [...input.feedbackModelCatalog] }),
-      ...(templates === undefined ? {} : { templates: [...templates] }),
-      ...(resolvedTemplatesError === undefined ? {} : { templatesError: resolvedTemplatesError }),
-      ...(input.attachmentTokens === undefined
-        ? {}
-        : {
-            attachmentUrl: input.getAttachmentUrl(),
-            attachmentToken: input.attachmentTokens.get(session.id),
-          }),
+      ...optionalFields,
     };
   }
-}
-
-function rawDataToString(raw: RawData): string {
-  if (raw instanceof ArrayBuffer) return Buffer.from(raw).toString();
-  if (Array.isArray(raw)) return Buffer.concat(raw).toString();
-  return Buffer.from(raw).toString();
 }
 
 function send(webSocket: WebSocket, message: ServerMessage): void {

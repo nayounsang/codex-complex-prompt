@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { AttachmentTokenStore } from '../features/attachments/attachment-token-store.js';
-import { SessionStore } from '../features/session/storage/session-store.js';
+import { AttachmentTokenStore } from '../features/attachments/store/attachment-token.store.js';
+import { SessionStore } from '../features/session/session.store.js';
 import type { AttachmentStore, LocalBridgeServerOptions, TemplateStore } from '../shared/types.js';
 import { createBridgeNestApplication } from './create-bridge-nest-application.js';
 import { ATTACHMENT_STORE, BRIDGE_OPTIONS, ON_PROMPT, TEMPLATE_STORE } from './tokens.js';

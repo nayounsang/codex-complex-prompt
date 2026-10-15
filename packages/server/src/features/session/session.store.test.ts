@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SessionStore } from './session-store.js';
+import { SessionStore } from './session.store.js';
 
 describe('세션 저장소', () => {
   it('인증한 세션 토큰의 재사용을 거부한다', () => {

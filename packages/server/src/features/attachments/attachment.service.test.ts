@@ -1,7 +1,7 @@
 import { AttachmentTooLargeError } from '@codex-complex-prompt/protocol';
 import { describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { startLocalBridgeServer, type AttachmentStore } from '../../../index.js';
+import { startLocalBridgeServer, type AttachmentStore } from '../../index.js';
 
 async function authenticate(
   server: AttachmentContractServer,
