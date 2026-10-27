@@ -406,11 +406,15 @@ button:focus-visible,
 
 .markdown-editor .milkdown .milkdown-code-block:has(> .mermaid-preview-mount) {
   position: relative;
-  min-height: 220px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 .markdown-editor .milkdown .milkdown-code-block:has(> .mermaid-preview-mount) > .tools,
-.markdown-editor .milkdown .milkdown-code-block:has(> .mermaid-preview-mount) .codemirror-host {
+.markdown-editor
+  .milkdown
+  .milkdown-code-block:has(> .mermaid-preview-mount):not(:has(.mermaid-code-view))
+  .codemirror-host {
   display: none;
 }
 .markdown-editor,
@@ -473,14 +477,36 @@ button:focus-visible,
 }
 .mermaid-preview-mount {
   position: relative;
-  min-height: 220px;
   color: #1f1f1f;
   font-size: 14px;
 }
+.mermaid-code-view {
+  display: none;
+}
+.mermaid-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 8px 4px;
+}
+.mermaid-view-tabs {
+  display: flex;
+  gap: 4px;
+}
+.markdown-editor .milkdown .mermaid-view-tabs button {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+.markdown-editor .milkdown .mermaid-view-tabs button[aria-selected='true'] {
+  background: #e5e5e5;
+}
 .mermaid-preview-card {
   position: relative;
-  display: grid;
-  min-height: 220px;
+  display: block;
   height: 100%;
   overflow: hidden;
   border-radius: 6px;
@@ -557,20 +583,21 @@ button:focus-visible,
   color: #737373;
   font-style: italic;
 }
-.mermaid-preview-actions-overlay {
-  position: absolute;
-  z-index: 30;
-  top: 6px;
-  right: 6px;
-  display: flex;
-  gap: 6px;
-  opacity: 0;
-  pointer-events: none;
+.mermaid-delete-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #37352f;
+  cursor: pointer;
 }
-.mermaid-preview-card:hover .mermaid-preview-actions-overlay,
-.mermaid-preview-card:focus-within .mermaid-preview-actions-overlay {
-  opacity: 1;
-  pointer-events: auto;
+.mermaid-delete-button:hover,
+.mermaid-delete-button:focus-visible {
+  background: #e5e5e5;
 }
 .mermaid-editor-dialog {
   position: fixed;

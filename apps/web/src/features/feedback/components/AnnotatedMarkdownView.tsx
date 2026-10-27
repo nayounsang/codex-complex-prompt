@@ -21,6 +21,7 @@ import { VideoEmbedPreview } from '../../input/components/VideoEmbedPreview.js';
 function isPreviewControlTarget(target: Element): boolean {
   return (
     target.closest('.mermaid-preview-open') !== null ||
+    target.closest('.mermaid-view-tabs') !== null ||
     target.closest('.video-embed-mount') !== null
   );
 }

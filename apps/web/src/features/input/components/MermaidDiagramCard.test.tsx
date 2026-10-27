@@ -59,6 +59,45 @@ function createTarget(id: string, source: string): MermaidDiagramTarget {
 }
 
 describe('MermaidDiagramCard', () => {
+  it('각 다이어그램의 코드 탭을 독립적으로 전환한다', () => {
+    const first = createTarget('first', 'graph TD\n A-->B');
+    const second = createTarget('second', 'graph TD\n C-->D');
+    render(
+      <>
+        <MermaidDiagramCard target={first} readOnly onEdit={vi.fn()} onReplace={vi.fn()} />
+        <MermaidDiagramCard target={second} readOnly onEdit={vi.fn()} onReplace={vi.fn()} />
+      </>,
+    );
+
+    const codeTab = first.mount.querySelector<HTMLButtonElement>('[role="tab"]:last-child');
+    fireEvent.click(codeTab as HTMLButtonElement);
+    expect(first.mount.querySelector('.mermaid-code-view')).not.toBeNull();
+    expect(codeTab).toHaveAttribute('aria-selected', 'true');
+    expect(second.mount.querySelector('.mermaid-preview-open')).not.toBeNull();
+    fireEvent.click(
+      first.mount.querySelector<HTMLButtonElement>('[role="tab"]:first-child') as HTMLButtonElement,
+    );
+    expect(first.mount.querySelector('.mermaid-preview-open')).not.toBeNull();
+  });
+
+  it('다이어그램 탭에 전달된 최신 원본을 렌더링한다', async () => {
+    const target = createTarget('updated', 'graph TD\n A-->B');
+    const { rerender } = render(
+      <MermaidDiagramCard target={target} readOnly={false} onEdit={vi.fn()} onReplace={vi.fn()} />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'code' }));
+    rerender(
+      <MermaidDiagramCard
+        target={{ ...target, source: 'graph TD\n A-->C' }}
+        readOnly={false}
+        onEdit={vi.fn()}
+        onReplace={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'diagram' }));
+    expect(await screen.findByText(/A-->C/)).toBeInTheDocument();
+  });
+
   it('미리보기의 편집 버튼 클릭을 상위 편집 상태에 전달한다', async () => {
     const target = createTarget('diagram-a', 'graph TD\n  A-->B');
     const onEdit = vi.fn();
@@ -110,6 +149,23 @@ describe('MermaidDiagramCard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete diagram' }));
 
+    expect(onReplace).toHaveBeenCalledExactlyOnceWith(target);
+  });
+
+  it('코드 탭에서도 같은 다이어그램을 삭제할 수 있다', () => {
+    const target = createTarget('diagram-code-delete', 'flowchart TD\n  A-->B');
+    const onReplace = vi.fn();
+    render(
+      <MermaidDiagramCard
+        target={target}
+        readOnly={false}
+        onEdit={vi.fn()}
+        onReplace={onReplace}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'code' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete diagram' }));
     expect(onReplace).toHaveBeenCalledExactlyOnceWith(target);
   });
 
