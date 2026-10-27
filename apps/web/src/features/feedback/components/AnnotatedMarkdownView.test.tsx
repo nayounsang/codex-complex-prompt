@@ -26,6 +26,30 @@ function renderMarkdown(
 }
 
 describe('AnnotatedMarkdownView', () => {
+  it('다이어그램 탭을 눌러도 이전 텍스트 선택을 다시 열지 않는다', async () => {
+    const onSelection = vi.fn();
+    const article = renderMarkdown('Review this sentence', onSelection);
+    await waitFor(() => expect(hasRenderedSourceMap(article)).toBe(true), { timeout: 5_000 });
+    const text = article.querySelector('p')?.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, 6);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    const tabs = document.createElement('div');
+    tabs.className = 'mermaid-view-tabs';
+    const button = document.createElement('button');
+    tabs.append(button);
+    article.append(tabs);
+
+    fireEvent.mouseDown(button);
+    fireEvent.mouseUp(button);
+    fireEvent.click(button);
+    expect(onSelection).not.toHaveBeenCalled();
+    tabs.remove();
+    window.getSelection()?.removeAllRanges();
+  });
+
   it('렌더링된 Markdown에서 텍스트 선택의 원문 범위를 전달한다', async () => {
     const onSelection = vi.fn();
     const article = renderMarkdown('Review this sentence', onSelection);

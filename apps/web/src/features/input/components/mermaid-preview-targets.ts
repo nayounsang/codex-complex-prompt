@@ -30,10 +30,12 @@ export function createMermaidPreviewTargets(
       mount = document.createElement('div');
       mount.className = 'mermaid-preview-mount';
       mount.contentEditable = 'false';
-      block.append(mount);
     }
     const id = mount.dataset['mermaidPreviewId'] ?? `mermaid-preview-${nextMermaidPreviewId++}`;
     mount.dataset['mermaidPreviewId'] = id;
+    if (mount !== block.firstElementChild) block.insertBefore(mount, block.firstChild);
+    const codeEditor = block.querySelector<HTMLElement>('.codemirror-host');
+    if (codeEditor !== null) codeEditor.id = `${id}-code-editor`;
     targets.push({ id, block, mount, source: content.source, position: content.position });
   });
   return targets;

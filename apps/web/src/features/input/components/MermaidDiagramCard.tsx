@@ -1,23 +1,22 @@
 import { lazy, Suspense, useState } from 'react';
-import { Trash2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { Trash2 } from 'lucide-react';
 
 import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
-import { MermaidPreviewErrorBoundary } from './MermaidPreviewErrorBoundary.js';
+import { Tabs } from '@base-ui/react/tabs';
+import { MermaidCodeView, MermaidDiagramView } from './MermaidBlockViews.js';
 import type { MermaidPreviewTarget } from './mermaid-preview-targets.js';
 import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../../shared/markdown/ui-replacements.js';
 
-const MermaidPreview = lazy(async () => {
-  const module = await import('./MermaidSdkComponents.js');
-  return { default: module.MermaidPreview };
-});
 const MermaidDialogEditor = lazy(async () => {
   const module = await import('./MermaidSdkComponents.js');
   return { default: module.MermaidDialogEditor };
 });
 
 export type MermaidDiagramTarget = MermaidPreviewTarget;
+type MermaidView = 'diagram' | 'code';
+const mermaidViews: readonly MermaidView[] = ['diagram', 'code'];
 
 interface MermaidDiagramCardProps {
   readonly target: MermaidDiagramTarget;
@@ -32,44 +31,28 @@ export function MermaidDiagramCard({
   onEdit,
   onReplace,
 }: MermaidDiagramCardProps): React.JSX.Element {
+  const [view, setView] = useState<MermaidView>('diagram');
   return createPortal(
-    <div
+    <Tabs.Root
       className="mermaid-preview-card"
+      value={view}
+      onValueChange={(value: unknown) => {
+        if (value === 'diagram' || value === 'code') setView(value);
+      }}
       data-markdown-ui-replacement={MARKDOWN_UI_REPLACEMENT_MODEL.mermaid.kind}
     >
-      <div className="mermaid-preview-open">
-        <div className="mermaid-preview-content" aria-hidden="true">
-          {target.source.trim() === '' ? (
-            <span className="mermaid-preview-placeholder">Edit Your Diagram</span>
-          ) : (
-            <Suspense fallback={<span>Rendering diagram…</span>}>
-              <MermaidPreviewErrorBoundary resetKey={target.source}>
-                <MermaidPreview source={target.source} />
-              </MermaidPreviewErrorBoundary>
-            </Suspense>
-          )}
-        </div>
-        <button
-          type="button"
-          className="mermaid-preview-trigger"
-          aria-label={target.source.trim() === '' ? 'Edit Your Diagram' : 'Edit diagram'}
-          onPointerDownCapture={(event) => event.stopPropagation()}
-          onMouseDownCapture={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-          onClickCapture={(event) => {
-            event.stopPropagation();
-            if (readOnly) return;
-            onEdit(target);
-          }}
-        />
-      </div>
-      {!readOnly && (
-        <div className="mermaid-preview-actions-overlay">
+      <div className="mermaid-view-header">
+        <Tabs.List className="mermaid-view-tabs" aria-label="Diagram view" aria-disabled="false">
+          {mermaidViews.map((tab) => (
+            <Tabs.Tab key={tab} value={tab}>
+              {tab}
+            </Tabs.Tab>
+          ))}
+        </Tabs.List>
+        {!readOnly && (
           <button
             type="button"
-            className="drawing-edit-overlay"
+            className="mermaid-delete-button"
             aria-label="Delete diagram"
             title="Delete diagram"
             onPointerDown={(event) => event.preventDefault()}
@@ -80,9 +63,15 @@ export function MermaidDiagramCard({
           >
             <Trash2 aria-hidden="true" size={18} />
           </button>
-        </div>
-      )}
-    </div>,
+        )}
+      </div>
+      <Tabs.Panel value="diagram">
+        <MermaidDiagramView target={target} readOnly={readOnly} onEdit={onEdit} />
+      </Tabs.Panel>
+      <Tabs.Panel value="code" aria-owns={`${target.id}-code-editor`}>
+        <MermaidCodeView />
+      </Tabs.Panel>
+    </Tabs.Root>,
     target.mount,
   );
 }
