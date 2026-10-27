@@ -38,7 +38,7 @@ function getMermaidSelectionAnchor(target: Element, markdown: string): Selection
 interface AnnotatedMarkdownViewProps {
   readonly markdown: string;
   readonly annotations: readonly FeedbackAnnotation[];
-  readonly selectionPopoverOpen: boolean;
+  readonly pendingSelection: SelectionAnchor | null;
   readonly onSelection: (selection: SelectionAnchor | null) => void;
   readonly attachmentUrl: string | null;
   readonly attachmentToken: string | null;
@@ -48,7 +48,7 @@ interface AnnotatedMarkdownViewProps {
 export function AnnotatedMarkdownView({
   markdown,
   annotations,
-  selectionPopoverOpen,
+  pendingSelection,
   onSelection,
   attachmentUrl,
   attachmentToken,
@@ -67,15 +67,18 @@ export function AnnotatedMarkdownView({
       ),
     [attachmentRefreshKey, attachmentToken, attachmentUrl, markdown],
   );
-  const decorationRangeKey = JSON.stringify(
-    annotations.flatMap((annotation) =>
+  const decorationRangeKey = JSON.stringify([
+    ...annotations.flatMap((annotation) =>
       annotation.scope === 'selection' &&
       annotation.end > annotation.start &&
       markdown.slice(annotation.start, annotation.end) === annotation.quote
         ? [{ id: annotation.id, start: annotation.start, end: annotation.end }]
         : [],
     ),
-  );
+    ...(pendingSelection === null
+      ? []
+      : [{ id: 'pending-selection', start: pendingSelection.start, end: pendingSelection.end }]),
+  ]);
   const handleRendererReady = useCallback((root: HTMLDivElement): void => {
     root.setAttribute('aria-label', 'Markdown feedback document');
     setRendererRoot(root);
@@ -91,7 +94,7 @@ export function AnnotatedMarkdownView({
     rootRef,
     markdown,
     annotations,
-    selectionPopoverOpen,
+    selectionPopoverOpen: pendingSelection !== null,
     onSelection,
   });
 
