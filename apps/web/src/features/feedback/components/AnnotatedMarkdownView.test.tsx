@@ -18,7 +18,7 @@ function renderMarkdown(
       attachmentToken="test-token"
       attachmentRefreshKey={0}
       annotations={annotations}
-      selectionPopoverOpen={false}
+      pendingSelection={null}
       onSelection={onSelection}
     />,
   );

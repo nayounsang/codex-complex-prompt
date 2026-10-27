@@ -49,7 +49,7 @@ export function FeedbackModeView(props: FeedbackModeViewProps): React.JSX.Elemen
             <AnnotatedMarkdownView
               markdown={props.markdown}
               annotations={props.annotations}
-              selectionPopoverOpen={props.pendingSelection !== null}
+              pendingSelection={props.pendingSelection}
               onSelection={props.onSelection}
               attachmentUrl={props.attachmentUrl}
               attachmentToken={props.attachmentToken}
