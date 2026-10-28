@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   hasMermaidRelevantMutations,
   hasRemovedMermaidPreviewCard,
-} from './mermaid-preview-observer.js';
-import {
   createMermaidPreviewTargets,
   haveSameMermaidPreviewTargets,
-} from './mermaid-preview-targets.js';
+} from '@codex-complex-prompt/milkdown-plugins/mermaid';
 
 function createMutationRecord(
   target: Node,

@@ -1,12 +1,3 @@
-export type MarkdownReference = string;
-
-export interface MarkdownMediaAsset {
-  readonly kind: 'image' | 'video';
-  readonly markdownReference: MarkdownReference;
-  readonly altText?: string;
-  readonly displayUrl?: string;
-}
-
 export const MARKDOWN_UI_REPLACEMENT_MODEL = {
   drawing: {
     kind: 'drawing',
@@ -41,35 +32,3 @@ export const MARKDOWN_UI_REPLACEMENT_MODEL = {
 } as const;
 
 export type MarkdownUiReplacementKind = keyof typeof MARKDOWN_UI_REPLACEMENT_MODEL;
-
-export interface MermaidPluginOptions {
-  readonly readOnly: boolean;
-}
-
-export interface MediaPluginOptions {
-  readonly readOnly: boolean;
-  readonly allowUploadsWhileReadOnly?: boolean;
-  readonly acceptedTypes: readonly string[];
-  readonly maxBytes: number;
-  readonly uploadMedia: (files: readonly File[]) => Promise<readonly MarkdownMediaAsset[]>;
-  onFileTooLarge?(file: File): MarkdownMediaAsset;
-  onMediaUploadComplete?(): void;
-  resolveMedia(reference: MarkdownReference): MarkdownMediaAsset | null;
-}
-
-export interface ExcalidrawPluginOptions {
-  readonly readOnly: boolean;
-  readonly maxBytes: number;
-  loadExcalidrawScene(reference: MarkdownReference): Promise<string>;
-  resolveMedia(reference: MarkdownReference): MarkdownMediaAsset | null;
-  getDrawingStatus(reference: MarkdownReference): Promise<{
-    readonly exists: boolean;
-    readonly editable: boolean;
-  }>;
-  saveExcalidrawDrawing(input: {
-    readonly markdownReference?: MarkdownReference;
-    readonly png: Blob;
-    readonly scene: string;
-  }): Promise<{ readonly markdownReference: MarkdownReference }>;
-  deleteExcalidrawDrawing?(reference: MarkdownReference): Promise<void>;
-}

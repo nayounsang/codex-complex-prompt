@@ -5,9 +5,9 @@ import {
   MermaidDiagramCard,
   MermaidDiagramDialog,
   type MermaidDiagramTarget,
-} from './MermaidDiagramCard.js';
+} from '@codex-complex-prompt/milkdown-plugins/mermaid';
 
-vi.mock('./MermaidSdkComponents.js', () => ({
+vi.mock('../../../../../../packages/milkdown-plugins/dist/mermaid/MermaidSdkComponents.js', () => ({
   MermaidPreview: ({ source }: { readonly source: string }) => (
     <div>
       <button type="button" aria-label="SDK canvas control">

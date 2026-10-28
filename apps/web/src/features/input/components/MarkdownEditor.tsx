@@ -9,13 +9,12 @@ import {
 } from 'react';
 import { autoUpdate, computePosition, offset } from '@floating-ui/dom';
 import type { Crepe } from '@milkdown/crepe';
-import { editorViewCtx, schemaCtx } from '@milkdown/kit/core';
+import { replaceMermaidBlock as replaceMermaidBlockInEditor } from '@codex-complex-prompt/milkdown-plugins/mermaid';
+import type { MermaidDiagramTarget } from '@codex-complex-prompt/milkdown-plugins/mermaid';
 import type { VideoEmbedTarget } from '../../../shared/markdown/video-embeds.js';
 import { MarkdownEditorAuxiliaryViews } from './MarkdownEditorAuxiliaryViews.js';
 import { useMarkdownEditorLifecycle } from './useMarkdownEditorLifecycle.js';
 import { useMarkdownEditorInteractionHandlers } from './useMarkdownEditorInteractionHandlers.js';
-import type { MermaidDiagramTarget } from './MermaidDiagramCard.js';
-import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../../shared/markdown/ui-replacements.js';
 import {
   syncMediaPlaceholderAccessibility,
   type DrawingEditTarget,
@@ -114,39 +113,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       setDrawingEditTarget,
     });
     const { clearDrawingEditTarget } = interactionHandlers;
-    const replaceMermaidBlock = (target: MermaidDiagramTarget, source?: string): boolean => {
-      const editor = crepeRef.current?.editor;
-      if (editor === undefined) return false;
-      let replaced = false;
-      editor.action((ctx) => {
-        const view = ctx.get(editorViewCtx);
-        const schema = ctx.get(schemaCtx);
-        const pos = target.position;
-        const node = view.state.doc.nodeAt(pos);
-        if (
-          node === null ||
-          node.type.name !== 'code_block' ||
-          String(node.attrs['language']).toLowerCase() !==
-            MARKDOWN_UI_REPLACEMENT_MODEL.mermaid.language ||
-          node.textContent !== target.source
-        )
-          return;
-        const replacement =
-          source === undefined
-            ? schema.nodes['paragraph']?.create()
-            : schema.nodes['code_block']?.create(
-                { ...node.attrs, language: MARKDOWN_UI_REPLACEMENT_MODEL.mermaid.language },
-                source === '' ? undefined : schema.text(source),
-              );
-        if (replacement === undefined) return;
-        view.dispatch(view.state.tr.replaceWith(pos, pos + node.nodeSize, replacement));
-        view.focus();
-        replaced = true;
-      });
-      return replaced;
-    };
     const replaceCurrentMermaidBlock = (target: MermaidDiagramTarget, source?: string): boolean => {
-      return replaceMermaidBlock(target, source);
+      const crepe = crepeRef.current;
+      return crepe === null ? false : replaceMermaidBlockInEditor(crepe, target, source);
     };
     useLayoutEffect(
       function positionDrawingEditOverlay() {
