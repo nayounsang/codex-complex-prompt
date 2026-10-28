@@ -22,7 +22,7 @@ export function createMermaidPreviewTargets(
   blockElements.forEach((block, blockIndex) => {
     const content = contents[blockIndex];
     let mount = block.querySelector<HTMLDivElement>(':scope > .mermaid-preview-mount');
-    if (content?.language !== MARKDOWN_UI_REPLACEMENT_MODEL.mermaid.language) {
+    if (content?.language !== MERMAID_UI_REPLACEMENT_MODEL.language) {
       mount?.remove();
       return;
     }
@@ -60,4 +60,4 @@ export function haveSameMermaidPreviewTargets(
     })
   );
 }
-import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../shared.js';
+import { MERMAID_UI_REPLACEMENT_MODEL } from '../shared.js';

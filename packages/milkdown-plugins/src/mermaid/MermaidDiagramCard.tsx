@@ -7,7 +7,7 @@ import { Dialog } from '@base-ui/react/dialog';
 import { Tabs } from '@base-ui/react/tabs';
 import { MermaidCodeView, MermaidDiagramView } from './MermaidBlockViews.js';
 import type { MermaidPreviewTarget } from './preview-targets.js';
-import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../shared.js';
+import { MERMAID_UI_REPLACEMENT_MODEL } from '../shared.js';
 
 const MermaidDialogEditor = lazy(async () => {
   const module = await import('./MermaidSdkComponents.js');
@@ -39,7 +39,7 @@ export function MermaidDiagramCard({
       onValueChange={(value: unknown) => {
         if (value === 'diagram' || value === 'code') setView(value);
       }}
-      data-markdown-ui-replacement={MARKDOWN_UI_REPLACEMENT_MODEL.mermaid.kind}
+      data-markdown-ui-replacement={MERMAID_UI_REPLACEMENT_MODEL.kind}
     >
       <div className="mermaid-view-header">
         <Tabs.List className="mermaid-view-tabs" aria-label="Diagram view" aria-disabled="false">
