@@ -6,8 +6,8 @@ import { Button } from '@base-ui/react/button';
 import { Dialog } from '@base-ui/react/dialog';
 import { Tabs } from '@base-ui/react/tabs';
 import { MermaidCodeView, MermaidDiagramView } from './MermaidBlockViews.js';
-import type { MermaidPreviewTarget } from './mermaid-preview-targets.js';
-import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../../shared/markdown/ui-replacements.js';
+import type { MermaidPreviewTarget } from './preview-targets.js';
+import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../shared.js';
 
 const MermaidDialogEditor = lazy(async () => {
   const module = await import('./MermaidSdkComponents.js');

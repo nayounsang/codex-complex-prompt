@@ -60,4 +60,4 @@ export function haveSameMermaidPreviewTargets(
     })
   );
 }
-import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../../shared/markdown/ui-replacements.js';
+import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../shared.js';
