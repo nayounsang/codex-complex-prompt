@@ -2,7 +2,7 @@ import { useCallback, type RefObject } from 'react';
 import type { Crepe } from '@milkdown/crepe';
 import { editorViewCtx, schemaCtx } from '@milkdown/kit/core';
 import { NodeSelection } from '@milkdown/kit/prose/state';
-import { insertMermaidDiagram as insertMermaidBlock } from '@codex-complex-prompt/milkdown-plugins/mermaid';
+import { insertMermaidDiagram as insertMermaidBlock } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 
 export function useMarkdownEditorMenuCommands(crepeRef: RefObject<Crepe | null>) {
   const insertMermaidDiagram = useCallback(

@@ -11,6 +11,14 @@
     "./mermaid": {
       "types": "./src/mermaid/index.ts",
       "import": "./dist/mermaid/index.js"
+    },
+    "./mermaid/core": {
+      "types": "./src/mermaid/core.ts",
+      "import": "./dist/mermaid/core.js"
+    },
+    "./mermaid/ui": {
+      "types": "./src/mermaid/ui.ts",
+      "import": "./dist/mermaid/ui.js"
     }
   },
   "scripts": {
@@ -21,10 +29,10 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
-    "@mermaid-editor-sdk/ui": "0.2.0",
     "zod": "^3.24.2"
   },
   "peerDependencies": {
+    "@mermaid-editor-sdk/ui": "^0.2.0",
     "@milkdown/crepe": "^7.22.1",
     "@milkdown/kit": "^7.22.1",
     "lucide-react": "^1.53.0",
@@ -33,6 +41,7 @@
   },
   "devDependencies": {
     "@antimatter-labs/eslint-plugin-no-anonymous-use-effect-callback-rule": "^1.0.2",
+    "@mermaid-editor-sdk/ui": "^0.2.0",
     "@milkdown/crepe": "^7.22.1",
     "@milkdown/kit": "^7.22.1",
     "@typescript-eslint/eslint-plugin": "^8.24.0",

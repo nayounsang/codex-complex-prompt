@@ -1,11 +1,7 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
 import { MermaidPreviewErrorBoundary } from './MermaidPreviewErrorBoundary.js';
 import type { MermaidPreviewTarget } from './preview-targets.js';
-
-const MermaidPreview = lazy(async () => {
-  const module = await import('./MermaidSdkComponents.js');
-  return { default: module.MermaidPreview };
-});
+import { MermaidPreview } from './MermaidSdkComponents.js';
 
 // Milkdown owns the code editor outside the portal; this marker reveals that editor.
 export function MermaidCodeView(): React.JSX.Element {

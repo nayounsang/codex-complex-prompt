@@ -1,14 +1,34 @@
-import type { RefObject } from 'react';
+import { lazy, Suspense, type RefObject } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 
 import type { VideoEmbedTarget } from '../../../shared/markdown/video-embeds.js';
 import { VideoEmbedPreview } from './VideoEmbedPreview.js';
-import {
-  MermaidDiagramCard,
-  MermaidDiagramDialog,
-  type MermaidDiagramTarget,
-} from '@codex-complex-prompt/milkdown-plugins/mermaid';
+import type { MermaidDiagramDialogProps } from '@codex-complex-prompt/milkdown-plugins/mermaid/ui';
+import { MermaidPreviewErrorBoundary } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
+import type { MermaidDiagramTarget } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 import type { DrawingEditTarget } from './markdown-editor-dom.js';
+
+const MermaidDiagramCard = lazy(async () => {
+  const [module] = await Promise.all([
+    import('@codex-complex-prompt/milkdown-plugins/mermaid/ui'),
+    import('@mermaid-editor-sdk/ui/style.css'),
+  ]);
+  return { default: module.MermaidDiagramCard };
+});
+
+const MermaidDiagramDialog = lazy(async () => {
+  const [{ MermaidDiagramDialog }, { MermaidDiagramEditor }] = await Promise.all([
+    import('@codex-complex-prompt/milkdown-plugins/mermaid/ui'),
+    import('./MermaidDiagramEditor.js'),
+  ]);
+  return {
+    default: function MermaidDiagramDialogWithEditor(
+      props: Omit<MermaidDiagramDialogProps, 'Editor'>,
+    ): React.JSX.Element {
+      return <MermaidDiagramDialog {...props} Editor={MermaidDiagramEditor} />;
+    },
+  };
+});
 
 interface DrawingActions {
   readonly onEditDrawing: ((id: string) => void) | undefined;
@@ -82,24 +102,29 @@ export function MarkdownEditorAuxiliaryViews({
         </div>
       )}
       {mermaidTargets.map((target) => (
-        <MermaidDiagramCard
-          key={target.id}
-          target={target}
-          readOnly={readOnly}
-          onEdit={onEditMermaid}
-          onReplace={onReplaceMermaid}
-        />
+        <Suspense key={target.id} fallback={<span role="status">Loading diagram…</span>}>
+          <MermaidPreviewErrorBoundary resetKey={target.source}>
+            <MermaidDiagramCard
+              target={target}
+              readOnly={readOnly}
+              onEdit={onEditMermaid}
+              onReplace={onReplaceMermaid}
+            />
+          </MermaidPreviewErrorBoundary>
+        </Suspense>
       ))}
       {videoTargets.map((target) => (
         <VideoEmbedPreview key={`${target.id}:${target.source}`} target={target} />
       ))}
       {mermaidDialogTarget !== null && (
-        <MermaidDiagramDialog
-          key={mermaidDialogTarget.id}
-          target={mermaidDialogTarget}
-          onClose={onCloseMermaid}
-          onReplace={onReplaceMermaid}
-        />
+        <Suspense fallback={<span role="status">Loading diagram editor…</span>}>
+          <MermaidDiagramDialog
+            key={mermaidDialogTarget.id}
+            target={mermaidDialogTarget}
+            onClose={onCloseMermaid}
+            onReplace={onReplaceMermaid}
+          />
+        </Suspense>
       )}
     </>
   );
