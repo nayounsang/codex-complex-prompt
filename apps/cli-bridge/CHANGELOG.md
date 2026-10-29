@@ -1,5 +1,15 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.5.0
+
+### Minor Changes
+
+- 53bded8: Add diagram and code views for Mermaid blocks in the editor and feedback mode.
+
+### Patch Changes
+
+- 68e0f64: Extract Mermaid editor behavior into the local Milkdown plugin package.
+
 ## 0.4.4
 
 ### Patch Changes
