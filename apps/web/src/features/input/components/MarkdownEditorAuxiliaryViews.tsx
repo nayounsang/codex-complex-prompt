@@ -3,8 +3,11 @@ import { Pencil, Trash2 } from 'lucide-react';
 
 import type { VideoEmbedTarget } from '../../../shared/markdown/video-embeds.js';
 import { VideoEmbedPreview } from './VideoEmbedPreview.js';
-import { MermaidDiagramCard, MermaidDiagramDialog } from './MermaidDiagramCard.js';
-import type { MermaidDiagramTarget } from './MermaidDiagramCard.js';
+import {
+  MermaidDiagramCard,
+  MermaidDiagramDialog,
+  type MermaidDiagramTarget,
+} from '@codex-complex-prompt/milkdown-plugins/mermaid';
 import type { DrawingEditTarget } from './markdown-editor-dom.js';
 
 interface DrawingActions {

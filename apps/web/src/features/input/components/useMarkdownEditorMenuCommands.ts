@@ -2,24 +2,13 @@ import { useCallback, type RefObject } from 'react';
 import type { Crepe } from '@milkdown/crepe';
 import { editorViewCtx, schemaCtx } from '@milkdown/kit/core';
 import { NodeSelection } from '@milkdown/kit/prose/state';
-import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../../shared/markdown/ui-replacements.js';
+import { insertMermaidDiagram as insertMermaidBlock } from '@codex-complex-prompt/milkdown-plugins/mermaid';
 
 export function useMarkdownEditorMenuCommands(crepeRef: RefObject<Crepe | null>) {
   const insertMermaidDiagram = useCallback(
     function insertMermaidDiagram(): void {
-      const editor = crepeRef.current?.editor;
-      if (editor === undefined) return;
-      editor.action((ctx) => {
-        const view = ctx.get(editorViewCtx);
-        const schema = ctx.get(schemaCtx);
-        const codeBlock = schema.nodes['code_block'];
-        if (codeBlock === undefined) return;
-        const block = codeBlock.create({
-          language: MARKDOWN_UI_REPLACEMENT_MODEL.mermaid.language,
-        });
-        view.dispatch(view.state.tr.replaceSelectionWith(block));
-        view.focus();
-      });
+      const crepe = crepeRef.current;
+      if (crepe !== null) insertMermaidBlock(crepe);
     },
     [crepeRef],
   );

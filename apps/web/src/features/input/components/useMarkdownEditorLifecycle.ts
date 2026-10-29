@@ -6,11 +6,11 @@ import { columnResizingPlugin } from '@milkdown/kit/preset/gfm';
 import {
   hasMermaidRelevantMutations,
   hasRemovedMermaidPreviewCard,
-} from './mermaid-preview-observer.js';
+} from '@codex-complex-prompt/milkdown-plugins/mermaid';
 import { addMarkdownEditorAdvancedMenu } from './markdown-editor-menu.js';
 import { useMarkdownEditorPreviewSync } from './useMarkdownEditorPreviewSync.js';
 import { useMarkdownEditorMenuCommands } from './useMarkdownEditorMenuCommands.js';
-import type { MermaidDiagramTarget } from './MermaidDiagramCard.js';
+import type { MermaidDiagramTarget } from '@codex-complex-prompt/milkdown-plugins/mermaid';
 import { isSupportedMediaFile } from '../model/media-files.js';
 import {
   getVideoEmbedAffectedParagraphs,

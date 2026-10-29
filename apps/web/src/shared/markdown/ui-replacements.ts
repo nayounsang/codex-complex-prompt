@@ -1,3 +1,5 @@
+import { MERMAID_UI_REPLACEMENT_MODEL } from '@codex-complex-prompt/milkdown-plugins/shared';
+
 export const MARKDOWN_UI_REPLACEMENT_MODEL = {
   drawing: {
     kind: 'drawing',
@@ -15,11 +17,10 @@ export const MARKDOWN_UI_REPLACEMENT_MODEL = {
     standaloneMarkdown: (source: string): string => `![](${source})`,
   },
   mermaid: {
-    kind: 'mermaid',
+    ...MERMAID_UI_REPLACEMENT_MODEL,
     markdown: 'fenced code block with mermaid info string',
     renderedUi: 'diagram preview with canvas and source editor',
     persistedMarkdown: 'the Mermaid code fence',
-    language: 'mermaid',
   },
   mediaPlaceholder: {
     kind: 'media-placeholder',

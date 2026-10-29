@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { MermaidPreviewErrorBoundary } from './MermaidPreviewErrorBoundary.js';
-import type { MermaidPreviewTarget } from './mermaid-preview-targets.js';
+import type { MermaidPreviewTarget } from './preview-targets.js';
 
 const MermaidPreview = lazy(async () => {
   const module = await import('./MermaidSdkComponents.js');

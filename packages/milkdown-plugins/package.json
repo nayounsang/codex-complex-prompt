@@ -1,0 +1,53 @@
+{
+  "name": "@codex-complex-prompt/milkdown-plugins",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./shared": {
+      "types": "./src/shared.ts",
+      "import": "./dist/shared.js"
+    },
+    "./mermaid": {
+      "types": "./src/mermaid/index.ts",
+      "import": "./dist/mermaid/index.js"
+    }
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.8.0",
+    "@mermaid-editor-sdk/ui": "0.2.0",
+    "zod": "^3.24.2"
+  },
+  "peerDependencies": {
+    "@milkdown/crepe": "^7.22.1",
+    "@milkdown/kit": "^7.22.1",
+    "lucide-react": "^1.53.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@antimatter-labs/eslint-plugin-no-anonymous-use-effect-callback-rule": "^1.0.2",
+    "@milkdown/crepe": "^7.22.1",
+    "@milkdown/kit": "^7.22.1",
+    "@typescript-eslint/eslint-plugin": "^8.24.0",
+    "@typescript-eslint/parser": "^8.24.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitest/eslint-plugin": "^1.6.18",
+    "eslint": "^9.22.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "lucide-react": "^1.53.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}
