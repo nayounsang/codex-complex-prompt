@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createMermaidPreviewTargets } from '@codex-complex-prompt/milkdown-plugins/mermaid';
+import { createMermaidPreviewTargets } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 
 afterEach(() => document.body.replaceChildren());
 

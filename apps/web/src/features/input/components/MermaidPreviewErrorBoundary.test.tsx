@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MermaidPreviewErrorBoundary } from '@codex-complex-prompt/milkdown-plugins/mermaid';
+import { MermaidPreviewErrorBoundary } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 
 afterEach(() => {
   cleanup();
