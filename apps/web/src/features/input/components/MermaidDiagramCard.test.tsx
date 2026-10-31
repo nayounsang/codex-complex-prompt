@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   MermaidDiagramCard,
   MermaidDiagramDialog,
+  type MermaidDiagramEditorProps,
   type MermaidDiagramTarget,
 } from '@codex-complex-prompt/milkdown-plugins/mermaid';
 
@@ -12,31 +13,6 @@ vi.mock('../../../../../../packages/milkdown-plugins/dist/mermaid/MermaidSdkComp
     <div>
       <button type="button" aria-label="SDK canvas control">
         {source}
-      </button>
-    </div>
-  ),
-  MermaidDialogEditor: ({
-    source,
-    view,
-    onChange,
-    onSave,
-  }: {
-    readonly source: string;
-    readonly view: 'canvas' | 'code';
-    readonly onChange: (source: string) => void;
-    readonly onSave: (source: string) => void;
-  }) => (
-    <div data-testid="sdk-editor" data-view={view}>
-      <output>{source}</output>
-      {view === 'code' && (
-        <textarea
-          aria-label="Mermaid code"
-          value={source}
-          onChange={(event) => onChange(event.currentTarget.value)}
-        />
-      )}
-      <button type="button" onClick={() => onSave(source)}>
-        SDK Save
       </button>
     </div>
   ),
@@ -56,6 +32,29 @@ function createTarget(id: string, source: string): MermaidDiagramTarget {
   block.append(mount);
   document.body.append(block);
   return { id, block, mount, source, position: 0 };
+}
+
+function TestMermaidDiagramEditor({
+  source,
+  view,
+  onChange,
+  onSave,
+}: MermaidDiagramEditorProps): React.JSX.Element {
+  return (
+    <div data-testid="sdk-editor" data-view={view}>
+      <output>{source}</output>
+      {view === 'code' && (
+        <textarea
+          aria-label="Mermaid code"
+          value={source}
+          onChange={(event) => onChange(event.currentTarget.value)}
+        />
+      )}
+      <button type="button" onClick={() => onSave(source)}>
+        SDK Save
+      </button>
+    </div>
+  );
 }
 
 describe('MermaidDiagramCard', () => {
@@ -125,7 +124,14 @@ describe('MermaidDiagramCard', () => {
     const target = createTarget('diagram-a', '');
     const onReplace = vi.fn(() => true);
     const onClose = vi.fn();
-    render(<MermaidDiagramDialog target={target} onClose={onClose} onReplace={onReplace} />);
+    render(
+      <MermaidDiagramDialog
+        Editor={TestMermaidDiagramEditor}
+        target={target}
+        onClose={onClose}
+        onReplace={onReplace}
+      />,
+    );
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     const source = await screen
@@ -173,7 +179,14 @@ describe('MermaidDiagramCard', () => {
     const target = createTarget('diagram-code-tab', 'flowchart TD\n  A-->B');
     const onReplace = vi.fn(() => true);
     const onClose = vi.fn();
-    render(<MermaidDiagramDialog target={target} onClose={onClose} onReplace={onReplace} />);
+    render(
+      <MermaidDiagramDialog
+        Editor={TestMermaidDiagramEditor}
+        target={target}
+        onClose={onClose}
+        onReplace={onReplace}
+      />,
+    );
 
     fireEvent.click(screen.getByRole('tab', { name: 'Mermaid code' }));
     const editor = await screen.findByTestId('sdk-editor');
@@ -191,7 +204,14 @@ describe('MermaidDiagramCard', () => {
     const target = createTarget('diagram-stale', 'flowchart TD\n  A-->B');
     const onReplace = vi.fn(() => false);
     const onClose = vi.fn();
-    render(<MermaidDiagramDialog target={target} onClose={onClose} onReplace={onReplace} />);
+    render(
+      <MermaidDiagramDialog
+        Editor={TestMermaidDiagramEditor}
+        target={target}
+        onClose={onClose}
+        onReplace={onReplace}
+      />,
+    );
 
     fireEvent.click(screen.getByRole('tab', { name: 'Mermaid code' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
@@ -219,6 +239,7 @@ describe('MermaidDiagramCard', () => {
           {dialogTarget !== null && (
             <MermaidDiagramDialog
               key={dialogTarget.id}
+              Editor={TestMermaidDiagramEditor}
               target={dialogTarget}
               onClose={() => setDialogTarget(null)}
               onReplace={onReplace}

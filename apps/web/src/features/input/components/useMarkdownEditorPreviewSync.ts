@@ -3,13 +3,13 @@ import { editorViewCtx } from '@milkdown/kit/core';
 import {
   createMermaidPreviewTargets,
   haveSameMermaidPreviewTargets,
-} from '@codex-complex-prompt/milkdown-plugins/mermaid';
+} from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 import {
   haveSameVideoEmbedTargets,
   updateVideoEmbedTargets,
   type VideoEmbedTarget,
 } from '../../../shared/markdown/video-embeds.js';
-import type { MermaidDiagramTarget } from '@codex-complex-prompt/milkdown-plugins/mermaid';
+import type { MermaidDiagramTarget } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 import type { Crepe } from '@milkdown/crepe';
 
 interface MarkdownEditorPreviewSyncOptions {

@@ -9,8 +9,8 @@ import {
 } from 'react';
 import { autoUpdate, computePosition, offset } from '@floating-ui/dom';
 import type { Crepe } from '@milkdown/crepe';
-import { replaceMermaidBlock as replaceMermaidBlockInEditor } from '@codex-complex-prompt/milkdown-plugins/mermaid';
-import type { MermaidDiagramTarget } from '@codex-complex-prompt/milkdown-plugins/mermaid';
+import { replaceMermaidBlock as replaceMermaidBlockInEditor } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
+import type { MermaidDiagramTarget } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 import type { VideoEmbedTarget } from '../../../shared/markdown/video-embeds.js';
 import { MarkdownEditorAuxiliaryViews } from './MarkdownEditorAuxiliaryViews.js';
 import { useMarkdownEditorLifecycle } from './useMarkdownEditorLifecycle.js';

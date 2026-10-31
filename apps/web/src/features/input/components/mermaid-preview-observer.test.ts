@@ -4,7 +4,7 @@ import {
   hasRemovedMermaidPreviewCard,
   createMermaidPreviewTargets,
   haveSameMermaidPreviewTargets,
-} from '@codex-complex-prompt/milkdown-plugins/mermaid';
+} from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 
 function createMutationRecord(
   target: Node,

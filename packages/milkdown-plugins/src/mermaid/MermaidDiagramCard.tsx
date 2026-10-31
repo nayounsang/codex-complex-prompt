@@ -1,4 +1,5 @@
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
+import type { ComponentType } from 'react';
 import { createPortal } from 'react-dom';
 import { Trash2 } from 'lucide-react';
 
@@ -9,14 +10,16 @@ import { MermaidCodeView, MermaidDiagramView } from './MermaidBlockViews.js';
 import type { MermaidPreviewTarget } from './preview-targets.js';
 import { MERMAID_UI_REPLACEMENT_MODEL } from '../shared.js';
 
-const MermaidDialogEditor = lazy(async () => {
-  const module = await import('./MermaidSdkComponents.js');
-  return { default: module.MermaidDialogEditor };
-});
-
 export type MermaidDiagramTarget = MermaidPreviewTarget;
 type MermaidView = 'diagram' | 'code';
 const mermaidViews: readonly MermaidView[] = ['diagram', 'code'];
+
+export interface MermaidDiagramEditorProps {
+  readonly source: string;
+  readonly view: 'canvas' | 'code';
+  readonly onChange: (source: string) => void;
+  readonly onSave: (source: string) => void;
+}
 
 interface MermaidDiagramCardProps {
   readonly target: MermaidDiagramTarget;
@@ -76,13 +79,15 @@ export function MermaidDiagramCard({
   );
 }
 
-interface MermaidDiagramDialogProps {
+export interface MermaidDiagramDialogProps {
+  readonly Editor: ComponentType<MermaidDiagramEditorProps>;
   readonly target: MermaidDiagramTarget;
   readonly onClose: () => void;
   readonly onReplace: (target: MermaidDiagramTarget, source?: string) => boolean;
 }
 
 export function MermaidDiagramDialog({
+  Editor,
   target,
   onClose,
   onReplace,
@@ -153,14 +158,7 @@ export function MermaidDiagramDialog({
               view === 'canvas' ? 'mermaid-editor-canvas-tab' : 'mermaid-editor-code-tab'
             }
           >
-            <Suspense fallback={<p>Loading diagram editor…</p>}>
-              <MermaidDialogEditor
-                source={editSource}
-                view={view}
-                onChange={setEditSource}
-                onSave={save}
-              />
-            </Suspense>
+            <Editor source={editSource} view={view} onChange={setEditSource} onSave={save} />
           </div>
         </Dialog.Popup>
       </Dialog.Portal>
