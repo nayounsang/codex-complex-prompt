@@ -1,5 +1,11 @@
 # @codex-complex-prompt/cli-bridge
 
+## 0.5.1
+
+### Patch Changes
+
+- 8475fdb: Let consuming apps compose the Mermaid editor UI through the editor SDK.
+
 ## 0.5.0
 
 ### Minor Changes
