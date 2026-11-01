@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { LazyMarkdownEditor } from '../../input/components/LazyMarkdownEditor.js';
-import { makeMarkdownImagesInert } from '../../../shared/markdown/markdown-rendering.js';
 import {
   decorateMarkdownRoot,
   type SourceFeedbackRange,
@@ -11,18 +10,18 @@ import { SourceFeedbackRangesSchema } from '../model/schema.js';
 import { mergeSelectionWithExistingFeedback } from './selection-feedback.js';
 import { useAnnotatedMarkdownSelection } from './useAnnotatedMarkdownSelection.js';
 import {
-  getVideoEmbedAffectedParagraphs,
-  haveSameVideoEmbedTargets,
-  updateVideoEmbedTargets,
-  type VideoEmbedTarget,
-} from '../../../shared/markdown/video-embeds.js';
-import { VideoEmbedPreview } from '../../input/components/VideoEmbedPreview.js';
+  getMediaEmbedAffectedContainers,
+  haveSameMediaEmbedTargets,
+  updateMediaEmbedTargets,
+  type MediaEmbedTarget,
+} from '../../../shared/markdown/media-embeds.js';
+import { MediaEmbedPreview } from '../../input/components/MediaEmbedPreview.js';
 
 function isPreviewControlTarget(target: Element): boolean {
   return (
     target.closest('.mermaid-preview-open') !== null ||
     target.closest('.mermaid-view-tabs') !== null ||
-    target.closest('.video-embed-mount') !== null
+    target.closest('.media-embed-mount') !== null
   );
 }
 
@@ -57,17 +56,7 @@ export function AnnotatedMarkdownView({
 }: AnnotatedMarkdownViewProps): React.JSX.Element {
   const rootRef = useRef<HTMLElement>(null);
   const [rendererRoot, setRendererRoot] = useState<HTMLDivElement | null>(null);
-  const [videoTargets, setVideoTargets] = useState<VideoEmbedTarget[]>([]);
-  const renderedMarkdown = useMemo(
-    () =>
-      makeMarkdownImagesInert(
-        markdown,
-        attachmentUrl === null || attachmentToken === null
-          ? undefined
-          : { baseUrl: attachmentUrl, token: attachmentToken, refreshKey: attachmentRefreshKey },
-      ),
-    [attachmentRefreshKey, attachmentToken, attachmentUrl, markdown],
-  );
+  const [mediaTargets, setMediaTargets] = useState<MediaEmbedTarget[]>([]);
   const decorationRangeKey = JSON.stringify([
     ...annotations.flatMap((annotation) =>
       annotation.scope === 'selection' &&
@@ -108,28 +97,16 @@ export function AnnotatedMarkdownView({
         ? parsedFeedbackRanges.data
         : [];
       const decorate = (records?: readonly MutationRecord[]): void => {
-        decorateMarkdownRoot(
-          rendererRoot,
-          renderedMarkdown,
-          feedbackRanges,
-          markdown,
-          attachmentUrl,
-        );
+        decorateMarkdownRoot(rendererRoot, markdown, feedbackRanges, markdown, attachmentUrl);
         const paragraphs =
           records === undefined
             ? undefined
-            : getVideoEmbedAffectedParagraphs(rendererRoot, records);
-        const mountRoot = rootRef.current;
+            : getMediaEmbedAffectedContainers(rendererRoot, records);
+        const mountRoot = rendererRoot.querySelector<HTMLElement>('.milkdown') ?? rootRef.current;
         if (mountRoot === null) return;
-        setVideoTargets((current) => {
-          const next = updateVideoEmbedTargets(
-            rendererRoot,
-            current,
-            markdown,
-            mountRoot,
-            paragraphs,
-          );
-          return haveSameVideoEmbedTargets(current, next) ? current : next;
+        setMediaTargets((current) => {
+          const next = updateMediaEmbedTargets(rendererRoot, current, mountRoot, paragraphs);
+          return haveSameMediaEmbedTargets(current, next) ? current : next;
         });
       };
       // TODO: Profile large documents; share the Markdown AST/line index and batch renderer churn if costly.
@@ -138,7 +115,14 @@ export function AnnotatedMarkdownView({
       decorate();
       return () => observer.disconnect();
     },
-    [attachmentUrl, decorationRangeKey, markdown, rendererRoot, renderedMarkdown],
+    [
+      attachmentRefreshKey,
+      attachmentToken,
+      attachmentUrl,
+      decorationRangeKey,
+      markdown,
+      rendererRoot,
+    ],
   );
 
   return (
@@ -190,7 +174,7 @@ export function AnnotatedMarkdownView({
       }}
     >
       <LazyMarkdownEditor
-        defaultMarkdown={renderedMarkdown}
+        defaultMarkdown={markdown}
         readOnly
         loadImmediately
         className="feedback-markdown-renderer"
@@ -201,8 +185,12 @@ export function AnnotatedMarkdownView({
         attachmentRefreshKey={attachmentRefreshKey}
         onReady={handleRendererReady}
       />
-      {videoTargets.map((target) => (
-        <VideoEmbedPreview key={`${target.id}:${target.source}`} target={target} />
+      {mediaTargets.map((target) => (
+        <MediaEmbedPreview
+          key={`${target.id}:${target.path}:${target.alt}`}
+          target={target}
+          readOnly
+        />
       ))}
     </article>
   );

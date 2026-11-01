@@ -13,21 +13,34 @@ function createPlaceholderRoot(alt = ''): {
   const image = document.createElement('img');
   image.src = '';
   image.alt = alt;
-  paragraph.append(image);
+  const separator = document.createElement('img');
+  separator.className = 'ProseMirror-separator';
+  const trailingBreak = document.createElement('br');
+  trailingBreak.className = 'ProseMirror-trailingBreak';
+  paragraph.append(image, separator, document.createTextNode(' '), trailingBreak);
   proseMirror.append(paragraph);
   root.append(proseMirror);
   return { root, paragraph };
 }
 
 describe('syncMediaPlaceholderAccessibility', () => {
-  it('exposes a dedicated empty image as an accessible media button', () => {
-    const { root, paragraph } = createPlaceholderRoot();
+  it('exposes a host media placeholder as an accessible media button', () => {
+    const { root, paragraph } = createPlaceholderRoot('media-placeholder-123');
 
     syncMediaPlaceholderAccessibility(root, false);
 
     expect(paragraph).toMatchObject({ tabIndex: 0 });
     expect(paragraph).toHaveAttribute('role', 'button');
     expect(paragraph).toHaveAttribute('aria-label', 'Add media');
+  });
+
+  it('leaves a Markdown empty image destination to the media renderer', () => {
+    const { root, paragraph } = createPlaceholderRoot();
+
+    syncMediaPlaceholderAccessibility(root, false);
+
+    expect(paragraph).not.toHaveAttribute('data-media-placeholder');
+    expect(paragraph).not.toHaveAttribute('role');
   });
 
   it('marks an uploading placeholder disabled and removes its action in read-only mode', () => {

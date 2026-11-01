@@ -78,6 +78,12 @@ export function useMarkdownEditorInteractionHandlers({
     activeMediaPlaceholderMarkerRef.current = { id: placeholderId, originalAlt };
   };
 
+  const openMediaFilePicker = (image: HTMLImageElement | null): void => {
+    if (readOnly) return;
+    if (image !== null) markMediaPlaceholder(image);
+    mediaFileInputRef.current?.click();
+  };
+
   const restoreMediaPlaceholder = (marker: ActiveMediaPlaceholderMarker | null): void => {
     if (marker === null) return;
     const root = rootRef.current;
@@ -172,8 +178,7 @@ export function useMarkdownEditorInteractionHandlers({
         return;
       }
       event.preventDefault();
-      if (image instanceof HTMLImageElement) markMediaPlaceholder(image);
-      mediaFileInputRef.current?.click();
+      openMediaFilePicker(image instanceof HTMLImageElement ? image : null);
       return;
     }
     const image = target.closest('img');
@@ -199,8 +204,7 @@ export function useMarkdownEditorInteractionHandlers({
           return;
         }
         event.preventDefault();
-        if (image instanceof HTMLImageElement) markMediaPlaceholder(image);
-        mediaFileInputRef.current?.click();
+        openMediaFilePicker(image instanceof HTMLImageElement ? image : null);
         return;
       }
     }
@@ -242,6 +246,7 @@ export function useMarkdownEditorInteractionHandlers({
 
   return {
     mediaFileInputRef,
+    openMediaFilePicker,
     clearDrawingEditTarget,
     onPointerMove,
     onClickCapture,

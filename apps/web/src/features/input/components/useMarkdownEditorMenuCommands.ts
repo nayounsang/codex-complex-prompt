@@ -3,6 +3,7 @@ import type { Crepe } from '@milkdown/crepe';
 import { editorViewCtx, schemaCtx } from '@milkdown/kit/core';
 import { NodeSelection } from '@milkdown/kit/prose/state';
 import { insertMermaidDiagram as insertMermaidBlock } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
+import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../../shared/markdown/ui-replacements.js';
 
 export function useMarkdownEditorMenuCommands(crepeRef: RefObject<Crepe | null>) {
   const insertMermaidDiagram = useCallback(
@@ -22,7 +23,8 @@ export function useMarkdownEditorMenuCommands(crepeRef: RefObject<Crepe | null>)
         const image = ctx.get(schemaCtx).nodes['image'];
         const paragraph = ctx.get(schemaCtx).nodes['paragraph'];
         if (image === undefined || paragraph === undefined) return;
-        const blankImage = image.create({ src: '', alt: '' });
+        const placeholderId = `${MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.markerPrefix}${globalThis.crypto.randomUUID()}`;
+        const blankImage = image.create({ src: '', alt: placeholderId });
         const imageParagraph = paragraph.create(null, blankImage);
         let transaction = view.state.tr.replaceSelectionWith(imageParagraph).scrollIntoView();
         const selection = transaction.selection.$from;

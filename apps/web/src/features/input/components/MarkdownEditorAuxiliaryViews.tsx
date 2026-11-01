@@ -1,8 +1,8 @@
 import { lazy, Suspense, type RefObject } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 
-import type { VideoEmbedTarget } from '../../../shared/markdown/video-embeds.js';
-import { VideoEmbedPreview } from './VideoEmbedPreview.js';
+import type { MediaEmbedTarget } from '../../../shared/markdown/media-embeds.js';
+import { MediaEmbedPreview } from './MediaEmbedPreview.js';
 import type { MermaidDiagramDialogProps } from '@codex-complex-prompt/milkdown-plugins/mermaid/ui';
 import { MermaidPreviewErrorBoundary } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 import type { MermaidDiagramTarget } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
@@ -41,10 +41,11 @@ interface MarkdownEditorAuxiliaryViewsProps {
   readonly drawingEditTarget: DrawingEditTarget | null;
   readonly drawingEditPosition: { readonly top: number; readonly left: number };
   readonly mermaidTargets: readonly MermaidDiagramTarget[];
-  readonly videoTargets: readonly VideoEmbedTarget[];
+  readonly mediaTargets: readonly MediaEmbedTarget[];
   readonly mermaidDialogTarget: MermaidDiagramTarget | null;
   readonly readOnly: boolean;
   readonly onClearDrawingEditTarget: () => void;
+  readonly onChooseMedia: (image: HTMLImageElement) => void;
   readonly onEditMermaid: (target: MermaidDiagramTarget) => void;
   readonly onCloseMermaid: () => void;
   readonly onReplaceMermaid: (target: MermaidDiagramTarget, source?: string) => boolean;
@@ -56,10 +57,11 @@ export function MarkdownEditorAuxiliaryViews({
   drawingEditTarget,
   drawingEditPosition,
   mermaidTargets,
-  videoTargets,
+  mediaTargets,
   mermaidDialogTarget,
   readOnly,
   onClearDrawingEditTarget,
+  onChooseMedia,
   onEditMermaid,
   onCloseMermaid,
   onReplaceMermaid,
@@ -113,9 +115,19 @@ export function MarkdownEditorAuxiliaryViews({
           </MermaidPreviewErrorBoundary>
         </Suspense>
       ))}
-      {videoTargets.map((target) => (
-        <VideoEmbedPreview key={`${target.id}:${target.source}`} target={target} />
-      ))}
+      {mediaTargets.map((target) => {
+        const key = `${target.id}:${target.path}:${target.alt}`;
+        return readOnly ? (
+          <MediaEmbedPreview key={key} target={target} readOnly />
+        ) : (
+          <MediaEmbedPreview
+            key={key}
+            target={target}
+            readOnly={false}
+            onChooseMedia={onChooseMedia}
+          />
+        );
+      })}
       {mermaidDialogTarget !== null && (
         <Suspense fallback={<span role="status">Loading diagram editor…</span>}>
           <MermaidDiagramDialog

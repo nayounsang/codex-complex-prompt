@@ -135,6 +135,102 @@ test('입력한 Markdown을 Codex에 전달하고 3초 뒤 브라우저 종료�
   }
 });
 
+test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디어 렌더러로 표시한다', async ({
+  page,
+}) => {
+  const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-media-'));
+  const browserUrlFile = join(codexHome, 'browser-url.txt');
+  const photoUrl = 'https://media.test/photo.PNG?size=2#preview';
+  const videoUrl = 'https://media.test/clip.webm?download=1#t=4';
+  const originalMarkdown = [
+    `![Photo](${photoUrl})`,
+    `![](${videoUrl})`,
+    '![](https://media.test/broken.png)',
+    '![](https://media.test/unsupported.avi)',
+    '![]()',
+  ].join('\n\n');
+  const fakeCodex = startFakeCodex(
+    'prompt',
+    {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'e2e-media-renderer-session',
+      cwd: repositoryRoot,
+      prompt: `$complex-prompt ${originalMarkdown}`,
+    },
+    codexHome,
+    browserUrlFile,
+  );
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.route('https://media.test/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/broken.png')) {
+      await route.abort();
+      return;
+    }
+    if (url.pathname.endsWith('/photo.PNG')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/png',
+        body: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=',
+          'base64',
+        ),
+      });
+      return;
+    }
+    if (url.pathname.endsWith('/clip.webm')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'video/webm',
+        body: Buffer.from(
+          'GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAALIEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEjTbuMU6uEHFO7a1OsggKy7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjIuMy4xMDBXQYxMYXZmNjIuMy4xMDBEiYhAaQAAAAAAABZUrmvIrgEAAAAAAAA/14EBc8WIZvwfe4KLkGOcgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4QCYloA4JCwgSC6gRKagQJVsIRVuYEBElTDZ/tzc59jwIBnyJlFo4dFTkNPREVSRIeMTGF2ZjYyLjMuMTAwc3PWY8CLY8WIZvwfe4KLkGNnyKFFo4dFTkNPREVSRIeUTGF2YzYyLjExLjEwMCBsaWJ2cHhnyKFFo4hEVVJBVElPTkSHkzAwOjAwOjAwLjIwMDAwMDAwMAAfQ7Z1QQnngQCjvoEAAIAQAwCdASogABIAAEcIhYWImYSIAgICdaoD+AP6AghZLpBw/v1u8//kb+PnRv/I4//8Sp7jieP//EaAo6yBACgA0QEAARA8ABgAHlf0DABBDgD+9hNf/n5QX1ZX1v16//XmAhdw7/11oKOugQBQANEBAAEQLAAYAB5X9AwAQQ4A/vi1F/9ZT1/ZT1/ZX++R/+88yhVUc/7ywKO0gQB4APEBAAEQIAAYC7APkNuUcEN7AP77Lkv/uPxX/H4r/kA/hP//z1kFQvO//PLzKVLwAKOwgQCgANEBAAEQGAAYAB5X9AwAQQ4A/vwNo//ee1X/ntV/58/6M//9XQxmLvH/6swAHFO7a5G7j7OBALeK94EB8YIBo/CBAw==',
+          'base64',
+        ),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/octet-stream',
+      body: 'unsupported',
+    });
+  });
+  const photoResponse = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith('/photo.PNG'),
+  );
+  const videoResponse = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith('/clip.webm'),
+  );
+
+  try {
+    await openFakeCodexBrowser(page, fakeCodex);
+    const editor = page.getByTestId('markdown-editor');
+    const photo = editor.locator('.media-embed-frame img[alt="Photo"]');
+    await expect(photo).toBeVisible();
+    await expect(photo).toHaveAttribute('src', photoUrl);
+    expect((await photoResponse).status()).toBe(200);
+
+    const video = editor.locator('.media-embed-frame video');
+    await expect(video).toBeVisible();
+    await expect(video).toHaveAttribute('src', videoUrl);
+    await expect(video).toHaveAttribute('controls', '');
+    expect((await videoResponse).status()).toBe(200);
+
+    const addMediaButton = editor.getByRole('button', { name: 'Add media' });
+    await expect(addMediaButton).toBeVisible();
+    await expect(addMediaButton).toBeEnabled();
+    await expect(
+      editor.locator('.media-embed-status').filter({ hasText: 'Media unavailable' }),
+    ).toHaveCount(2);
+    expect(pageErrors).toEqual([]);
+    await page.getByRole('button', { name: 'Send to Codex' }).click();
+    expect((await fakeCodex.result).exitCode).toBe(0);
+  } finally {
+    await rm(codexHome, { recursive: true, force: true });
+  }
+});
+
 test('null appState가 저장된 Excalidraw 장면을 편집할 수 있다', async ({ page }) => {
   const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-null-app-state-'));
   const projectDirectory = join(codexHome, 'project');

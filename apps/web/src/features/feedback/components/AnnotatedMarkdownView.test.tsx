@@ -4,13 +4,19 @@ import '../../../shared/testing/mock-crepe.js';
 import { hasRenderedSourceMap } from '../../../shared/markdown/markdown-source-map.js';
 import { AnnotatedMarkdownView } from './AnnotatedMarkdownView.js';
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function renderMarkdown(
   markdown: string,
   onSelection = vi.fn(),
   annotations: Parameters<typeof AnnotatedMarkdownView>[0]['annotations'] = [],
 ): HTMLElement {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+    new DOMRect(12, 24, 320, 180),
+  );
   render(
     <AnnotatedMarkdownView
       markdown={markdown}
@@ -26,6 +32,61 @@ function renderMarkdown(
 }
 
 describe('AnnotatedMarkdownView', () => {
+  it('renders Markdown images through the shared media renderer and shows its error state', async () => {
+    const article = renderMarkdown('![Outside](https://example.test/photo.PNG?size=2#preview)');
+    const image = await waitFor(() => {
+      const rendered = article.querySelector<HTMLImageElement>('.media-embed-frame img');
+      expect(rendered).not.toBeNull();
+      return rendered as HTMLImageElement;
+    });
+
+    expect(image).toHaveAttribute('alt', 'Outside');
+    expect(image).toHaveAttribute('src', 'https://example.test/photo.PNG?size=2#preview');
+    fireEvent.error(image);
+
+    await waitFor(() =>
+      expect(article.querySelector('.media-embed-status')).toHaveTextContent('Media unavailable'),
+    );
+  });
+
+  it('resolves an attachment image before passing its path to the shared renderer', async () => {
+    const id = '00000000-0000-4000-8000-000000000006';
+    const article = renderMarkdown(`![Drawing](.complex-prompt/attachments/${id}.png)`);
+
+    const image = await waitFor(() => {
+      const rendered = article.querySelector<HTMLImageElement>('.media-embed-frame img');
+      expect(rendered).not.toBeNull();
+      return rendered as HTMLImageElement;
+    });
+
+    expect(image.src).toContain(
+      `/_complex-prompt/attachments/${id}.png?token=test-token&refresh=0`,
+    );
+  });
+
+  it('renders a Markdown video through the shared renderer with controls', async () => {
+    const article = renderMarkdown('![](https://example.test/clip.mp4?download=1#t=2)');
+
+    const video = await waitFor(() => {
+      const rendered = article.querySelector<HTMLVideoElement>('.media-embed-frame video');
+      expect(rendered).not.toBeNull();
+      return rendered as HTMLVideoElement;
+    });
+
+    expect(video).toHaveAttribute('src', 'https://example.test/clip.mp4?download=1#t=2');
+    expect(video).toHaveAttribute('controls');
+  });
+
+  it('renders a disabled Add media button for an empty Markdown destination', async () => {
+    const article = renderMarkdown('![]()');
+
+    const button = await waitFor(() => within(article).getByRole('button', { name: 'Add media' }));
+
+    expect(button).toHaveTextContent('Add media');
+    expect(button).toBeDisabled();
+    expect(article).not.toHaveTextContent('Media unavailable');
+  });
+
   it('다이어그램 탭을 눌러도 이전 텍스트 선택을 다시 열지 않는다', async () => {
     const onSelection = vi.fn();
     const article = renderMarkdown('Review this sentence', onSelection);

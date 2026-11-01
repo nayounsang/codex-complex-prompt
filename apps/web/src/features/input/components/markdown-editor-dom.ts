@@ -12,24 +12,22 @@ export interface DrawingEditTarget {
   readonly editable: boolean;
 }
 
-function isIgnorableMediaPlaceholderChild(child: ChildNode, image: HTMLImageElement): boolean {
-  return (
-    child === image ||
-    (child instanceof HTMLImageElement && child.classList.contains('ProseMirror-separator')) ||
-    (child.nodeType === Node.TEXT_NODE && (child.textContent ?? '').trim() === '') ||
-    (child instanceof HTMLBRElement && child.classList.contains('ProseMirror-trailingBreak'))
-  );
-}
-
 function isDedicatedMediaPlaceholder(paragraph: HTMLParagraphElement): boolean {
   const image = paragraph.querySelector(':scope > img');
-  return (
-    image instanceof HTMLImageElement &&
-    image.getAttribute('src') === '' &&
-    Array.from(paragraph.childNodes).every((child) =>
-      isIgnorableMediaPlaceholderChild(child, image),
-    )
-  );
+  if (!(image instanceof HTMLImageElement) || image.getAttribute('src') !== '') return false;
+
+  const hasPlaceholderMarker =
+    image.alt.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.markerPrefix) ||
+    image.alt.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.pendingPrefix);
+  const containsOnlyPlaceholderNodes = Array.from(paragraph.childNodes).every((child) => {
+    if (child === image) return true;
+    if (child instanceof HTMLImageElement) return child.classList.contains('ProseMirror-separator');
+    if (child instanceof HTMLBRElement)
+      return child.classList.contains('ProseMirror-trailingBreak');
+    return child.nodeType === Node.TEXT_NODE && (child.textContent ?? '').trim() === '';
+  });
+
+  return hasPlaceholderMarker && containsOnlyPlaceholderNodes;
 }
 
 function isMediaPlaceholderUploading(paragraph: HTMLParagraphElement): boolean {
@@ -37,9 +35,7 @@ function isMediaPlaceholderUploading(paragraph: HTMLParagraphElement): boolean {
   return (
     image instanceof HTMLImageElement &&
     image.getAttribute('src') === '' &&
-    image
-      .getAttribute('alt')
-      ?.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.pendingPrefix) === true
+    image.alt.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.pendingPrefix)
   );
 }
 
@@ -126,6 +122,7 @@ export function replaceAttachmentImageUrls(
       const inertImage = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
       if (image.src !== inertImage) image.src = inertImage;
     } else if (image.src !== url) {
+      delete image.dataset['videoSource'];
       image.src = url;
     }
   }

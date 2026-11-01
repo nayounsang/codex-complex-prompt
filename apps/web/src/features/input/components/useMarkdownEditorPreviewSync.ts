@@ -5,10 +5,10 @@ import {
   haveSameMermaidPreviewTargets,
 } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 import {
-  haveSameVideoEmbedTargets,
-  updateVideoEmbedTargets,
-  type VideoEmbedTarget,
-} from '../../../shared/markdown/video-embeds.js';
+  haveSameMediaEmbedTargets,
+  updateMediaEmbedTargets,
+  type MediaEmbedTarget,
+} from '../../../shared/markdown/media-embeds.js';
 import type { MermaidDiagramTarget } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 import type { Crepe } from '@milkdown/crepe';
 
@@ -16,14 +16,14 @@ interface MarkdownEditorPreviewSyncOptions {
   readonly rootRef: RefObject<HTMLDivElement | null>;
   readonly crepeRef: RefObject<Crepe | null>;
   readonly setMermaidTargets: Dispatch<SetStateAction<MermaidDiagramTarget[]>>;
-  readonly setVideoTargets: Dispatch<SetStateAction<VideoEmbedTarget[]>>;
+  readonly setMediaTargets: Dispatch<SetStateAction<MediaEmbedTarget[]>>;
 }
 
 export function useMarkdownEditorPreviewSync({
   rootRef,
   crepeRef,
   setMermaidTargets,
-  setVideoTargets,
+  setMediaTargets,
 }: MarkdownEditorPreviewSyncOptions) {
   const syncMermaidPreviews = useCallback(
     function syncMermaidPreviews(editorRoot: HTMLDivElement, recoverRemovedPreview = false): void {
@@ -60,19 +60,20 @@ export function useMarkdownEditorPreviewSync({
     [crepeRef, setMermaidTargets],
   );
 
-  const syncVideoEmbeds = useCallback(
-    function syncVideoEmbeds(
+  const syncMediaEmbeds = useCallback(
+    function syncMediaEmbeds(
       editorRoot: HTMLDivElement,
-      paragraphs?: readonly HTMLParagraphElement[],
+      containers?: readonly HTMLElement[],
     ): void {
-      const mountRoot = rootRef.current ?? editorRoot;
-      setVideoTargets((current) => {
-        const next = updateVideoEmbedTargets(editorRoot, current, undefined, mountRoot, paragraphs);
-        return haveSameVideoEmbedTargets(current, next) ? current : next;
+      const mountRoot =
+        editorRoot.querySelector<HTMLElement>('.milkdown') ?? rootRef.current ?? editorRoot;
+      setMediaTargets((current) => {
+        const next = updateMediaEmbedTargets(editorRoot, current, mountRoot, containers);
+        return haveSameMediaEmbedTargets(current, next) ? current : next;
       });
     },
-    [rootRef, setVideoTargets],
+    [rootRef, setMediaTargets],
   );
 
-  return { syncMermaidPreviews, syncVideoEmbeds };
+  return { syncMermaidPreviews, syncMediaEmbeds };
 }

@@ -13,9 +13,9 @@ import { useMarkdownEditorMenuCommands } from './useMarkdownEditorMenuCommands.j
 import type { MermaidDiagramTarget } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 import { isSupportedMediaFile } from '../model/media-files.js';
 import {
-  getVideoEmbedAffectedParagraphs,
-  type VideoEmbedTarget,
-} from '../../../shared/markdown/video-embeds.js';
+  getMediaEmbedAffectedContainers,
+  type MediaEmbedTarget,
+} from '../../../shared/markdown/media-embeds.js';
 import {
   replaceAttachmentImageUrls,
   syncMediaPlaceholderAccessibility,
@@ -47,7 +47,7 @@ interface MarkdownEditorLifecycleOptions {
   readonly receiveMediaFiles: (files: readonly File[]) => void;
   readonly setInitializationError: Dispatch<SetStateAction<Error | null>>;
   readonly setMermaidTargets: Dispatch<SetStateAction<MermaidDiagramTarget[]>>;
-  readonly setVideoTargets: Dispatch<SetStateAction<VideoEmbedTarget[]>>;
+  readonly setMediaTargets: Dispatch<SetStateAction<MediaEmbedTarget[]>>;
 }
 
 export function useMarkdownEditorLifecycle({
@@ -66,13 +66,13 @@ export function useMarkdownEditorLifecycle({
   receiveMediaFiles,
   setInitializationError,
   setMermaidTargets,
-  setVideoTargets,
+  setMediaTargets,
 }: MarkdownEditorLifecycleOptions): void {
-  const { syncMermaidPreviews, syncVideoEmbeds } = useMarkdownEditorPreviewSync({
+  const { syncMermaidPreviews, syncMediaEmbeds } = useMarkdownEditorPreviewSync({
     rootRef,
     crepeRef,
     setMermaidTargets,
-    setVideoTargets,
+    setMediaTargets,
   });
   const { insertMermaidDiagram, insertMediaPlaceholder } = useMarkdownEditorMenuCommands(crepeRef);
   useEffect(
@@ -141,7 +141,7 @@ export function useMarkdownEditorLifecycle({
       let attachmentObserver: MutationObserver | undefined;
       let mediaPlaceholderObserver: MutationObserver | undefined;
       let mermaidObserver: MutationObserver | undefined;
-      let videoObserver: MutationObserver | undefined;
+      let mediaObserver: MutationObserver | undefined;
       const syncInitialMarkdown = (): void => {
         if (disposed) return;
         replaceAttachmentImageUrls(
@@ -171,7 +171,7 @@ export function useMarkdownEditorLifecycle({
           notifyReady(editorRoot);
           syncMediaPlaceholderAccessibility(editorRoot, getCurrentReadOnly());
           syncMermaidPreviews(editorRoot);
-          syncVideoEmbeds(editorRoot);
+          syncMediaEmbeds(editorRoot);
           mediaPlaceholderObserver = new MutationObserver(() =>
             syncMediaPlaceholderAccessibility(editorRoot, getCurrentReadOnly()),
           );
@@ -193,15 +193,15 @@ export function useMarkdownEditorLifecycle({
             attributes: true,
             attributeFilter: ['class'],
           });
-          videoObserver = new MutationObserver((records) =>
-            syncVideoEmbeds(editorRoot, getVideoEmbedAffectedParagraphs(editorRoot, records)),
+          mediaObserver = new MutationObserver((records) =>
+            syncMediaEmbeds(editorRoot, getMediaEmbedAffectedContainers(editorRoot, records)),
           );
-          videoObserver.observe(stableProseMirror, {
+          mediaObserver.observe(stableProseMirror, {
             childList: true,
             subtree: true,
             characterData: true,
             attributes: true,
-            attributeFilter: ['href'],
+            attributeFilter: ['alt', 'src'],
           });
           markdownRef.current = crepe?.getMarkdown() ?? defaultMarkdown;
           notifyMarkdownChange(markdownRef.current);
@@ -230,7 +230,7 @@ export function useMarkdownEditorLifecycle({
         attachmentObserver?.disconnect();
         mediaPlaceholderObserver?.disconnect();
         mermaidObserver?.disconnect();
-        videoObserver?.disconnect();
+        mediaObserver?.disconnect();
         editorRoot.removeEventListener('paste', blockFileTransfer, true);
         editorRoot.removeEventListener('drop', blockFileTransfer, true);
         crepeRef.current = null;
