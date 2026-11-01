@@ -1,6 +1,6 @@
 # `@codex-complex-prompt/milkdown-plugins`
 
-Private workspace integrations between Milkdown and React UI for shared replacements and Mermaid diagrams. Import them through the `./shared`, `./mermaid/core`, and `./mermaid/ui` entrypoints.
+Private workspace integrations between Milkdown and React UI for shared replacements, Mermaid diagrams, and media. Import them through the `./shared`, `./mermaid/*`, and `./media/*` entrypoints.
 
 ## Get Started
 
@@ -29,6 +29,10 @@ The app owns lazy loading and imports `@mermaid-editor-sdk/ui/style.css` with th
 | `@codex-complex-prompt/milkdown-plugins/shared`       | Shared replacement metadata                            | None                                                                    |
 | `@codex-complex-prompt/milkdown-plugins/mermaid/core` | Preview helpers, error boundary, and Milkdown commands | `@milkdown/crepe`, `@milkdown/kit`, React, and browser DOM              |
 | `@codex-complex-prompt/milkdown-plugins/mermaid/ui`   | Mermaid React components                               | React, React DOM, `lucide-react`, `@mermaid-editor-sdk/ui`, browser DOM |
+| `@codex-complex-prompt/milkdown-plugins/media/core`   | MIME detection from media paths                        | `mime`                                                                  |
+| `@codex-complex-prompt/milkdown-plugins/media/ui`     | Image and video React renderer                         | React and browser DOM                                                   |
+
+`MediaRenderer` receives a Markdown image destination and `alt` text. The host resolves authenticated attachment URLs and provides `renderEmpty` and `renderError` UI. Supported video types are MP4, QuickTime, and WebM; other non-image paths go through the error callback.
 
 ### Shared
 
