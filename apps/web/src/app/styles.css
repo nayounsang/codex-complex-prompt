@@ -457,6 +457,10 @@ button:focus-visible,
   ) {
   opacity: 0;
 }
+.markdown-editor .milkdown .ProseMirror img[data-video-source],
+.annotated-markdown .milkdown .ProseMirror img[data-video-source] {
+  display: none;
+}
 .media-embed-mount {
   display: contents;
 }

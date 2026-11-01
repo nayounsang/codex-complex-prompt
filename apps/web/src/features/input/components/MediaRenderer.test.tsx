@@ -44,12 +44,13 @@ describe('MediaRenderer', () => {
     expect(screen.getByRole('alert')).toBeInTheDocument();
   });
 
-  it('uses the empty callback for an empty destination and reports unsupported MIME types', () => {
+  it('uses the empty callback for an empty destination', () => {
     const renderEmpty = vi.fn(() => <div>Empty</div>);
-    const empty = render(<MediaRenderer path="" renderEmpty={renderEmpty} />);
+    render(<MediaRenderer path="" renderEmpty={renderEmpty} />);
     expect(renderEmpty).toHaveBeenCalledOnce();
-    empty.unmount();
+  });
 
+  it('reports unsupported MIME types to the error callback', () => {
     const renderError = vi.fn(() => <div>Unsupported</div>);
     render(<MediaRenderer path="clip.avi" renderError={renderError} />);
     expect(renderError).toHaveBeenCalledWith(
