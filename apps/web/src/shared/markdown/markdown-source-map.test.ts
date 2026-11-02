@@ -10,6 +10,7 @@ import {
   hasRenderedSourceMap,
   locateMappedText,
 } from './markdown-source-map.js';
+import { INERT_MEDIA_IMAGE_SRC } from './media-embeds.js';
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -154,7 +155,8 @@ describe('Markdown source map', () => {
     const externalImage = document.createElement('img');
     externalImage.src = `https://example.test/${id}.png`;
     const drawingImage = document.createElement('img');
-    drawingImage.src = `${attachmentUrl}/${id}.png?token=test-token`;
+    drawingImage.src = INERT_MEDIA_IMAGE_SRC;
+    drawingImage.dataset['mediaSource'] = `${attachmentUrl}/${id}.png?token=test-token`;
     root.append(externalImage, drawingImage);
     document.body.append(root);
 

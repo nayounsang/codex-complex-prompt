@@ -1,6 +1,7 @@
 import { useEffect, type RefObject, type Dispatch, type SetStateAction } from 'react';
 import { Crepe, useCrepeFeatures as getCrepeFeatures } from '@milkdown/crepe';
 import type { BlockEditFeatureConfig } from '@milkdown/crepe/feature/block-edit';
+import { imageAttr, imageSchema } from '@milkdown/kit/preset/commonmark';
 import { columnResizingPlugin } from '@milkdown/kit/preset/gfm';
 
 import {
@@ -14,6 +15,7 @@ import type { MermaidDiagramTarget } from '@codex-complex-prompt/milkdown-plugin
 import { isSupportedMediaFile } from '../model/media-files.js';
 import {
   getMediaEmbedAffectedContainers,
+  INERT_MEDIA_IMAGE_SRC,
   type MediaEmbedTarget,
 } from '../../../shared/markdown/media-embeds.js';
 import {
@@ -125,6 +127,42 @@ export function useMarkdownEditorLifecycle({
       });
       // Keep the slash-menu table command without loading Crepe's custom table view.
       crepe.editor.config((ctx) => {
+        ctx.update(imageSchema.key, (getSchema) => (schemaCtx) => {
+          const schema = getSchema(schemaCtx);
+          return {
+            ...schema,
+            parseDOM: [
+              {
+                tag: 'img[data-media-source]',
+                getAttrs: (dom) =>
+                  dom instanceof HTMLElement
+                    ? {
+                        src: dom.getAttribute('data-media-source') ?? '',
+                        alt: dom.getAttribute('alt') ?? '',
+                        title: dom.getAttribute('title') || dom.getAttribute('alt') || '',
+                      }
+                    : false,
+              },
+              ...(schema.parseDOM ?? []),
+            ],
+            toDOM: (node) => {
+              const source: unknown = node.attrs['src'];
+              if (typeof source !== 'string' || source === '')
+                return schema.toDOM?.(node) ?? ['img', { ...node.attrs }];
+              return [
+                'img',
+                {
+                  ...schemaCtx.get(imageAttr.key)(node),
+                  ...node.attrs,
+                  src: INERT_MEDIA_IMAGE_SRC,
+                  'data-media-source': source,
+                  'data-media-pending': 'true',
+                  'aria-hidden': 'true',
+                },
+              ];
+            },
+          };
+        });
         getCrepeFeatures(ctx).update((features) => [...features, Crepe.Feature.Table]);
       });
       crepe.editor.use(columnResizingPlugin);
@@ -201,7 +239,7 @@ export function useMarkdownEditorLifecycle({
             subtree: true,
             characterData: true,
             attributes: true,
-            attributeFilter: ['alt', 'src'],
+            attributeFilter: ['alt', 'src', 'data-media-source'],
           });
           markdownRef.current = crepe?.getMarkdown() ?? defaultMarkdown;
           notifyMarkdownChange(markdownRef.current);

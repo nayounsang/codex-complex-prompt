@@ -49,6 +49,28 @@ describe('프로젝트 그림 첨부 저장소', () => {
     await expect(store.getImageInfo(id, '../png')).resolves.toBeUndefined();
   });
 
+  it('없거나 비어 있거나 너무 크거나 일반 파일이 아닌 이미지 정보를 반환하지 않는다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const directory = join(projectDirectory, '.complex-prompt', 'attachments');
+    await mkdir(directory, { recursive: true });
+    const missingId = '00000000-0000-4000-8000-000000000053';
+    const emptyId = '00000000-0000-4000-8000-000000000054';
+    const oversizedId = '00000000-0000-4000-8000-000000000055';
+    const directoryId = '00000000-0000-4000-8000-000000000056';
+    await writeFile(join(directory, `${emptyId}.png`), Buffer.alloc(0));
+    await writeFile(
+      join(directory, `${oversizedId}.png`),
+      Buffer.alloc(MAX_ATTACHMENT_PNG_BYTES + 1),
+    );
+    await mkdir(join(directory, `${directoryId}.png`));
+
+    await expect(store.getImageInfo(missingId, 'png')).resolves.toBeUndefined();
+    await expect(store.getImageInfo(emptyId, 'png')).resolves.toBeUndefined();
+    await expect(store.getImageInfo(oversizedId, 'png')).resolves.toBeUndefined();
+    await expect(store.getImageInfo(directoryId, 'png')).resolves.toBeUndefined();
+  });
+
   it('MP4를 저장하고 정보와 지정한 byte range를 읽는다', async () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);
@@ -133,6 +155,7 @@ describe('프로젝트 그림 첨부 저장소', () => {
     if (readScene === undefined) throw new Error('readScene must be available.');
 
     await expect(store.getVideoInfo(id, 'mp4')).rejects.toMatchObject({ code: 'ENOTDIR' });
+    await expect(store.getImageInfo(id, 'png')).rejects.toMatchObject({ code: 'ENOTDIR' });
     await expect(store.readVideoRange(id, 'mp4', 0, 1, 2)).rejects.toMatchObject({
       code: 'ENOTDIR',
     });

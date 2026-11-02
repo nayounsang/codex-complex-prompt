@@ -429,14 +429,10 @@ button:focus-visible,
   .milkdown
   .ProseMirror
   p:has(> img[src='']:not([alt^='media-placeholder-']):not([alt^='media-upload-pending-']))::after,
+.markdown-editor .milkdown .ProseMirror p:has(> img[data-media-pending])::after,
+.annotated-markdown .milkdown .ProseMirror p:has(> img[data-media-pending])::after,
 .markdown-editor .milkdown .ProseMirror p:has(> img[data-video-source])::after,
-.annotated-markdown .milkdown .ProseMirror p:has(> img[data-video-source])::after,
-.markdown-editor .milkdown .ProseMirror p:has(> img[src*='.mp4' i])::after,
-.markdown-editor .milkdown .ProseMirror p:has(> img[src*='.mov' i])::after,
-.markdown-editor .milkdown .ProseMirror p:has(> img[src*='.webm' i])::after,
-.annotated-markdown .milkdown .ProseMirror p:has(> img[src*='.mp4' i])::after,
-.annotated-markdown .milkdown .ProseMirror p:has(> img[src*='.mov' i])::after,
-.annotated-markdown .milkdown .ProseMirror p:has(> img[src*='.webm' i])::after {
+.annotated-markdown .milkdown .ProseMirror p:has(> img[data-video-source])::after {
   display: block;
   width: min(100%, 800px);
   margin-top: 8px;

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../../shared/testing/mock-crepe.js';
 import { hasRenderedSourceMap } from '../../../shared/markdown/markdown-source-map.js';
+import { INERT_MEDIA_IMAGE_SRC } from '../../../shared/markdown/media-embeds.js';
 import { AnnotatedMarkdownView } from './AnnotatedMarkdownView.js';
 
 afterEach(() => {
@@ -51,6 +52,18 @@ function renderMarkdown(
     />,
   );
   return screen.getByTestId('annotated-markdown');
+}
+
+async function loadSourceImages(article: HTMLElement): Promise<void> {
+  let images: HTMLImageElement[] = [];
+  await waitFor(() => {
+    images = Array.from(
+      article.querySelectorAll<HTMLImageElement>('.ProseMirror img[data-media-source]'),
+    );
+    expect(images.length).toBeGreaterThan(0);
+    expect(images.every((image) => image.getAttribute('src') !== INERT_MEDIA_IMAGE_SRC)).toBe(true);
+  });
+  images.forEach((image) => fireEvent.load(image));
 }
 
 describe('AnnotatedMarkdownView', () => {
@@ -176,6 +189,7 @@ describe('AnnotatedMarkdownView', () => {
     const markdown =
       '![다이어그램](.complex-prompt/attachments/00000000-0000-4000-8000-000000000001.png)';
     const article = renderMarkdown(markdown, onSelection);
+    await loadSourceImages(article);
     const image = await within(article).findByRole('button', {
       name: 'Select image for feedback: 다이어그램 (.complex-prompt/attachments/00000000-0000-4000-8000-000000000001.png)',
     });
@@ -193,6 +207,7 @@ describe('AnnotatedMarkdownView', () => {
     const markdown =
       '![화면](.complex-prompt/attachments/00000000-0000-4000-8000-000000000002.png)';
     const article = renderMarkdown(markdown, onSelection);
+    await loadSourceImages(article);
     const image = await within(article).findByRole('button', {
       name: 'Select image for feedback: 화면 (.complex-prompt/attachments/00000000-0000-4000-8000-000000000002.png)',
     });
@@ -212,6 +227,7 @@ describe('AnnotatedMarkdownView', () => {
       '![Drawing](.complex-prompt/attachments/00000000-0000-4000-8000-000000000005.png)';
     const markdown = `${first}\n\n${second}`;
     const article = renderMarkdown(markdown, onSelection);
+    await loadSourceImages(article);
     const secondImage = await within(article).findByRole('button', {
       name: 'Select image for feedback: Drawing (.complex-prompt/attachments/00000000-0000-4000-8000-000000000005.png)',
     });
@@ -270,6 +286,7 @@ describe('AnnotatedMarkdownView', () => {
         feedback: '이 그림을 수정해 주세요.',
       },
     ]);
+    await loadSourceImages(article);
     const image = await within(article).findByRole('button', {
       name: 'Select image for feedback: 와이어프레임 (.complex-prompt/attachments/00000000-0000-4000-8000-000000000003.png)',
     });

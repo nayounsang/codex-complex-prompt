@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { syncMediaPlaceholderAccessibility } from './markdown-editor-dom.js';
+import {
+  getDrawingIdFromImage,
+  replaceAttachmentImageUrls,
+  syncMediaPlaceholderAccessibility,
+} from './markdown-editor-dom.js';
+import { INERT_MEDIA_IMAGE_SRC } from '../../../shared/markdown/media-embeds.js';
 
 function createPlaceholderRoot(alt = ''): {
   root: HTMLDivElement;
@@ -63,5 +68,33 @@ describe('syncMediaPlaceholderAccessibility', () => {
 
     expect(paragraph).not.toHaveAttribute('data-media-placeholder');
     expect(paragraph).not.toHaveAttribute('role');
+  });
+});
+
+describe('replaceAttachmentImageUrls', () => {
+  it('keeps attachment URLs off the source image until the media type is resolved', () => {
+    const root = document.createElement('div');
+    const id = '00000000-0000-4000-8000-000000000009';
+    const image = document.createElement('img');
+    image.src = `.complex-prompt/attachments/${id}.png`;
+    root.append(image);
+
+    replaceAttachmentImageUrls(
+      root,
+      'http://127.0.0.1:8765/_complex-prompt/attachments',
+      'test-token',
+      0,
+    );
+
+    expect(image.getAttribute('src')).toBe(INERT_MEDIA_IMAGE_SRC);
+    expect(image.dataset['mediaSource']).toContain(`/${id}.png?token=test-token&refresh=0`);
+    expect(image.dataset['mediaPending']).toBe('true');
+    expect(
+      getDrawingIdFromImage(
+        image,
+        'http://127.0.0.1:8765/_complex-prompt/attachments',
+        'test-token',
+      ),
+    ).toBe(id);
   });
 });

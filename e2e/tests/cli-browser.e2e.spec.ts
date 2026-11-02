@@ -140,8 +140,8 @@ test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디�
 }) => {
   const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-media-'));
   const browserUrlFile = join(codexHome, 'browser-url.txt');
-  const photoUrl = 'https://media.test/photo.PNG?size=2#preview';
-  const videoUrl = 'https://media.test/clip.webm?download=1#t=4';
+  const photoUrl = 'https://media.test/photo?size=2#preview';
+  const videoUrl = 'https://media.test/clip?download=1#t=4';
   const originalMarkdown = [
     `![Photo](${photoUrl})`,
     `![](${videoUrl})`,
@@ -161,14 +161,28 @@ test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디�
     browserUrlFile,
   );
   const pageErrors: string[] = [];
+  const videoRequests: string[] = [];
+  let releaseVideoHead: () => void = () => undefined;
+  const videoHeadGate = new Promise<void>((resolve) => {
+    releaseVideoHead = resolve;
+  });
+  let notifyVideoHeadStarted: () => void = () => undefined;
+  const videoHeadStarted = new Promise<void>((resolve) => {
+    notifyVideoHeadStarted = resolve;
+  });
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.origin === 'https://media.test' && url.pathname === '/clip')
+      videoRequests.push(request.method());
+  });
   await page.route('https://media.test/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/broken.png')) {
       await route.abort();
       return;
     }
-    if (url.pathname.endsWith('/photo.PNG')) {
+    if (url.pathname === '/photo') {
       await route.fulfill({
         status: 200,
         contentType: 'image/png',
@@ -180,7 +194,11 @@ test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디�
       });
       return;
     }
-    if (url.pathname.endsWith('/clip.webm')) {
+    if (url.pathname === '/clip') {
+      if (route.request().method() === 'HEAD') {
+        notifyVideoHeadStarted();
+        await videoHeadGate;
+      }
       await route.fulfill({
         status: 200,
         contentType: 'video/webm',
@@ -201,18 +219,27 @@ test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디�
   });
   const photoResponse = page.waitForResponse(
     (response) =>
-      response.request().method() === 'GET' &&
-      new URL(response.url()).pathname.endsWith('/photo.PNG'),
+      response.request().method() === 'GET' && new URL(response.url()).pathname === '/photo',
   );
   const videoResponse = page.waitForResponse(
     (response) =>
-      response.request().method() === 'GET' &&
-      new URL(response.url()).pathname.endsWith('/clip.webm'),
+      response.request().method() === 'GET' && new URL(response.url()).pathname === '/clip',
   );
 
   try {
     await openFakeCodexBrowser(page, fakeCodex);
     const editor = page.getByTestId('markdown-editor');
+    await videoHeadStarted;
+    const sourceVideo = editor.locator('.milkdown .ProseMirror img[data-media-source*="/clip"]');
+    await expect(sourceVideo).toHaveAttribute(
+      'src',
+      'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=',
+    );
+    await expect(sourceVideo).toHaveAttribute('data-media-pending', 'true');
+    await expect(editor.locator('.media-embed-frame video')).toHaveCount(0);
+    expect(videoRequests).toEqual(['HEAD']);
+    releaseVideoHead();
+
     const photo = editor.locator('.media-embed-frame img[alt="Photo"]');
     await expect(photo).toBeVisible();
     await expect(photo).toHaveAttribute('src', photoUrl);
@@ -220,6 +247,7 @@ test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디�
       .poll(() => photo.evaluate((image) => (image as HTMLImageElement).naturalWidth))
       .toBeGreaterThan(0);
     expect((await photoResponse).status()).toBe(200);
+    expect(videoRequests[0]).toBe('HEAD');
 
     const video = editor.locator('.media-embed-frame video');
     await expect(video).toBeVisible();
@@ -229,6 +257,7 @@ test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디�
       .poll(() => video.evaluate((element) => (element as HTMLVideoElement).readyState))
       .toBeGreaterThan(0);
     expect((await videoResponse).status()).toBe(200);
+    expect(videoRequests).toEqual(['HEAD', 'GET']);
 
     const addMediaButton = editor.getByRole('button', { name: 'Add media' });
     await expect(addMediaButton).toBeVisible();
@@ -238,8 +267,14 @@ test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디�
     ).toHaveCount(2);
     expect(pageErrors).toEqual([]);
     await page.getByRole('button', { name: 'Send to Codex' }).click();
-    expect((await fakeCodex.result).exitCode).toBe(0);
+    const hookResult = await fakeCodex.result;
+    expect(hookResult.exitCode).toBe(0);
+    const response = JSON.parse(hookResult.output) as {
+      readonly hookSpecificOutput: { readonly additionalContext: string };
+    };
+    expect(response.hookSpecificOutput.additionalContext).toContain(originalMarkdown);
   } finally {
+    releaseVideoHead();
     await rm(codexHome, { recursive: true, force: true });
   }
 });

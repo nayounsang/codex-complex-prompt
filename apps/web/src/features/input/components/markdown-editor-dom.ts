@@ -4,6 +4,10 @@ import {
   getMarkdownAttachmentExtension,
   getMarkdownAttachmentId,
 } from '../../../shared/markdown/attachment-path.js';
+import {
+  getMediaImageSource,
+  INERT_MEDIA_IMAGE_SRC,
+} from '../../../shared/markdown/media-embeds.js';
 import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../../shared/markdown/ui-replacements.js';
 
 export interface DrawingEditTarget {
@@ -73,7 +77,7 @@ export function getDrawingIdFromImage(
   attachmentUrl: string | null | undefined,
   attachmentToken: string | null | undefined,
 ): string | null {
-  const source = image.getAttribute('src');
+  const source = getMediaImageSource(image);
   if (source === null) return null;
   const markdownId = getMarkdownAttachmentId(source);
   if (markdownId !== null) return markdownId;
@@ -101,7 +105,7 @@ export function replaceAttachmentImageUrls(
   )
     return;
   for (const image of root.querySelectorAll<HTMLImageElement>('img[src]')) {
-    const source = image.getAttribute('src');
+    const source = getMediaImageSource(image);
     const id = source === null ? null : getMarkdownAttachmentId(source);
     const extension = source === null ? null : getMarkdownAttachmentExtension(source);
     if (id === null || extension === null) continue;
@@ -117,13 +121,11 @@ export function replaceAttachmentImageUrls(
     image.dataset['markdownUiReplacement'] = MARKDOWN_UI_REPLACEMENT_MODEL.drawing.kind;
     image.setAttribute('role', 'button');
     image.setAttribute('aria-label', `Drawing actions: ${image.alt.trim() || 'Drawing'}`);
-    if (['mp4', 'mov', 'webm'].includes(extension)) {
-      image.dataset['videoSource'] = url;
-      const inertImage = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
-      if (image.src !== inertImage) image.src = inertImage;
-    } else if (image.src !== url) {
-      delete image.dataset['videoSource'];
-      image.src = url;
-    }
+    image.dataset['mediaSource'] = url;
+    image.dataset['mediaPending'] = 'true';
+    delete image.dataset['videoSource'];
+    image.setAttribute('aria-hidden', 'true');
+    if (image.getAttribute('src') !== INERT_MEDIA_IMAGE_SRC)
+      image.setAttribute('src', INERT_MEDIA_IMAGE_SRC);
   }
 }

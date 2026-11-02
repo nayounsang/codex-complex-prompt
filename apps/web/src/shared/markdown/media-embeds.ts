@@ -16,6 +16,11 @@ export interface MediaEmbedTarget {
 
 let nextMediaEmbedId = 0;
 const mediaEmbedIds = new WeakMap<HTMLImageElement, string>();
+export const INERT_MEDIA_IMAGE_SRC = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+
+export function getMediaImageSource(image: HTMLImageElement): string | null {
+  return image.dataset['mediaSource'] ?? image.dataset['videoSource'] ?? image.getAttribute('src');
+}
 
 const MediaEmbedImageSchema = z.lazy(() =>
   z.object({
@@ -55,7 +60,7 @@ export function createMediaEmbedTargets(
           Array.from(container.querySelectorAll<HTMLImageElement>('img')),
         );
   for (const image of images) {
-    const path = image.dataset['videoSource'] ?? image.getAttribute('src') ?? '';
+    const path = getMediaImageSource(image) ?? '';
     const parsedImage = MediaEmbedImageSchema.safeParse({
       image,
       container: image.closest('p') ?? image.parentElement,
@@ -64,6 +69,13 @@ export function createMediaEmbedTargets(
       isHighlighted: image.classList.contains('feedback-image-highlight'),
     });
     if (!parsedImage.success) continue;
+    if (path !== '' && image.dataset['mediaSource'] === undefined) {
+      image.dataset['mediaSource'] = path;
+      image.dataset['mediaPending'] = 'true';
+      delete image.dataset['videoSource'];
+      image.setAttribute('aria-hidden', 'true');
+      image.setAttribute('src', INERT_MEDIA_IMAGE_SRC);
+    }
     const { image: sourceImage, container, alt, isHighlighted } = parsedImage.data;
 
     const mimeType = path === '' ? null : getMediaMimeType(path);

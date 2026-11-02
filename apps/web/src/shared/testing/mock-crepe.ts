@@ -110,7 +110,15 @@ const mockCrepe = vi.hoisted(() => {
       if (image !== null) {
         const imageElement = document.createElement('img');
         imageElement.alt = image[1] ?? '';
-        imageElement.src = image[2] ?? '';
+        const source = image[2] ?? '';
+        if (source === '') {
+          imageElement.setAttribute('src', '');
+        } else {
+          imageElement.dataset['mediaSource'] = source;
+          imageElement.dataset['mediaPending'] = 'true';
+          imageElement.setAttribute('aria-hidden', 'true');
+          imageElement.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+        }
         root.append(imageElement);
         cursor += image[0].length;
         continue;
@@ -168,7 +176,7 @@ const mockCrepe = vi.hoisted(() => {
     public readonly editor = {
       action: vi.fn(),
       config: (configure: (ctx: object) => void) => {
-        configure({});
+        configure({ update: () => undefined });
         return this.editor;
       },
       use: () => this.editor,

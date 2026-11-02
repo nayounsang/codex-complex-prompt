@@ -20,7 +20,7 @@ const crepeTest = vi.hoisted(() => {
       action: vi.fn(),
       use: vi.fn(),
       config: vi.fn((configure: (ctx: object) => void) => {
-        configure({});
+        configure({ update: vi.fn() });
         return this.editor;
       }),
     };

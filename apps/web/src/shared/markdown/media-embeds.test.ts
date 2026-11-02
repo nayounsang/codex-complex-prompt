@@ -4,6 +4,7 @@ import {
   createMediaEmbedTargets,
   getMediaEmbedAffectedContainers,
   haveSameMediaEmbedTargets,
+  INERT_MEDIA_IMAGE_SRC,
 } from './media-embeds.js';
 
 describe('createMediaEmbedTargets', () => {
@@ -30,9 +31,17 @@ describe('createMediaEmbedTargets', () => {
       alt: '',
       mimeType: null,
     });
+    expect(images[0]).toHaveAttribute('src', INERT_MEDIA_IMAGE_SRC);
+    expect(images[0]).toHaveAttribute('data-media-source', './cover.PNG?size=2');
+    expect(images[0]).toHaveAttribute('data-media-pending', 'true');
+    expect(attachment).toHaveAttribute(
+      'data-media-source',
+      'https://attachments.test/clip.MP4?token=secret',
+    );
+    expect(attachment).not.toHaveAttribute('data-video-source');
     expect(mountRoot.querySelectorAll('.media-embed-mount')).toHaveLength(2);
     expect(images[0]).not.toHaveAttribute('data-media-embed-id');
-    expect(images[0]).not.toHaveAttribute('aria-hidden');
+    expect(images[0]).toHaveAttribute('aria-hidden', 'true');
     expect(root.querySelector('.media-embed-mount')).toBeNull();
   });
 
