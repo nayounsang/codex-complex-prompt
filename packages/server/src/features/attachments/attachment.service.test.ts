@@ -162,6 +162,33 @@ describe('공개 첨부 HTTP 계약', () => {
     }
   });
 
+  it('image 첨부의 HEAD 요청에서 MIME 타입을 반환한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000043';
+    let readCalled = false;
+    const { server, token } = await startAttachmentTestServer({
+      getImageInfo: async () => ({ size: 42, mimeType: 'image/webp' }),
+      read: async () => {
+        readCalled = true;
+        return undefined;
+      },
+    });
+
+    try {
+      const response = await fetch(
+        `${server.url}/_complex-prompt/attachments/${id}.webp?token=${encodeURIComponent(token)}`,
+        { method: 'HEAD' },
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('image/webp');
+      expect(response.headers.get('content-length')).toBe('42');
+      expect((await response.arrayBuffer()).byteLength).toBe(0);
+      expect(readCalled).toBe(false);
+    } finally {
+      await server.close();
+    }
+  });
+
   it('video 저장소에서 GET range를 읽고 누락 및 오류를 처리한다', async () => {
     const id = '00000000-0000-4000-8000-000000000041';
     const bytes = Buffer.from('0123456789');

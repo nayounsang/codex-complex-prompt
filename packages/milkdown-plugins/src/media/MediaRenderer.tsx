@@ -1,26 +1,27 @@
 import { useState } from 'react';
 
-import { getMediaMimeType, isSupportedVideoMimeType } from './core.js';
+import { isSupportedVideoMimeType } from './core.js';
 
 export interface MediaRendererProps {
   readonly path: string;
+  readonly mimeType: string | null;
   readonly alt?: string;
-  readonly renderEmpty?: () => React.ReactNode;
-  readonly renderError?: (error: unknown) => React.ReactNode;
+  readonly renderEmpty: () => React.ReactNode;
+  readonly renderError: (error: unknown) => React.ReactNode;
 }
 
 export function MediaRenderer({
   path,
+  mimeType,
   alt,
   renderEmpty,
   renderError,
 }: MediaRendererProps): React.JSX.Element | React.ReactNode {
   const [loadError, setLoadError] = useState<{ readonly path: string; readonly error: unknown }>();
 
-  if (path === '') return renderEmpty!();
-  if (loadError?.path === path) return renderError!(loadError.error);
+  if (path === '') return renderEmpty();
+  if (loadError?.path === path) return renderError(loadError.error);
 
-  const mimeType = getMediaMimeType(path);
   if (mimeType?.startsWith('image/') === true) {
     return (
       <img
@@ -34,6 +35,7 @@ export function MediaRenderer({
     return (
       <video
         src={path}
+        aria-label={alt || undefined}
         controls
         playsInline
         preload="metadata"
@@ -41,5 +43,5 @@ export function MediaRenderer({
       />
     );
   }
-  return renderError!(new Error(`Unsupported media MIME type: ${mimeType ?? 'unknown'}`));
+  return renderError(new Error(`Unsupported media MIME type: ${mimeType ?? 'unknown'}`));
 }

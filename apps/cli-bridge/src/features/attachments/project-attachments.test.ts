@@ -34,6 +34,21 @@ async function createProjectDirectory(): Promise<string> {
 }
 
 describe('프로젝트 그림 첨부 저장소', () => {
+  it('이미지 파일을 읽지 않고 MIME 타입과 크기를 반환한다', async () => {
+    const projectDirectory = await createProjectDirectory();
+    const store = createProjectAttachmentStore(projectDirectory);
+    const id = '00000000-0000-4000-8000-000000000052';
+    const image = Buffer.from(PNG_DATA, 'base64');
+    await store.save({ id, image: PNG_DATA_URL, scene: '{"elements":[]}' });
+
+    await expect(store.getImageInfo(id, 'png')).resolves.toEqual({
+      size: image.byteLength,
+      mimeType: 'image/png',
+    });
+    await expect(store.getImageInfo('../outside', 'png')).resolves.toBeUndefined();
+    await expect(store.getImageInfo(id, '../png')).resolves.toBeUndefined();
+  });
+
   it('MP4를 저장하고 정보와 지정한 byte range를 읽는다', async () => {
     const projectDirectory = await createProjectDirectory();
     const store = createProjectAttachmentStore(projectDirectory);

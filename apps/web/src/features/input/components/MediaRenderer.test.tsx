@@ -5,7 +5,15 @@ import { MediaRenderer } from '@codex-complex-prompt/milkdown-plugins/media/ui';
 
 describe('MediaRenderer', () => {
   it('renders images with the received path and alt text', () => {
-    render(<MediaRenderer path="./cover.PNG?size=2#preview" alt="Cover" />);
+    render(
+      <MediaRenderer
+        path="./cover.PNG?size=2#preview"
+        mimeType="image/png"
+        alt="Cover"
+        renderEmpty={() => null}
+        renderError={() => null}
+      />,
+    );
 
     expect(screen.getByAltText('Cover')).toHaveAttribute('src', './cover.PNG?size=2#preview');
   });
@@ -17,6 +25,7 @@ describe('MediaRenderer', () => {
       const { container } = render(
         <MediaRenderer
           path={`https://example.test/clip.${extension}?token=secret`}
+          mimeType={mime}
           renderEmpty={() => null}
           renderError={() => null}
         />,
@@ -29,10 +38,29 @@ describe('MediaRenderer', () => {
     },
   );
 
+  it('uses the Markdown alt text as the video accessible name', () => {
+    render(
+      <MediaRenderer
+        path="clip.mp4"
+        mimeType="video/mp4"
+        alt="A short clip"
+        renderEmpty={() => null}
+        renderError={() => null}
+      />,
+    );
+
+    expect(screen.getByLabelText('A short clip').tagName).toBe('VIDEO');
+  });
+
   it('passes the original load error value to the consumer', () => {
     const renderError = vi.fn(() => <div role="alert">Failed</div>);
     const { container } = render(
-      <MediaRenderer path="cover.png" renderEmpty={() => null} renderError={renderError} />,
+      <MediaRenderer
+        path="cover.png"
+        mimeType="image/png"
+        renderEmpty={() => null}
+        renderError={renderError}
+      />,
     );
     const image = container.querySelector('img');
     if (image === null) throw new Error('Missing rendered image');
@@ -46,20 +74,24 @@ describe('MediaRenderer', () => {
 
   it('uses the empty callback for an empty destination', () => {
     const renderEmpty = vi.fn(() => <div>Empty</div>);
-    render(<MediaRenderer path="" renderEmpty={renderEmpty} />);
+    render(
+      <MediaRenderer path="" mimeType={null} renderEmpty={renderEmpty} renderError={() => null} />,
+    );
     expect(renderEmpty).toHaveBeenCalledOnce();
   });
 
   it('reports unsupported MIME types to the error callback', () => {
     const renderError = vi.fn(() => <div>Unsupported</div>);
-    render(<MediaRenderer path="clip.avi" renderError={renderError} />);
+    render(
+      <MediaRenderer
+        path="clip.avi"
+        mimeType="video/x-msvideo"
+        renderEmpty={() => null}
+        renderError={renderError}
+      />,
+    );
     expect(renderError).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'Unsupported media MIME type: video/x-msvideo' }),
     );
-  });
-
-  it('throws when a required state callback is omitted', () => {
-    expect(() => render(<MediaRenderer path="" />)).toThrow();
-    expect(() => render(<MediaRenderer path="document.pdf" />)).toThrow();
   });
 });

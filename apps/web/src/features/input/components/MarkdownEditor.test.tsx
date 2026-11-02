@@ -65,6 +65,7 @@ afterEach(() => {
   cleanup();
   crepeTest.state.instance = undefined;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 async function getBlockEditMenuLabels(
@@ -94,6 +95,14 @@ async function getBlockEditMenuLabels(
 
 describe('MarkdownEditor', () => {
   it('renders Markdown image elements through the shared media renderer', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'Content-Type': 'image/png' }),
+      }),
+    );
     vi.spyOn(HTMLImageElement.prototype, 'getBoundingClientRect').mockReturnValue(
       new DOMRect(12, 24, 320, 180),
     );

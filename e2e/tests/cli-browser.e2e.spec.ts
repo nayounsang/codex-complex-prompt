@@ -172,6 +172,7 @@ test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디�
       await route.fulfill({
         status: 200,
         contentType: 'image/png',
+        headers: { 'Access-Control-Allow-Origin': '*' },
         body: Buffer.from(
           'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=',
           'base64',
@@ -183,6 +184,7 @@ test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디�
       await route.fulfill({
         status: 200,
         contentType: 'video/webm',
+        headers: { 'Access-Control-Allow-Origin': '*' },
         body: Buffer.from(
           'GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAALIEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEjTbuMU6uEHFO7a1OsggKy7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjIuMy4xMDBXQYxMYXZmNjIuMy4xMDBEiYhAaQAAAAAAABZUrmvIrgEAAAAAAAA/14EBc8WIZvwfe4KLkGOcgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4QCYloA4JCwgSC6gRKagQJVsIRVuYEBElTDZ/tzc59jwIBnyJlFo4dFTkNPREVSRIeMTGF2ZjYyLjMuMTAwc3PWY8CLY8WIZvwfe4KLkGNnyKFFo4dFTkNPREVSRIeUTGF2YzYyLjExLjEwMCBsaWJ2cHhnyKFFo4hEVVJBVElPTkSHkzAwOjAwOjAwLjIwMDAwMDAwMAAfQ7Z1QQnngQCjvoEAAIAQAwCdASogABIAAEcIhYWImYSIAgICdaoD+AP6AghZLpBw/v1u8//kb+PnRv/I4//8Sp7jieP//EaAo6yBACgA0QEAARA8ABgAHlf0DABBDgD+9hNf/n5QX1ZX1v16//XmAhdw7/11oKOugQBQANEBAAEQLAAYAB5X9AwAQQ4A/vi1F/9ZT1/ZT1/ZX++R/+88yhVUc/7ywKO0gQB4APEBAAEQIAAYC7APkNuUcEN7AP77Lkv/uPxX/H4r/kA/hP//z1kFQvO//PLzKVLwAKOwgQCgANEBAAEQGAAYAB5X9AwAQQ4A/vwNo//ee1X/ntV/58/6M//9XQxmLvH/6swAHFO7a5G7j7OBALeK94EB8YIBo/CBAw==',
           'base64',
@@ -193,14 +195,19 @@ test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디�
     await route.fulfill({
       status: 200,
       contentType: 'application/octet-stream',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: 'unsupported',
     });
   });
-  const photoResponse = page.waitForResponse((response) =>
-    new URL(response.url()).pathname.endsWith('/photo.PNG'),
+  const photoResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' &&
+      new URL(response.url()).pathname.endsWith('/photo.PNG'),
   );
-  const videoResponse = page.waitForResponse((response) =>
-    new URL(response.url()).pathname.endsWith('/clip.webm'),
+  const videoResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' &&
+      new URL(response.url()).pathname.endsWith('/clip.webm'),
   );
 
   try {
@@ -209,12 +216,18 @@ test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디�
     const photo = editor.locator('.media-embed-frame img[alt="Photo"]');
     await expect(photo).toBeVisible();
     await expect(photo).toHaveAttribute('src', photoUrl);
+    await expect
+      .poll(() => photo.evaluate((image) => (image as HTMLImageElement).naturalWidth))
+      .toBeGreaterThan(0);
     expect((await photoResponse).status()).toBe(200);
 
     const video = editor.locator('.media-embed-frame video');
     await expect(video).toBeVisible();
     await expect(video).toHaveAttribute('src', videoUrl);
     await expect(video).toHaveAttribute('controls', '');
+    await expect
+      .poll(() => video.evaluate((element) => (element as HTMLVideoElement).readyState))
+      .toBeGreaterThan(0);
     expect((await videoResponse).status()).toBe(200);
 
     const addMediaButton = editor.getByRole('button', { name: 'Add media' });

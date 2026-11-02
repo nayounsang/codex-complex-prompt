@@ -7,13 +7,35 @@ import { AnnotatedMarkdownView } from './AnnotatedMarkdownView.js';
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function renderMarkdown(
   markdown: string,
   onSelection = vi.fn(),
   annotations: Parameters<typeof AnnotatedMarkdownView>[0]['annotations'] = [],
+  mediaResponse?: Response,
 ): HTMLElement {
+  vi.stubGlobal('fetch', (input: RequestInfo | URL): Promise<Response> => {
+    if (mediaResponse !== undefined) return Promise.resolve(mediaResponse);
+    const requestUrl =
+      typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const pathname = new URL(requestUrl, window.location.href).pathname;
+    const extension = pathname.split('.').pop()?.toLowerCase() ?? '';
+    const mimeType =
+      extension === 'mp4'
+        ? 'video/mp4'
+        : extension === 'mov'
+          ? 'video/quicktime'
+          : extension === 'webm'
+            ? 'video/webm'
+            : 'image/png';
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'Content-Type': mimeType }),
+    } as Response);
+  });
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
     new DOMRect(12, 24, 320, 180),
   );
@@ -47,6 +69,20 @@ describe('AnnotatedMarkdownView', () => {
     await waitFor(() =>
       expect(article.querySelector('.media-embed-status')).toHaveTextContent('Media unavailable'),
     );
+  });
+
+  it('shows an error when the HEAD response has no MIME type', async () => {
+    const article = renderMarkdown(
+      '![Outside](https://example.test/photo)',
+      undefined,
+      [],
+      new Response(null, { status: 200 }),
+    );
+
+    await waitFor(() =>
+      expect(article.querySelector('.media-embed-status')).toHaveTextContent('Media unavailable'),
+    );
+    expect(article.querySelector('.media-embed-frame img, .media-embed-frame video')).toBeNull();
   });
 
   it('resolves an attachment image before passing its path to the shared renderer', async () => {

@@ -22,6 +22,10 @@ export interface TemplateStore {
 }
 
 export interface AttachmentStore {
+  readonly getImageInfo?: (
+    id: string,
+    extension: string,
+  ) => Promise<{ readonly size: number; readonly mimeType: string } | undefined>;
   readonly getVideoInfo?: (
     id: string,
     extension: string,

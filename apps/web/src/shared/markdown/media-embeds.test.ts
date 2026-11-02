@@ -23,12 +23,12 @@ describe('createMediaEmbedTargets', () => {
     expect(targets[0]).toMatchObject({
       path: './cover.PNG?size=2',
       alt: 'Cover',
-      mimeType: 'image/png',
+      mimeType: null,
     });
     expect(targets[1]).toMatchObject({
       path: 'https://attachments.test/clip.MP4?token=secret',
       alt: '',
-      mimeType: 'video/mp4',
+      mimeType: null,
     });
     expect(mountRoot.querySelectorAll('.media-embed-mount')).toHaveLength(2);
     expect(images[0]).not.toHaveAttribute('data-media-embed-id');
@@ -43,7 +43,7 @@ describe('createMediaEmbedTargets', () => {
 
     expect(createMediaEmbedTargets(root).map(({ path, mimeType }) => [path, mimeType])).toEqual([
       ['', null],
-      ['clip.avi', 'video/x-msvideo'],
+      ['clip.avi', null],
     ]);
   });
 

@@ -90,6 +90,39 @@ afterEach(() => {
   window.history.replaceState({}, '', '/');
 });
 
+function installMediaMimeHeadResponse(): void {
+  const originalFetch = globalThis.fetch;
+  const mimeTypes: Readonly<Record<string, string>> = {
+    gif: 'image/gif',
+    jpeg: 'image/jpeg',
+    jpg: 'image/jpeg',
+    mp4: 'video/mp4',
+    mov: 'video/quicktime',
+    png: 'image/png',
+    svg: 'image/svg+xml',
+    webm: 'video/webm',
+    webp: 'image/webp',
+  };
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    if (init?.method?.toUpperCase() === 'HEAD') {
+      const requestUrl =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const { pathname } = new URL(requestUrl, window.location.href);
+      if (!(pathname.includes('/_complex-prompt/attachments/') && pathname.endsWith('.json'))) {
+        const extension = pathname.split('.').pop()?.toLowerCase() ?? '';
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({
+            'Content-Type': mimeTypes[extension] ?? 'application/octet-stream',
+          }),
+        } as Response);
+      }
+    }
+    return init === undefined ? originalFetch(input) : originalFetch(input, init);
+  });
+}
+
 function renderWithSession(
   bridge = 'http://127.0.0.1:4321',
   initialMarkdown?: string,
@@ -98,6 +131,7 @@ function renderWithSession(
 ): MockWebSocket {
   const params = new URLSearchParams({ token: 'test-token', bridge });
   window.history.replaceState({}, '', `/?${params.toString()}`);
+  installMediaMimeHeadResponse();
   vi.stubGlobal('WebSocket', MockWebSocket);
   vi.stubGlobal('crypto', { randomUUID: () => '00000000-0000-4000-8000-000000000004' });
 
