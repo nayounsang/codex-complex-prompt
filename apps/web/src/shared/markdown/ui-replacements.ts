@@ -8,14 +8,6 @@ export const MARKDOWN_UI_REPLACEMENT_MODEL = {
     persistedMarkdown: 'the same Markdown image reference',
     fallbackLabel: 'Drawing',
   },
-  video: {
-    kind: 'video',
-    markdown: 'standalone ![](http-or-https-video-url)',
-    renderedUi: 'video preview mounted beside its source paragraph',
-    persistedMarkdown: 'the original Markdown image reference',
-    mountClassName: 'video-embed-mount',
-    standaloneMarkdown: (source: string): string => `![](${source})`,
-  },
   mermaid: {
     ...MERMAID_UI_REPLACEMENT_MODEL,
     markdown: 'fenced code block with mermaid info string',

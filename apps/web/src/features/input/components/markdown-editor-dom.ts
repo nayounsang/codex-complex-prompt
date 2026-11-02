@@ -4,6 +4,10 @@ import {
   getMarkdownAttachmentExtension,
   getMarkdownAttachmentId,
 } from '../../../shared/markdown/attachment-path.js';
+import {
+  getMediaImageSource,
+  INERT_MEDIA_IMAGE_SRC,
+} from '../../../shared/markdown/media-embeds.js';
 import { MARKDOWN_UI_REPLACEMENT_MODEL } from '../../../shared/markdown/ui-replacements.js';
 
 export interface DrawingEditTarget {
@@ -12,24 +16,22 @@ export interface DrawingEditTarget {
   readonly editable: boolean;
 }
 
-function isIgnorableMediaPlaceholderChild(child: ChildNode, image: HTMLImageElement): boolean {
-  return (
-    child === image ||
-    (child instanceof HTMLImageElement && child.classList.contains('ProseMirror-separator')) ||
-    (child.nodeType === Node.TEXT_NODE && (child.textContent ?? '').trim() === '') ||
-    (child instanceof HTMLBRElement && child.classList.contains('ProseMirror-trailingBreak'))
-  );
-}
-
 function isDedicatedMediaPlaceholder(paragraph: HTMLParagraphElement): boolean {
   const image = paragraph.querySelector(':scope > img');
-  return (
-    image instanceof HTMLImageElement &&
-    image.getAttribute('src') === '' &&
-    Array.from(paragraph.childNodes).every((child) =>
-      isIgnorableMediaPlaceholderChild(child, image),
-    )
-  );
+  if (!(image instanceof HTMLImageElement) || image.getAttribute('src') !== '') return false;
+
+  const hasPlaceholderMarker =
+    image.alt.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.markerPrefix) ||
+    image.alt.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.pendingPrefix);
+  const containsOnlyPlaceholderNodes = Array.from(paragraph.childNodes).every((child) => {
+    if (child === image) return true;
+    if (child instanceof HTMLImageElement) return child.classList.contains('ProseMirror-separator');
+    if (child instanceof HTMLBRElement)
+      return child.classList.contains('ProseMirror-trailingBreak');
+    return child.nodeType === Node.TEXT_NODE && (child.textContent ?? '').trim() === '';
+  });
+
+  return hasPlaceholderMarker && containsOnlyPlaceholderNodes;
 }
 
 function isMediaPlaceholderUploading(paragraph: HTMLParagraphElement): boolean {
@@ -37,9 +39,7 @@ function isMediaPlaceholderUploading(paragraph: HTMLParagraphElement): boolean {
   return (
     image instanceof HTMLImageElement &&
     image.getAttribute('src') === '' &&
-    image
-      .getAttribute('alt')
-      ?.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.pendingPrefix) === true
+    image.alt.startsWith(MARKDOWN_UI_REPLACEMENT_MODEL.mediaPlaceholder.pendingPrefix)
   );
 }
 
@@ -77,7 +77,7 @@ export function getDrawingIdFromImage(
   attachmentUrl: string | null | undefined,
   attachmentToken: string | null | undefined,
 ): string | null {
-  const source = image.getAttribute('src');
+  const source = getMediaImageSource(image);
   if (source === null) return null;
   const markdownId = getMarkdownAttachmentId(source);
   if (markdownId !== null) return markdownId;
@@ -105,7 +105,7 @@ export function replaceAttachmentImageUrls(
   )
     return;
   for (const image of root.querySelectorAll<HTMLImageElement>('img[src]')) {
-    const source = image.getAttribute('src');
+    const source = getMediaImageSource(image);
     const id = source === null ? null : getMarkdownAttachmentId(source);
     const extension = source === null ? null : getMarkdownAttachmentExtension(source);
     if (id === null || extension === null) continue;
@@ -121,12 +121,11 @@ export function replaceAttachmentImageUrls(
     image.dataset['markdownUiReplacement'] = MARKDOWN_UI_REPLACEMENT_MODEL.drawing.kind;
     image.setAttribute('role', 'button');
     image.setAttribute('aria-label', `Drawing actions: ${image.alt.trim() || 'Drawing'}`);
-    if (['mp4', 'mov', 'webm'].includes(extension)) {
-      image.dataset['videoSource'] = url;
-      const inertImage = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
-      if (image.src !== inertImage) image.src = inertImage;
-    } else if (image.src !== url) {
-      image.src = url;
-    }
+    image.dataset['mediaSource'] = url;
+    image.dataset['mediaPending'] = 'true';
+    delete image.dataset['videoSource'];
+    image.setAttribute('aria-hidden', 'true');
+    if (image.getAttribute('src') !== INERT_MEDIA_IMAGE_SRC)
+      image.setAttribute('src', INERT_MEDIA_IMAGE_SRC);
   }
 }

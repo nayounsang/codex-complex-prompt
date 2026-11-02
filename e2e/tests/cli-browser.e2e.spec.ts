@@ -135,6 +135,150 @@ test('입력한 Markdown을 Codex에 전달하고 3초 뒤 브라우저 종료�
   }
 });
 
+test('Markdown 이미지·비디오·빈 경로·로드 오류를 공용 미디어 렌더러로 표시한다', async ({
+  page,
+}) => {
+  const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-media-'));
+  const browserUrlFile = join(codexHome, 'browser-url.txt');
+  const photoUrl = 'https://media.test/photo?size=2#preview';
+  const videoUrl = 'https://media.test/clip?download=1#t=4';
+  const originalMarkdown = [
+    `![Photo](${photoUrl})`,
+    `![](${videoUrl})`,
+    '![](https://media.test/broken.png)',
+    '![](https://media.test/unsupported.avi)',
+    '![]()',
+  ].join('\n\n');
+  const fakeCodex = startFakeCodex(
+    'prompt',
+    {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'e2e-media-renderer-session',
+      cwd: repositoryRoot,
+      prompt: `$complex-prompt ${originalMarkdown}`,
+    },
+    codexHome,
+    browserUrlFile,
+  );
+  const pageErrors: string[] = [];
+  const videoRequests: string[] = [];
+  let releaseVideoHead: () => void = () => undefined;
+  const videoHeadGate = new Promise<void>((resolve) => {
+    releaseVideoHead = resolve;
+  });
+  let notifyVideoHeadStarted: () => void = () => undefined;
+  const videoHeadStarted = new Promise<void>((resolve) => {
+    notifyVideoHeadStarted = resolve;
+  });
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.origin === 'https://media.test' && url.pathname === '/clip')
+      videoRequests.push(request.method());
+  });
+  await page.route('https://media.test/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/broken.png')) {
+      await route.abort();
+      return;
+    }
+    if (url.pathname === '/photo') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/png',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=',
+          'base64',
+        ),
+      });
+      return;
+    }
+    if (url.pathname === '/clip') {
+      if (route.request().method() === 'HEAD') {
+        notifyVideoHeadStarted();
+        await videoHeadGate;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'video/webm',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: Buffer.from(
+          'GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAALIEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEjTbuMU6uEHFO7a1OsggKy7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjIuMy4xMDBXQYxMYXZmNjIuMy4xMDBEiYhAaQAAAAAAABZUrmvIrgEAAAAAAAA/14EBc8WIZvwfe4KLkGOcgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4QCYloA4JCwgSC6gRKagQJVsIRVuYEBElTDZ/tzc59jwIBnyJlFo4dFTkNPREVSRIeMTGF2ZjYyLjMuMTAwc3PWY8CLY8WIZvwfe4KLkGNnyKFFo4dFTkNPREVSRIeUTGF2YzYyLjExLjEwMCBsaWJ2cHhnyKFFo4hEVVJBVElPTkSHkzAwOjAwOjAwLjIwMDAwMDAwMAAfQ7Z1QQnngQCjvoEAAIAQAwCdASogABIAAEcIhYWImYSIAgICdaoD+AP6AghZLpBw/v1u8//kb+PnRv/I4//8Sp7jieP//EaAo6yBACgA0QEAARA8ABgAHlf0DABBDgD+9hNf/n5QX1ZX1v16//XmAhdw7/11oKOugQBQANEBAAEQLAAYAB5X9AwAQQ4A/vi1F/9ZT1/ZT1/ZX++R/+88yhVUc/7ywKO0gQB4APEBAAEQIAAYC7APkNuUcEN7AP77Lkv/uPxX/H4r/kA/hP//z1kFQvO//PLzKVLwAKOwgQCgANEBAAEQGAAYAB5X9AwAQQ4A/vwNo//ee1X/ntV/58/6M//9XQxmLvH/6swAHFO7a5G7j7OBALeK94EB8YIBo/CBAw==',
+          'base64',
+        ),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/octet-stream',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: 'unsupported',
+    });
+  });
+  const photoResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' && new URL(response.url()).pathname === '/photo',
+  );
+  const videoResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' && new URL(response.url()).pathname === '/clip',
+  );
+
+  try {
+    await openFakeCodexBrowser(page, fakeCodex);
+    const editor = page.getByTestId('markdown-editor');
+    await videoHeadStarted;
+    const sourceVideo = editor.locator('.milkdown .ProseMirror img[data-media-source*="/clip"]');
+    await expect(sourceVideo).toHaveAttribute(
+      'src',
+      'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=',
+    );
+    await expect(sourceVideo).toHaveAttribute('data-media-pending', 'true');
+    await expect(editor.locator('.media-embed-frame video')).toHaveCount(0);
+    expect(videoRequests).toEqual(['HEAD']);
+    releaseVideoHead();
+
+    const photo = editor.locator('.media-embed-frame img[alt="Photo"]');
+    await expect(photo).toBeVisible();
+    await expect(photo).toHaveAttribute('src', photoUrl);
+    await expect
+      .poll(() => photo.evaluate((image) => (image as HTMLImageElement).naturalWidth))
+      .toBeGreaterThan(0);
+    expect((await photoResponse).status()).toBe(200);
+    expect(videoRequests[0]).toBe('HEAD');
+
+    const video = editor.locator('.media-embed-frame video');
+    await expect(video).toBeVisible();
+    await expect(video).toHaveAttribute('src', videoUrl);
+    await expect(video).toHaveAttribute('controls', '');
+    await expect
+      .poll(() => video.evaluate((element) => (element as HTMLVideoElement).readyState))
+      .toBeGreaterThan(0);
+    expect((await videoResponse).status()).toBe(200);
+    expect(videoRequests).toEqual(['HEAD', 'GET']);
+
+    const addMediaButton = editor.getByRole('button', { name: 'Add media' });
+    await expect(addMediaButton).toBeVisible();
+    await expect(addMediaButton).toBeEnabled();
+    await expect(
+      editor.locator('.media-embed-status').filter({ hasText: 'Media unavailable' }),
+    ).toHaveCount(2);
+    expect(pageErrors).toEqual([]);
+    await page.getByRole('button', { name: 'Send to Codex' }).click();
+    const hookResult = await fakeCodex.result;
+    expect(hookResult.exitCode).toBe(0);
+    const response = JSON.parse(hookResult.output) as {
+      readonly hookSpecificOutput: { readonly additionalContext: string };
+    };
+    expect(response.hookSpecificOutput.additionalContext).toContain(originalMarkdown);
+  } finally {
+    releaseVideoHead();
+    await rm(codexHome, { recursive: true, force: true });
+  }
+});
+
 test('null appState가 저장된 Excalidraw 장면을 편집할 수 있다', async ({ page }) => {
   const codexHome = await mkdtemp(join(tmpdir(), 'complex-prompt-e2e-null-app-state-'));
   const projectDirectory = join(codexHome, 'project');

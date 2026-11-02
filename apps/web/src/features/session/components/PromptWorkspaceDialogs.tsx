@@ -5,11 +5,13 @@ import { Dialog } from '@base-ui/react/dialog';
 import type { PromptDrawingData } from '../hooks/prompt-workspace/usePromptWorkspaceAttachments.js';
 import { SubmitFeedbackDialog } from '../../../app/components/SubmitFeedbackDialog.js';
 
-const DrawingDialog = lazy(async () => {
+const loadDrawingDialog = async () => {
   (window as Window & { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH = '/';
   const module = await import('../../input/DrawingDialog.js');
   return { default: module.DrawingDialog };
-});
+};
+const DrawingDialog = lazy(loadDrawingDialog);
+void loadDrawingDialog().catch(() => undefined);
 
 interface PromptWorkspaceDialogsProps {
   readonly drawing: PromptDrawingData | null;

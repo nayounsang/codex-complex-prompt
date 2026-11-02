@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileExists, removeFile, removeStaleMediaFiles } from './attachment-filesystem.js';
 
@@ -39,6 +39,10 @@ export interface ProjectAttachment {
 }
 
 export interface ProjectAttachmentStore {
+  readonly getImageInfo: (
+    id: string,
+    extension: string,
+  ) => Promise<{ readonly size: number; readonly mimeType: string } | undefined>;
   readonly getVideoInfo: (
     id: string,
     extension: string,
@@ -69,6 +73,21 @@ export function createProjectAttachmentStore(projectDirectory: string): ProjectA
 
   return {
     ...createProjectAttachmentVideoReader(directory),
+    getImageInfo: async (id, extension) => {
+      if (!isAttachmentId(id) || !isSafeImageExtension(extension)) return undefined;
+      try {
+        const file = await stat(join(directory, `${id}.${extension}`));
+        if (!file.isFile() || file.size === 0 || file.size > MAX_ATTACHMENT_IMAGE_BYTES)
+          return undefined;
+        const mimeType = mime.getType(extension);
+        if (mimeType === null) return undefined;
+        // shortcut: HEAD trusts the extension validated on upload; revalidate here if files become externally mutable.
+        return { size: file.size, mimeType };
+      } catch (error) {
+        if (isMissingFile(error)) return undefined;
+        throw error;
+      }
+    },
     save: async ({
       id = randomUUID(),
       image: imageDataUrl,

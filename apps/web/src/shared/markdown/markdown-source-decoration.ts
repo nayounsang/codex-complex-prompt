@@ -11,6 +11,7 @@ import {
   type MarkdownAttachmentImageRange,
 } from './markdown-source-ast.js';
 import { getMarkdownTableRanges } from './markdown-source-text-map.js';
+import { getMediaImageSource } from './media-embeds.js';
 import type { RenderedTextMapping, SourceFeedbackRange } from './markdown-source-map-types.js';
 
 const feedbackHighlightName = 'feedback-annotation';
@@ -63,7 +64,7 @@ function getAttachmentImageId(
   image: HTMLImageElement,
   attachmentUrl: string | null,
 ): string | null {
-  const source = image.getAttribute('src');
+  const source = getMediaImageSource(image);
   if (source === null) return null;
   return getMarkdownAttachmentId(source, true) ?? getConfiguredAttachmentId(source, attachmentUrl);
 }
@@ -72,7 +73,7 @@ function getAttachmentImageExtension(
   image: HTMLImageElement,
   attachmentUrl: string | null,
 ): string | null {
-  const source = image.getAttribute('src');
+  const source = getMediaImageSource(image);
   if (source === null) return null;
   return (
     getMarkdownAttachmentExtension(source) ??

@@ -11,7 +11,7 @@ import { autoUpdate, computePosition, offset } from '@floating-ui/dom';
 import type { Crepe } from '@milkdown/crepe';
 import { replaceMermaidBlock as replaceMermaidBlockInEditor } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
 import type { MermaidDiagramTarget } from '@codex-complex-prompt/milkdown-plugins/mermaid/core';
-import type { VideoEmbedTarget } from '../../../shared/markdown/video-embeds.js';
+import type { MediaEmbedTarget } from '../../../shared/markdown/media-embeds.js';
 import { MarkdownEditorAuxiliaryViews } from './MarkdownEditorAuxiliaryViews.js';
 import { useMarkdownEditorLifecycle } from './useMarkdownEditorLifecycle.js';
 import { useMarkdownEditorInteractionHandlers } from './useMarkdownEditorInteractionHandlers.js';
@@ -78,7 +78,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const markdownRef = useRef(defaultMarkdown);
     const [drawingEditTarget, setDrawingEditTarget] = useState<DrawingEditTarget | null>(null);
     const [mermaidTargets, setMermaidTargets] = useState<MermaidDiagramTarget[]>([]);
-    const [videoTargets, setVideoTargets] = useState<VideoEmbedTarget[]>([]);
+    const [mediaTargets, setMediaTargets] = useState<MediaEmbedTarget[]>([]);
     const [mermaidDialogTarget, setMermaidDialogTarget] = useState<MermaidDiagramTarget | null>(
       null,
     );
@@ -178,7 +178,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       receiveMediaFiles,
       setInitializationError,
       setMermaidTargets,
-      setVideoTargets,
+      setMediaTargets,
     });
     useImperativeHandle(
       forwardedRef,
@@ -240,10 +240,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           drawingEditTarget={drawingEditTarget}
           drawingEditPosition={drawingEditPosition}
           mermaidTargets={mermaidTargets}
-          videoTargets={videoTargets}
+          mediaTargets={mediaTargets}
           mermaidDialogTarget={mermaidDialogTarget}
           readOnly={readOnly}
           onClearDrawingEditTarget={interactionHandlers.clearDrawingEditTarget}
+          onChooseMedia={interactionHandlers.openMediaFilePicker}
           onEditMermaid={setMermaidDialogTarget}
           onCloseMermaid={() => setMermaidDialogTarget(null)}
           onReplaceMermaid={replaceCurrentMermaidBlock}

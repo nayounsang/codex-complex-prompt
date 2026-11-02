@@ -19,6 +19,18 @@
     "./mermaid/ui": {
       "types": "./src/mermaid/ui.ts",
       "import": "./dist/mermaid/ui.js"
+    },
+    "./media": {
+      "types": "./src/media/index.ts",
+      "import": "./dist/media/index.js"
+    },
+    "./media/core": {
+      "types": "./src/media/core.ts",
+      "import": "./dist/media/core.js"
+    },
+    "./media/ui": {
+      "types": "./src/media/ui.ts",
+      "import": "./dist/media/ui.js"
     }
   },
   "scripts": {

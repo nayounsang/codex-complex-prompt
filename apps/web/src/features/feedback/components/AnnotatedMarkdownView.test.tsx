@@ -2,15 +2,44 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../../shared/testing/mock-crepe.js';
 import { hasRenderedSourceMap } from '../../../shared/markdown/markdown-source-map.js';
+import { INERT_MEDIA_IMAGE_SRC } from '../../../shared/markdown/media-embeds.js';
 import { AnnotatedMarkdownView } from './AnnotatedMarkdownView.js';
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 function renderMarkdown(
   markdown: string,
   onSelection = vi.fn(),
   annotations: Parameters<typeof AnnotatedMarkdownView>[0]['annotations'] = [],
+  mediaResponse?: Response,
 ): HTMLElement {
+  vi.stubGlobal('fetch', (input: RequestInfo | URL): Promise<Response> => {
+    if (mediaResponse !== undefined) return Promise.resolve(mediaResponse);
+    const requestUrl =
+      typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const pathname = new URL(requestUrl, window.location.href).pathname;
+    const extension = pathname.split('.').pop()?.toLowerCase() ?? '';
+    const mimeType =
+      extension === 'mp4'
+        ? 'video/mp4'
+        : extension === 'mov'
+          ? 'video/quicktime'
+          : extension === 'webm'
+            ? 'video/webm'
+            : 'image/png';
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'Content-Type': mimeType }),
+    } as Response);
+  });
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+    new DOMRect(12, 24, 320, 180),
+  );
   render(
     <AnnotatedMarkdownView
       markdown={markdown}
@@ -25,7 +54,88 @@ function renderMarkdown(
   return screen.getByTestId('annotated-markdown');
 }
 
+async function loadSourceImages(article: HTMLElement): Promise<void> {
+  let images: HTMLImageElement[] = [];
+  await waitFor(() => {
+    images = Array.from(
+      article.querySelectorAll<HTMLImageElement>('.ProseMirror img[data-media-source]'),
+    );
+    expect(images.length).toBeGreaterThan(0);
+    expect(images.every((image) => image.getAttribute('src') !== INERT_MEDIA_IMAGE_SRC)).toBe(true);
+  });
+  images.forEach((image) => fireEvent.load(image));
+}
+
 describe('AnnotatedMarkdownView', () => {
+  it('renders Markdown images through the shared media renderer and shows its error state', async () => {
+    const article = renderMarkdown('![Outside](https://example.test/photo.PNG?size=2#preview)');
+    const image = await waitFor(() => {
+      const rendered = article.querySelector<HTMLImageElement>('.media-embed-frame img');
+      expect(rendered).not.toBeNull();
+      return rendered as HTMLImageElement;
+    });
+
+    expect(image).toHaveAttribute('alt', 'Outside');
+    expect(image).toHaveAttribute('src', 'https://example.test/photo.PNG?size=2#preview');
+    fireEvent.error(image);
+
+    await waitFor(() =>
+      expect(article.querySelector('.media-embed-status')).toHaveTextContent('Media unavailable'),
+    );
+  });
+
+  it('shows an error when the HEAD response has no MIME type', async () => {
+    const article = renderMarkdown(
+      '![Outside](https://example.test/photo)',
+      undefined,
+      [],
+      new Response(null, { status: 200 }),
+    );
+
+    await waitFor(() =>
+      expect(article.querySelector('.media-embed-status')).toHaveTextContent('Media unavailable'),
+    );
+    expect(article.querySelector('.media-embed-frame img, .media-embed-frame video')).toBeNull();
+  });
+
+  it('resolves an attachment image before passing its path to the shared renderer', async () => {
+    const id = '00000000-0000-4000-8000-000000000006';
+    const article = renderMarkdown(`![Drawing](.complex-prompt/attachments/${id}.png)`);
+
+    const image = await waitFor(() => {
+      const rendered = article.querySelector<HTMLImageElement>('.media-embed-frame img');
+      expect(rendered).not.toBeNull();
+      return rendered as HTMLImageElement;
+    });
+
+    expect(image.src).toContain(
+      `/_complex-prompt/attachments/${id}.png?token=test-token&refresh=0`,
+    );
+  });
+
+  it('renders a Markdown video through the shared renderer with controls', async () => {
+    const article = renderMarkdown('![](https://example.test/clip.mp4?download=1#t=2)');
+
+    const video = await waitFor(() => {
+      const rendered = article.querySelector<HTMLVideoElement>('.media-embed-frame video');
+      expect(rendered).not.toBeNull();
+      return rendered as HTMLVideoElement;
+    });
+
+    expect(video).toHaveAttribute('src', 'https://example.test/clip.mp4?download=1#t=2');
+    expect(video).toHaveAttribute('controls');
+  });
+
+  it('renders a disabled Add media button for an empty Markdown destination', async () => {
+    const article = renderMarkdown('![]()');
+
+    const button = await waitFor(() => within(article).getByRole('button', { name: 'Add media' }));
+
+    expect(button).toHaveTextContent('Add media');
+    expect(button).toBeDisabled();
+    expect(article).not.toHaveTextContent('Media unavailable');
+  });
+
   it('다이어그램 탭을 눌러도 이전 텍스트 선택을 다시 열지 않는다', async () => {
     const onSelection = vi.fn();
     const article = renderMarkdown('Review this sentence', onSelection);
@@ -79,6 +189,7 @@ describe('AnnotatedMarkdownView', () => {
     const markdown =
       '![다이어그램](.complex-prompt/attachments/00000000-0000-4000-8000-000000000001.png)';
     const article = renderMarkdown(markdown, onSelection);
+    await loadSourceImages(article);
     const image = await within(article).findByRole('button', {
       name: 'Select image for feedback: 다이어그램 (.complex-prompt/attachments/00000000-0000-4000-8000-000000000001.png)',
     });
@@ -96,6 +207,7 @@ describe('AnnotatedMarkdownView', () => {
     const markdown =
       '![화면](.complex-prompt/attachments/00000000-0000-4000-8000-000000000002.png)';
     const article = renderMarkdown(markdown, onSelection);
+    await loadSourceImages(article);
     const image = await within(article).findByRole('button', {
       name: 'Select image for feedback: 화면 (.complex-prompt/attachments/00000000-0000-4000-8000-000000000002.png)',
     });
@@ -115,6 +227,7 @@ describe('AnnotatedMarkdownView', () => {
       '![Drawing](.complex-prompt/attachments/00000000-0000-4000-8000-000000000005.png)';
     const markdown = `${first}\n\n${second}`;
     const article = renderMarkdown(markdown, onSelection);
+    await loadSourceImages(article);
     const secondImage = await within(article).findByRole('button', {
       name: 'Select image for feedback: Drawing (.complex-prompt/attachments/00000000-0000-4000-8000-000000000005.png)',
     });
@@ -173,6 +286,7 @@ describe('AnnotatedMarkdownView', () => {
         feedback: '이 그림을 수정해 주세요.',
       },
     ]);
+    await loadSourceImages(article);
     const image = await within(article).findByRole('button', {
       name: 'Select image for feedback: 와이어프레임 (.complex-prompt/attachments/00000000-0000-4000-8000-000000000003.png)',
     });

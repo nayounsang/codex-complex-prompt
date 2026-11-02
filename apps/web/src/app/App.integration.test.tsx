@@ -90,6 +90,39 @@ afterEach(() => {
   window.history.replaceState({}, '', '/');
 });
 
+function installMediaMimeHeadResponse(): void {
+  const originalFetch = globalThis.fetch;
+  const mimeTypes: Readonly<Record<string, string>> = {
+    gif: 'image/gif',
+    jpeg: 'image/jpeg',
+    jpg: 'image/jpeg',
+    mp4: 'video/mp4',
+    mov: 'video/quicktime',
+    png: 'image/png',
+    svg: 'image/svg+xml',
+    webm: 'video/webm',
+    webp: 'image/webp',
+  };
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    if (init?.method?.toUpperCase() === 'HEAD') {
+      const requestUrl =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const { pathname } = new URL(requestUrl, window.location.href);
+      if (!(pathname.includes('/_complex-prompt/attachments/') && pathname.endsWith('.json'))) {
+        const extension = pathname.split('.').pop()?.toLowerCase() ?? '';
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({
+            'Content-Type': mimeTypes[extension] ?? 'application/octet-stream',
+          }),
+        } as Response);
+      }
+    }
+    return init === undefined ? originalFetch(input) : originalFetch(input, init);
+  });
+}
+
 function renderWithSession(
   bridge = 'http://127.0.0.1:4321',
   initialMarkdown?: string,
@@ -98,6 +131,7 @@ function renderWithSession(
 ): MockWebSocket {
   const params = new URLSearchParams({ token: 'test-token', bridge });
   window.history.replaceState({}, '', `/?${params.toString()}`);
+  installMediaMimeHeadResponse();
   vi.stubGlobal('WebSocket', MockWebSocket);
   vi.stubGlobal('crypto', { randomUUID: () => '00000000-0000-4000-8000-000000000004' });
 
@@ -1379,6 +1413,9 @@ describe('그림 첨부', () => {
 
   it('25 MB를 넘는 이미지는 읽지 않고 fallback 이미지로 대체한다', async () => {
     const readAsDataURL = vi.spyOn(FileReader.prototype, 'readAsDataURL');
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(12, 24, 320, 180),
+    );
     const socket = renderWithSession();
     const editor = await screen.findByRole('textbox', { name: 'Command' });
     const image = new File(['image'], 'large.png', { type: 'image/png' });
@@ -1388,10 +1425,12 @@ describe('그림 첨부', () => {
 
     editor.dispatchEvent(paste);
 
-    expect(await screen.findByAltText('Image upload failed: large.png')).toHaveAttribute(
-      'src',
-      '/image-upload-failed.svg',
-    );
+    await waitFor(() => {
+      const fallbackPreview = document.querySelector<HTMLImageElement>(
+        '.media-embed-frame img[alt="Image upload failed: large.png"]',
+      );
+      expect(fallbackPreview).toHaveAttribute('src', '/image-upload-failed.svg');
+    });
     expect(readAsDataURL).not.toHaveBeenCalled();
     expect(socket.send).not.toHaveBeenCalledWith(expect.stringContaining('prompt.submit'));
   });
@@ -1483,20 +1522,46 @@ describe('그림 첨부', () => {
       url: 'http://127.0.0.1:8765/_complex-prompt/attachments',
       token: 'a'.repeat(32),
     };
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Headers({ 'X-Attachment-Editable': 'true' }),
-      })
-      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => '{"elements":[]}' })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 201,
-        text: async () => JSON.stringify({ id }),
-      });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const requestUrl =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const { pathname } = new URL(requestUrl, window.location.href);
+      if (init?.method === 'HEAD' && pathname.endsWith('.png')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'Content-Type': 'image/png' }),
+        } as Response);
+      }
+      if (init?.method === 'HEAD' && pathname.endsWith('.json')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'X-Attachment-Editable': 'true' }),
+        } as Response);
+      }
+      if (init?.method === undefined && pathname.endsWith('.json')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => '{"elements":[]}',
+        } as Response);
+      }
+      if (init?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          status: 201,
+          text: async () => JSON.stringify({ id }),
+        } as Response);
+      }
+      return Promise.reject(
+        new Error(`Unexpected fetch request: ${init?.method ?? 'GET'} ${requestUrl}`),
+      );
+    });
     vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(12, 24, 320, 180),
+    );
     renderWithSession(
       'http://127.0.0.1:4321',
       `![그림](.complex-prompt/attachments/${id}.png)`,
@@ -1509,12 +1574,19 @@ describe('그림 첨부', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Edit drawing' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Save mocked drawing' }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     const updatedImageUrl = `${attachment.url}/${id}.png?token=${attachment.token}&refresh=1`;
-    expect(await screen.findByAltText('그림')).toHaveAttribute('src', updatedImageUrl);
+    await waitFor(() =>
+      expect(
+        document.querySelector('.markdown-editor .media-embed-frame img[alt="그림"]'),
+      ).toHaveAttribute('src', updatedImageUrl),
+    );
 
     fireEvent.click(screen.getByRole('tab', { name: 'AI Feedback Mode' }));
 
-    expect(await screen.findByAltText('그림')).toHaveAttribute('src', updatedImageUrl);
+    await waitFor(() =>
+      expect(
+        document.querySelector('.annotated-markdown .media-embed-frame img[alt="그림"]'),
+      ).toHaveAttribute('src', updatedImageUrl),
+    );
   });
 });

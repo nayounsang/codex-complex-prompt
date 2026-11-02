@@ -123,6 +123,32 @@ function serveAttachmentRequest(
         .catch(() => response.writeHead(500).end());
       return true;
     }
+    if (
+      kind !== undefined &&
+      kind !== 'json' &&
+      !isVideoExtension(kind) &&
+      attachmentStore.getImageInfo !== undefined
+    ) {
+      void attachmentStore
+        .getImageInfo(id, kind)
+        .then((info) => {
+          if (info === undefined) {
+            response.writeHead(404, { 'Cache-Control': 'no-store' }).end();
+            return;
+          }
+          response
+            .writeHead(200, {
+              'Content-Type': info.mimeType,
+              'Content-Length': String(info.size),
+              'Cache-Control': 'no-store',
+              'X-Content-Type-Options': 'nosniff',
+              'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+            })
+            .end();
+        })
+        .catch(() => response.writeHead(500).end());
+      return true;
+    }
     if (kind === 'json' && attachmentStore.readScene !== undefined) {
       void attachmentStore
         .readScene(id)
@@ -147,11 +173,34 @@ function serveAttachmentRequest(
         .catch(() => response.writeHead(500).end());
       return true;
     }
+    if (kind === undefined || kind === 'json') {
+      void attachmentStore
+        .hasSceneData(id)
+        .then((exists) =>
+          response.writeHead(exists ? 200 : 404, { 'Cache-Control': 'no-store' }).end(),
+        )
+        .catch(() => response.writeHead(500).end());
+      return true;
+    }
     void attachmentStore
-      .hasSceneData(id)
-      .then((exists) =>
-        response.writeHead(exists ? 200 : 404, { 'Cache-Control': 'no-store' }).end(),
-      )
+      .read(id, kind)
+      .then((attachment) => {
+        const media = attachment?.image ?? attachment?.png ?? attachment?.video;
+        if (attachment === undefined || media === undefined) {
+          response.writeHead(404, { 'Cache-Control': 'no-store' }).end();
+          return;
+        }
+        response
+          .writeHead(200, {
+            'Content-Type':
+              attachment.mimeType ?? (kind === 'png' ? 'image/png' : 'application/octet-stream'),
+            'Content-Length': String(media.byteLength),
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+          })
+          .end();
+      })
       .catch(() => response.writeHead(500).end());
     return true;
   }

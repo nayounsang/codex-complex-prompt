@@ -20,7 +20,7 @@ const crepeTest = vi.hoisted(() => {
       action: vi.fn(),
       use: vi.fn(),
       config: vi.fn((configure: (ctx: object) => void) => {
-        configure({});
+        configure({ update: vi.fn() });
         return this.editor;
       }),
     };
@@ -65,6 +65,7 @@ afterEach(() => {
   cleanup();
   crepeTest.state.instance = undefined;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 async function getBlockEditMenuLabels(
@@ -93,6 +94,37 @@ async function getBlockEditMenuLabels(
 }
 
 describe('MarkdownEditor', () => {
+  it('renders Markdown image elements through the shared media renderer', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'Content-Type': 'image/png' }),
+      }),
+    );
+    vi.spyOn(HTMLImageElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(12, 24, 320, 180),
+    );
+    render(<MarkdownEditor />);
+    const editor = await screen.findByRole('textbox', { name: 'Command' });
+    const paragraph = document.createElement('p');
+    const image = document.createElement('img');
+    image.src = 'https://example.test/editor.png';
+    image.alt = 'Editor image';
+    paragraph.append(image);
+    editor.append(paragraph);
+
+    const media = await waitFor(() => {
+      const rendered = document.querySelector<HTMLImageElement>('.media-embed-frame img');
+      expect(rendered).not.toBeNull();
+      return rendered as HTMLImageElement;
+    });
+
+    expect(media).toHaveAttribute('src', 'https://example.test/editor.png');
+    expect(media).toHaveAttribute('alt', 'Editor image');
+  });
+
   it('Crepe에 파일 이미지 기능을 끄고 기본 Markdown을 전달한다', async () => {
     render(<MarkdownEditor defaultMarkdown="# Draft" />);
     await waitFor(() => expect(crepeTest.state.instance).toBeDefined());
